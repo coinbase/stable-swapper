@@ -16,7 +16,9 @@ abstract contract TwoStepSingleRoleAuthority is SingleRoleAuthority {
     /// @param role The role identifier being transferred
     /// @param currentAuthority Address of the current authority proposing the transfer
     /// @param pendingAuthority Address that will receive authority if they accept
-    event AuthorityTransferProposed(bytes32 indexed role, address indexed currentAuthority, address indexed pendingAuthority);
+    event AuthorityTransferProposed(
+        bytes32 indexed role, address indexed currentAuthority, address indexed pendingAuthority
+    );
 
     /// @notice Emitted when an authority role is transferred to a new address
     ///
