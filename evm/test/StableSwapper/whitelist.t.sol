@@ -20,6 +20,12 @@ contract WhitelistTest is StableSwapperBase {
         vm.expectRevert();
         swapper.addToWhitelist(unauthorized);
     }
+
+    function test_addToWhitelist_reverts_whenAddressIsZeroAddress() public {
+        vm.prank(pauseAuthority);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        swapper.addToWhitelist(address(0));
+    }
     
     function test_addToWhitelist_reverts_whenAddingDuplicateAddress() public {
         vm.startPrank(pauseAuthority);
@@ -47,7 +53,37 @@ contract WhitelistTest is StableSwapperBase {
         
         vm.stopPrank();
     }
-    
+
+    function test_removeFromWhitelist_reverts_whenUnauthorizedUser() public {
+        address unauthorized = makeAddr("unauthorized");
+        
+        vm.prank(unauthorized);
+        vm.expectRevert();
+        swapper.removeFromWhitelist(unauthorized);
+    }
+
+    function test_removeFromWhitelist_reverts_whenAddressIsZeroAddress() public {
+        vm.prank(pauseAuthority);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        swapper.removeFromWhitelist(address(0));
+    }
+
+    function test_enableWhitelist_reverts_whenUnauthorizedUser() public {
+        address unauthorized = makeAddr("unauthorized");
+        
+        vm.prank(unauthorized);
+        vm.expectRevert();
+        swapper.enableWhitelist();
+    }
+
+    function test_disableWhitelist_reverts_whenUnauthorizedUser() public {
+        address unauthorized = makeAddr("unauthorized");
+        
+        vm.prank(unauthorized);
+        vm.expectRevert();
+        swapper.disableWhitelist();
+    }
+
     function test_removeFromWhitelist_reverts_whenAddressNotInWhitelist() public {
         address missingAddress = makeAddr("missingAddress");
         

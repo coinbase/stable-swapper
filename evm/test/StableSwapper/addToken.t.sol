@@ -3,6 +3,21 @@ pragma solidity ^0.8.20;
 
 import {StableSwapperBase, MockERC20} from "./StableSwapperBase.sol";
 import {StableSwapper} from "../../src/StableSwapper.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+// Mock ERC20 token that doesn't implement the decimals() function
+contract MockERC20WithoutDecimals is ERC20 {
+    constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
+
+    // Override decimals to always revert, simulating a token that doesn't implement it
+    function decimals() public pure override returns (uint8) {
+        revert("decimals() not implemented");
+    }
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
 
 /**
  * @title AddTokenTest
@@ -20,23 +35,21 @@ contract AddTokenTest is StableSwapperBase {
         vm.expectRevert();
         swapper.addToken(address(usdc));
     }
-    
-    function test_addToken_reverts_whenTokenDecimalsLessThan6() public {
-        MockERC20 invalidToken = new MockERC20("Invalid Token", "INV", 5);
-        
+
+    function test_addToken_reverts_whenTokenIsZeroAddress() public {
         vm.prank(operationsAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.DecimalsOutOfRange.selector, address(invalidToken), 5));
-        swapper.addToken(address(invalidToken));
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        swapper.addToken(address(0));
     }
-    
-    function test_addToken_reverts_whenTokenDecimalsGreaterThan9() public {
-        MockERC20 invalidToken = new MockERC20("Invalid Token", "INV", 12);
-        
-        vm.prank(operationsAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.DecimalsOutOfRange.selector, address(invalidToken), 12));
-        swapper.addToken(address(invalidToken));
+
+    function test_addToken_reverts_whenTokenAlreadySupported() public {
+        vm.startPrank(operationsAuthority);
+        swapper.addToken(address(usdc));
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenAlreadySupported.selector, address(usdc)));
+        swapper.addToken(address(usdc));
+        vm.stopPrank();
     }
-    
+
     function test_addToken_reverts_whenMaxSupportedTokensReached() public {
         uint256 maxTokens = 50;
         // Add tokens up to the limit (50)
@@ -56,48 +69,58 @@ contract AddTokenTest is StableSwapperBase {
         swapper.addToken(address(extraToken));
         vm.stopPrank();
     }
+
+    function test_addToken_reverts_whenTokenDoesNotImplementDecimals() public {
+        MockERC20WithoutDecimals token = new MockERC20WithoutDecimals("Token", "TOK");
+        vm.prank(operationsAuthority);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenDoesNotImplementDecimals.selector, address(token)));
+        swapper.addToken(address(token));
+    }
+
+    function test_addToken_reverts_whenTokenDecimalsLessThan6() public {
+        MockERC20 invalidToken = new MockERC20("Invalid Token", "INV", 5);
+        
+        vm.prank(operationsAuthority);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.DecimalsOutOfRange.selector, address(invalidToken), 5));
+        swapper.addToken(address(invalidToken));
+    }
+    
+    function test_addToken_reverts_whenTokenDecimalsGreaterThan9() public {
+        MockERC20 invalidToken = new MockERC20("Invalid Token", "INV", 12);
+        
+        vm.prank(operationsAuthority);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.DecimalsOutOfRange.selector, address(invalidToken), 12));
+        swapper.addToken(address(invalidToken));
+    }
     
     /*//////////////////////////////////////////////////////////////
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_addToken_addsUsdcAsSupportedToken() public {
-        vm.prank(operationsAuthority);
+    function test_addToken_addsSupportedTokens() public {
+        vm.startPrank(operationsAuthority);
         swapper.addToken(address(usdc));
+        swapper.addToken(address(appStable));
+        vm.stopPrank();
         
-        uint256 expectedTokenCount = 1;
-        uint8 expectedDecimals = 6;
+        uint256 expectedTokenCount = 2;
+        uint8 expectedDecimalsUsdc = 6;
+        uint8 expectedDecimalsAppStable = 6;
         uint64 expectedReservedAmount = 0;
         
         assertEq(swapper.getSupportedTokensCount(), expectedTokenCount);
         address[] memory tokens = swapper.getSupportedTokens();
         assertEq(tokens[0], address(usdc));
+        assertEq(tokens[1], address(appStable));
         
-        StableSwapper.TokenVault memory vault = swapper.getVault(address(usdc));
-        assertTrue(vault.isEnabled);
-        assertEq(vault.decimals, expectedDecimals);
-        assertEq(vault.reservedAmount, expectedReservedAmount);
-    }
-    
-    function test_addToken_addsAppStableAsSupportedToken() public {
-        vm.prank(operationsAuthority);
-        swapper.addToken(address(usdc));
-        
-        vm.prank(operationsAuthority);
-        swapper.addToken(address(appStable));
-        
-        uint256 expectedTokenCount = 2;
-        assertEq(swapper.getSupportedTokensCount(), expectedTokenCount);
-    }
-    
-    function test_addToken_addsNewTestToken() public {
-        MockERC20 testToken = new MockERC20("Test Token", "TEST", 6);
-        
-        vm.prank(operationsAuthority);
-        swapper.addToken(address(testToken));
-        
-        uint256 expectedTokenCount = 1;
-        assertEq(swapper.getSupportedTokensCount(), expectedTokenCount);
+        StableSwapper.TokenVault memory usdcVault = swapper.getVault(address(usdc));
+        assertTrue(usdcVault.isEnabled);
+        assertEq(usdcVault.decimals, expectedDecimalsUsdc);
+        assertEq(usdcVault.reservedAmount, expectedReservedAmount);
+        StableSwapper.TokenVault memory appStableVault = swapper.getVault(address(appStable));
+        assertTrue(appStableVault.isEnabled);
+        assertEq(appStableVault.decimals, expectedDecimalsAppStable);
+        assertEq(appStableVault.reservedAmount, expectedReservedAmount);
     }
     
     function test_addToken_acceptsTokensWithValidDecimalsInRange() public {

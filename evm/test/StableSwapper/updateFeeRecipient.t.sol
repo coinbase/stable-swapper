@@ -2,12 +2,34 @@
 pragma solidity ^0.8.20;
 
 import {StableSwapperBase} from "./StableSwapperBase.sol";
+import {StableSwapper} from "../../src/StableSwapper.sol";
 
 /**
  * @title UpdateFeeRecipientTest
  * @notice Tests for the StableSwapper updateFeeRecipient function
  */
 contract UpdateFeeRecipientTest is StableSwapperBase {
+
+    /*//////////////////////////////////////////////////////////////
+                              REVERT TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function test_updateFeeRecipient_reverts_whenUnauthorizedUser() public {
+        address unauthorized = makeAddr("unauthorized");
+        vm.expectRevert();
+        swapper.updateFeeRecipient(unauthorized);
+    }
+
+    function test_updateFeeRecipient_reverts_whenZeroAddress() public {
+        vm.prank(operationsAuthority);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        swapper.updateFeeRecipient(address(0));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            SUCCESS TESTS
+    //////////////////////////////////////////////////////////////*/
+
     function test_updateFeeRecipient_collectsFeesToNewRecipient() public {
         address newFeeRecipient = makeAddr("newFeeRecipient");
         

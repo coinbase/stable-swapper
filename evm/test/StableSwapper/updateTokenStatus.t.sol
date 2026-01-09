@@ -23,6 +23,18 @@ contract UpdateTokenStatusTest is StableSwapperBase {
         vm.expectRevert();
         swapper.updateTokenStatus(address(usdc), false);
     }
+
+    function test_updateTokenStatus_reverts_whenTokenIsZeroAddress() public {
+        vm.prank(pauseAuthority);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        swapper.updateTokenStatus(address(0), false);
+    }
+
+    function test_updateTokenStatus_reverts_whenTokenNotSupported() public {
+        vm.prank(pauseAuthority);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenNotSupported.selector, address(usdc)));
+        swapper.updateTokenStatus(address(usdc), false);
+    }
     
     /*//////////////////////////////////////////////////////////////
                             SUCCESS TESTS

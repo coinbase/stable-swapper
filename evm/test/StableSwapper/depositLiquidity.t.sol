@@ -12,7 +12,6 @@ contract DepositLiquidityTest is StableSwapperBase {
     /*//////////////////////////////////////////////////////////////
                               REVERT TESTS
     //////////////////////////////////////////////////////////////*/
-    
     function test_depositLiquidity_reverts_whenUnauthorizedUser() public {
         vm.prank(operationsAuthority);
         swapper.addToken(address(usdc));
@@ -26,7 +25,13 @@ contract DepositLiquidityTest is StableSwapperBase {
         swapper.depositLiquidity(address(usdc), 10 * 10 ** 6);
         vm.stopPrank();
     }
-    
+
+    function test_depositLiquidity_reverts_whenTokenIsZeroAddress() public {
+        vm.prank(operationsAuthority);
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
+        swapper.depositLiquidity(address(0), 10 * 10 ** 6);
+    }
+
     function test_depositLiquidity_reverts_whenLiquidityPaused() public {
         vm.prank(operationsAuthority);
         swapper.addToken(address(usdc));
@@ -47,6 +52,12 @@ contract DepositLiquidityTest is StableSwapperBase {
         vm.prank(pauseAuthority);
         swapper.unpauseLiquidity();
     }
+
+    function test_depositLiquidity_reverts_whenTokenNotSupported() public {
+        vm.prank(operationsAuthority);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenNotSupported.selector, address(usdc)));
+        swapper.depositLiquidity(address(usdc), 10 * 10 ** 6);
+    }
     
     function test_depositLiquidity_reverts_whenDepositingZeroAmount() public {
         vm.prank(operationsAuthority);
@@ -61,11 +72,12 @@ contract DepositLiquidityTest is StableSwapperBase {
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_depositLiquidity_depositsUsdcLiquidity() public {
+    function testFuzz_depositLiquidity_depositsUsdcLiquidity(uint256 depositAmountSeed) public {
+        uint64 maxBalance = 1000 * 10 ** 6; // Amount minted to operationsAuthority in setUp
+        uint64 depositAmount = uint64(bound(depositAmountSeed, 1, maxBalance));
+        
         vm.prank(operationsAuthority);
         swapper.addToken(address(usdc));
-        
-        uint64 depositAmount = 500 * 10 ** 6; // 500 USDC
         
         vm.startPrank(operationsAuthority);
         usdc.approve(address(swapper), depositAmount);
@@ -75,11 +87,12 @@ contract DepositLiquidityTest is StableSwapperBase {
         assertEq(usdc.balanceOf(address(swapper)), depositAmount);
     }
     
-    function test_depositLiquidity_depositsAppStableLiquidity() public {
+    function testFuzz_depositLiquidity_depositsAppStableLiquidity(uint256 depositAmountSeed) public {
+        uint64 maxBalance = 1000 * 10 ** 6; // Amount minted to operationsAuthority in setUp
+        uint64 depositAmount = uint64(bound(depositAmountSeed, 1, maxBalance));
+        
         vm.prank(operationsAuthority);
         swapper.addToken(address(appStable));
-        
-        uint64 depositAmount = 500 * 10 ** 6; // 500 AppStable
         
         vm.startPrank(operationsAuthority);
         appStable.approve(address(swapper), depositAmount);

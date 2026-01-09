@@ -28,6 +28,18 @@ contract RemoveTokenTest is StableSwapperBase {
         vm.expectRevert();
         swapper.removeToken(address(testToken));
     }
+
+    function test_removeToken_reverts_whenTokenIsZeroAddress() public {
+        vm.prank(operationsAuthority);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        swapper.removeToken(address(0));
+    }
+
+    function test_removeToken_reverts_whenTokenNotSupported() public {
+        vm.prank(operationsAuthority);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenNotSupported.selector, address(usdc)));
+        swapper.removeToken(address(usdc));
+    }
     
     function test_removeToken_reverts_whenTokenIsNotDisabled() public {
         MockERC20 testToken = new MockERC20("Test Token", "TEST", 6);
