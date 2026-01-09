@@ -94,7 +94,7 @@ contract StableSwapper is Initializable, AccessControlEnumerableUpgradeable, UUP
     /// @dev This empty reserved space is put in place to allow future versions to add new
     /// variables without shifting down storage in the inheritance chain.
     /// See https://docs.openzeppelin.com/contracts/5.x/upgradeable#storage_gaps
-    uint256[50] private __gap;
+    uint256[50] private _gap;
 
     /// @notice Emitted when the contract is initialized with initial authorities and fee configuration
     ///
@@ -332,7 +332,7 @@ contract StableSwapper is Initializable, AccessControlEnumerableUpgradeable, UUP
         require(decimals >= MIN_DECIMALS && decimals <= MAX_DECIMALS, DecimalsOutOfRange(token, decimals));
 
         _supportedTokens.add(token);
-        _vaults[token] = TokenVault(0, true, decimals);
+        _vaults[token] = TokenVault({reservedAmount: 0, isEnabled: true, decimals: decimals});
         emit TokenAdded(token, decimals);
     }
 
@@ -419,6 +419,8 @@ contract StableSwapper is Initializable, AccessControlEnumerableUpgradeable, UUP
 
         // Fee should never exceed amountIn, but add safety check
         require(fee256 <= type(uint64).max, FeeCalculationOverflow());
+        // casting to 'uint64' is safe because we check fee256 <= type(uint64).max above
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint64 fee = uint64(fee256);
 
         // Checked subtraction to prevent underflow (though fee <= amountIn by construction)
@@ -806,12 +808,17 @@ contract StableSwapper is Initializable, AccessControlEnumerableUpgradeable, UUP
 
             // Ensure result fits in uint64
             require(result <= type(uint64).max, DecimalNormalizationOverflow());
+            // casting to 'uint64' is safe because we check result <= type(uint64).max above
+            // forge-lint: disable-next-line(unsafe-typecast)
             return uint64(result);
         } else {
             // Scaling down: divide by 10^decimalsDelta (no overflow possible)
             // Division automatically rounds down (floor)
             uint8 decimalsDelta = decimalsFrom - decimalsTo;
             uint256 divisor = 10 ** uint256(decimalsDelta);
+            // casting to 'uint64' is safe because division can only decrease or maintain the value,
+            // and the input amount is already uint64
+            // forge-lint: disable-next-line(unsafe-typecast)
             return uint64(uint256(amount) / divisor);
         }
     }

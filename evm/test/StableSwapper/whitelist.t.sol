@@ -48,9 +48,11 @@ contract WhitelistTest is StableSwapperBase {
 
         // Try to add 101st address
         address extraAddr = makeAddr("extraUser");
-        vm.expectRevert(
-            abi.encodeWithSelector(StableSwapper.WhitelistExceedsMaximum.selector, uint64(maxWhitelistSize))
-        );
+        // casting to 'uint64' is safe because maxWhitelistSize is 100, well within uint64 range
+        bytes memory expectedError =
+        // forge-lint: disable-next-line(unsafe-typecast)
+        abi.encodeWithSelector(StableSwapper.WhitelistExceedsMaximum.selector, uint64(maxWhitelistSize));
+        vm.expectRevert(expectedError);
         swapper.addToWhitelist(extraAddr);
 
         vm.stopPrank();

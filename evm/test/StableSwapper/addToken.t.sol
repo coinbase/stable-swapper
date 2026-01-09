@@ -64,6 +64,8 @@ contract AddTokenTest is StableSwapperBase {
 
         // Try to add 51st token
         MockERC20 extraToken = new MockERC20("Extra Token", "EXTRA", 6);
+        // casting to 'uint64' is safe because maxTokens is 50, well within uint64 range
+        // forge-lint: disable-next-line(unsafe-typecast)
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.SupportedTokensExceedsMaximum.selector, uint64(maxTokens)));
         swapper.addToken(address(extraToken));
         vm.stopPrank();
