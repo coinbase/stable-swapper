@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {StableSwapperBase} from "./StableSwapperBase.sol";
 import {StableSwapper} from "../../src/StableSwapper.sol";
+import {StableSwapperBase} from "./StableSwapperBase.sol";
 
 /**
  * @title WhitelistTest

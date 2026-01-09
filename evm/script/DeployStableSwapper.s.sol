@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
-import {StableSwapper} from "../src/StableSwapper.sol";
+import {Script} from "forge-std/Script.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+
+import {StableSwapper} from "../src/StableSwapper.sol";
 
 /**
  * @title DeployStableSwapper
@@ -45,6 +46,7 @@ contract DeployStableSwapper is Script {
     );
 
     /// @notice Main deployment function
+    ///
     /// @dev Reads configuration from environment variables and deploys contracts
     function run() external {
         // Read configuration from environment variables
@@ -104,11 +106,13 @@ contract DeployStableSwapper is Script {
     }
 
     /// @notice Deploys StableSwapper implementation and proxy
+    ///
     /// @param upgradeAuthority Address with upgrade authority role
     /// @param operationsAuthority Address with operations authority role
     /// @param pauseAuthority Address with pause authority role
     /// @param feeRecipient Address that receives swap fees
     /// @param feeRate Fee rate in basis points (e.g., 100 = 1%)
+    ///
     /// @return implementation Address of the implementation contract
     /// @return proxy Address of the proxy contract (main entry point)
     function deploy(

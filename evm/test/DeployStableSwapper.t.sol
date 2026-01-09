@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
+import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
+
 import {DeployStableSwapper} from "../script/DeployStableSwapper.s.sol";
 import {StableSwapper} from "../src/StableSwapper.sol";
 
