@@ -72,42 +72,24 @@ contract VerifyDeployment is Script {
         bytes32 opsAuthRole = stableSwapper.OPERATIONS_AUTHORITY();
         bytes32 pauseAuthRole = stableSwapper.PAUSE_AUTHORITY();
 
-        uint256 upgradeAuthCount = stableSwapper.getRoleMemberCount(upgradeAuthRole);
-        console.log("Upgrade Authority Count:", upgradeAuthCount);
-        if (upgradeAuthCount > 0) {
-            for (uint256 i = 0; i < upgradeAuthCount; i++) {
-                address auth = stableSwapper.getRoleMember(upgradeAuthRole, i);
-                console.log("  [", i, "]", auth);
-            }
-        }
+        address upgradeAuth = stableSwapper.getRoleHolder(upgradeAuthRole);
+        console.log("Upgrade Authority:", upgradeAuth == address(0) ? "None" : vm.toString(upgradeAuth));
 
-        uint256 opsAuthCount = stableSwapper.getRoleMemberCount(opsAuthRole);
-        console.log("Operations Authority Count:", opsAuthCount);
-        if (opsAuthCount > 0) {
-            for (uint256 i = 0; i < opsAuthCount; i++) {
-                address auth = stableSwapper.getRoleMember(opsAuthRole, i);
-                console.log("  [", i, "]", auth);
-            }
-        }
+        address opsAuth = stableSwapper.getRoleHolder(opsAuthRole);
+        console.log("Operations Authority:", opsAuth == address(0) ? "None" : vm.toString(opsAuth));
 
-        uint256 pauseAuthCount = stableSwapper.getRoleMemberCount(pauseAuthRole);
-        console.log("Pause Authority Count:", pauseAuthCount);
-        if (pauseAuthCount > 0) {
-            for (uint256 i = 0; i < pauseAuthCount; i++) {
-                address auth = stableSwapper.getRoleMember(pauseAuthRole, i);
-                console.log("  [", i, "]", auth);
-            }
-        }
+        address pauseAuth = stableSwapper.getRoleHolder(pauseAuthRole);
+        console.log("Pause Authority:", pauseAuth == address(0) ? "None" : vm.toString(pauseAuth));
 
         // Pending authority transfers
         console.log("\n--- Pending Authority Transfers ---");
-        address pendingUpgrade = stableSwapper.pendingUpgradeAuthority();
+        address pendingUpgrade = stableSwapper.getPendingAuthority(upgradeAuthRole);
         console.log("Pending Upgrade Authority:", pendingUpgrade == address(0) ? "None" : vm.toString(pendingUpgrade));
 
-        address pendingOps = stableSwapper.pendingOperationsAuthority();
+        address pendingOps = stableSwapper.getPendingAuthority(opsAuthRole);
         console.log("Pending Operations Authority:", pendingOps == address(0) ? "None" : vm.toString(pendingOps));
 
-        address pendingPause = stableSwapper.pendingPauseAuthority();
+        address pendingPause = stableSwapper.getPendingAuthority(pauseAuthRole);
         console.log("Pending Pause Authority:", pendingPause == address(0) ? "None" : vm.toString(pendingPause));
 
         // Supported tokens
@@ -162,7 +144,8 @@ contract VerifyDeployment is Script {
         console.log("[OK] Contract Version:", version);
         console.log("[OK] Fee Rate:", feeRate, "bp");
         console.log(
-            "[OK] Authorities Set:", upgradeAuthCount > 0 && opsAuthCount > 0 && pauseAuthCount > 0 ? "YES" : "NO"
+            "[OK] Authorities Set:",
+            upgradeAuth != address(0) && opsAuth != address(0) && pauseAuth != address(0) ? "YES" : "NO"
         );
         console.log("[OK] Tokens Configured:", tokenCount);
         console.log("[OK] Swaps Status:", swapsPaused ? "PAUSED" : "ACTIVE");

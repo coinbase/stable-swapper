@@ -9,281 +9,274 @@ import {StableSwapperBase} from "./StableSwapperBase.sol";
  * @notice Tests for the StableSwapper authority transfer functions
  */
 contract AuthorityTransfersTest is StableSwapperBase {
+    bytes32 public upgradeAuthorityRole;
+    bytes32 public operationsAuthorityRole;
+    bytes32 public pauseAuthorityRole;
+
+    function setUp() public override {
+        super.setUp();
+
+        // Cache role identifiers to avoid view calls during expectRevert tests
+        upgradeAuthorityRole = swapper.UPGRADE_AUTHORITY();
+        operationsAuthorityRole = swapper.OPERATIONS_AUTHORITY();
+        pauseAuthorityRole = swapper.PAUSE_AUTHORITY();
+    }
+
     /*//////////////////////////////////////////////////////////////
                               REVERT TESTS
     //////////////////////////////////////////////////////////////*/
 
-    function test_proposeOperationsAuthorityTransfer_reverts_whenCalledByPauseAuthority() public {
+    function test_proposeAuthorityTransfer_reverts_whenCalledByWrongAuthority() public {
         address newAuthority = makeAddr("newAuthority");
 
+        // Pause authority trying to transfer operations authority
         vm.prank(pauseAuthority);
         vm.expectRevert();
-        swapper.proposeOperationsAuthorityTransfer(newAuthority);
-    }
+        swapper.proposeAuthorityTransfer(operationsAuthorityRole, newAuthority);
 
-    function test_proposeOperationsAuthorityTransfer_reverts_whenCalledByUpgradeAuthority() public {
-        address newAuthority = makeAddr("newAuthority");
-
+        // Upgrade authority trying to transfer operations authority
         vm.prank(upgradeAuthority);
         vm.expectRevert();
-        swapper.proposeOperationsAuthorityTransfer(newAuthority);
-    }
+        swapper.proposeAuthorityTransfer(operationsAuthorityRole, newAuthority);
 
-    function test_proposePauseAuthorityTransfer_reverts_whenCalledByOperationsAuthority() public {
-        address newAuthority = makeAddr("newAuthority");
-
+        // Operations authority trying to transfer pause authority
         vm.prank(operationsAuthority);
         vm.expectRevert();
-        swapper.proposePauseAuthorityTransfer(newAuthority);
-    }
+        swapper.proposeAuthorityTransfer(pauseAuthorityRole, newAuthority);
 
-    function test_proposePauseAuthorityTransfer_reverts_whenCalledByUpgradeAuthority() public {
-        address newAuthority = makeAddr("newAuthority");
-
+        // Upgrade authority trying to transfer pause authority
         vm.prank(upgradeAuthority);
         vm.expectRevert();
-        swapper.proposePauseAuthorityTransfer(newAuthority);
-    }
+        swapper.proposeAuthorityTransfer(pauseAuthorityRole, newAuthority);
 
-    function test_proposeUpgradeAuthorityTransfer_reverts_whenCalledByOperationsAuthority() public {
-        address newAuthority = makeAddr("newAuthority");
-
+        // Operations authority trying to transfer upgrade authority
         vm.prank(operationsAuthority);
         vm.expectRevert();
-        swapper.proposeUpgradeAuthorityTransfer(newAuthority);
-    }
+        swapper.proposeAuthorityTransfer(upgradeAuthorityRole, newAuthority);
 
-    function test_proposeUpgradeAuthorityTransfer_reverts_whenCalledByPauseAuthority() public {
-        address newAuthority = makeAddr("newAuthority");
-
+        // Pause authority trying to transfer upgrade authority
         vm.prank(pauseAuthority);
         vm.expectRevert();
-        swapper.proposeUpgradeAuthorityTransfer(newAuthority);
+        swapper.proposeAuthorityTransfer(upgradeAuthorityRole, newAuthority);
     }
 
-    function test_proposeOperationsAuthorityTransfer_reverts_whenNewAuthorityIsZeroAddress() public {
+    function test_proposeAuthorityTransfer_reverts_whenNewAuthorityIsZeroAddress_operations() public {
         vm.prank(operationsAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
-        swapper.proposeOperationsAuthorityTransfer(address(0));
+        swapper.proposeAuthorityTransfer(operationsAuthorityRole, address(0));
     }
 
-    function test_proposePauseAuthorityTransfer_reverts_whenNewAuthorityIsZeroAddress() public {
+    function test_proposeAuthorityTransfer_reverts_whenNewAuthorityIsZeroAddress_pause() public {
         vm.prank(pauseAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
-        swapper.proposePauseAuthorityTransfer(address(0));
+        swapper.proposeAuthorityTransfer(pauseAuthorityRole, address(0));
     }
 
-    function test_proposeUpgradeAuthorityTransfer_reverts_whenNewAuthorityIsZeroAddress() public {
+    function test_proposeAuthorityTransfer_reverts_whenNewAuthorityIsZeroAddress_upgrade() public {
         vm.prank(upgradeAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
-        swapper.proposeUpgradeAuthorityTransfer(address(0));
+        swapper.proposeAuthorityTransfer(upgradeAuthorityRole, address(0));
     }
 
-    function test_proposeOperationsAuthorityTransfer_reverts_whenPendingAuthorityIsAlreadySet() public {
+    function test_proposeAuthorityTransfer_reverts_whenPendingAuthorityIsAlreadySet_operations() public {
         address newAuthority = makeAddr("newAuthority");
 
         vm.prank(operationsAuthority);
-        swapper.proposeOperationsAuthorityTransfer(newAuthority);
+        swapper.proposeAuthorityTransfer(operationsAuthorityRole, newAuthority);
 
         vm.prank(operationsAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.PendingAuthorityAlreadySet.selector));
-        swapper.proposeOperationsAuthorityTransfer(newAuthority);
+        swapper.proposeAuthorityTransfer(operationsAuthorityRole, newAuthority);
     }
 
-    function test_proposePauseAuthorityTransfer_reverts_whenPendingAuthorityIsAlreadySet() public {
+    function test_proposeAuthorityTransfer_reverts_whenPendingAuthorityIsAlreadySet_pause() public {
         address newAuthority = makeAddr("newAuthority");
 
         vm.prank(pauseAuthority);
-        swapper.proposePauseAuthorityTransfer(newAuthority);
+        swapper.proposeAuthorityTransfer(pauseAuthorityRole, newAuthority);
 
         vm.prank(pauseAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.PendingAuthorityAlreadySet.selector));
-        swapper.proposePauseAuthorityTransfer(newAuthority);
+        swapper.proposeAuthorityTransfer(pauseAuthorityRole, newAuthority);
     }
 
-    function test_proposeUpgradeAuthorityTransfer_reverts_whenPendingAuthorityIsAlreadySet() public {
+    function test_proposeAuthorityTransfer_reverts_whenPendingAuthorityIsAlreadySet_upgrade() public {
         address newAuthority = makeAddr("newAuthority");
 
         vm.prank(upgradeAuthority);
-        swapper.proposeUpgradeAuthorityTransfer(newAuthority);
+        swapper.proposeAuthorityTransfer(upgradeAuthorityRole, newAuthority);
 
         vm.prank(upgradeAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.PendingAuthorityAlreadySet.selector));
-        swapper.proposeUpgradeAuthorityTransfer(newAuthority);
+        swapper.proposeAuthorityTransfer(upgradeAuthorityRole, newAuthority);
     }
 
-    function test_acceptOperationsAuthority_reverts_whenNoPendingAuthority() public {
+    function test_acceptAuthority_reverts_whenNoPendingAuthority_operations() public {
         address newAuthority = makeAddr("newAuthority");
 
         vm.prank(newAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.NoPendingAuthorityTransfer.selector));
-        swapper.acceptOperationsAuthority();
+        swapper.acceptAuthority(operationsAuthorityRole);
     }
 
-    function test_acceptOperationsAuthority_reverts_whenCalledByNonPendingAuthority() public {
-        address newAuthority = makeAddr("newAuthority");
-        address wrongCaller = makeAddr("wrongCaller");
-
-        // Set up a pending authority transfer first
-        vm.prank(operationsAuthority);
-        swapper.proposeOperationsAuthorityTransfer(newAuthority);
-
-        // Try to accept from wrong caller
-        vm.prank(wrongCaller);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NotPendingAuthority.selector));
-        swapper.acceptOperationsAuthority();
-    }
-
-    function test_acceptPauseAuthority_reverts_whenNoPendingAuthority() public {
+    function test_acceptAuthority_reverts_whenNoPendingAuthority_pause() public {
         address newAuthority = makeAddr("newAuthority");
 
         vm.prank(newAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.NoPendingAuthorityTransfer.selector));
-        swapper.acceptPauseAuthority();
+        swapper.acceptAuthority(pauseAuthorityRole);
     }
 
-    function test_acceptPauseAuthority_reverts_whenCalledByNonPendingAuthority() public {
-        address newAuthority = makeAddr("newAuthority");
-        address wrongCaller = makeAddr("wrongCaller");
-
-        // Set up a pending authority transfer first
-        vm.prank(pauseAuthority);
-        swapper.proposePauseAuthorityTransfer(newAuthority);
-
-        // Try to accept from wrong caller
-        vm.prank(wrongCaller);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NotPendingAuthority.selector));
-        swapper.acceptPauseAuthority();
-    }
-
-    function test_acceptUpgradeAuthority_reverts_whenNoPendingAuthority() public {
+    function test_acceptAuthority_reverts_whenNoPendingAuthority_upgrade() public {
         address newAuthority = makeAddr("newAuthority");
 
         vm.prank(newAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.NoPendingAuthorityTransfer.selector));
-        swapper.acceptUpgradeAuthority();
+        swapper.acceptAuthority(upgradeAuthorityRole);
     }
 
-    function test_acceptUpgradeAuthority_reverts_whenCalledByNonPendingAuthority() public {
+    function test_acceptAuthority_reverts_whenCalledByNonPendingAuthority_operations() public {
         address newAuthority = makeAddr("newAuthority");
         address wrongCaller = makeAddr("wrongCaller");
 
-        // Set up a pending authority transfer first
-        vm.prank(upgradeAuthority);
-        swapper.proposeUpgradeAuthorityTransfer(newAuthority);
+        vm.prank(operationsAuthority);
+        swapper.proposeAuthorityTransfer(operationsAuthorityRole, newAuthority);
 
-        // Try to accept from wrong caller
         vm.prank(wrongCaller);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.NotPendingAuthority.selector));
-        swapper.acceptUpgradeAuthority();
+        swapper.acceptAuthority(operationsAuthorityRole);
     }
 
-    function test_cancelOperationsAuthorityTransfer_reverts_whenNoPendingAuthority() public {
+    function test_acceptAuthority_reverts_whenCalledByNonPendingAuthority_pause() public {
+        address newAuthority = makeAddr("newAuthority");
+        address wrongCaller = makeAddr("wrongCaller");
+
+        vm.prank(pauseAuthority);
+        swapper.proposeAuthorityTransfer(pauseAuthorityRole, newAuthority);
+
+        vm.prank(wrongCaller);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NotPendingAuthority.selector));
+        swapper.acceptAuthority(pauseAuthorityRole);
+    }
+
+    function test_acceptAuthority_reverts_whenCalledByNonPendingAuthority_upgrade() public {
+        address newAuthority = makeAddr("newAuthority");
+        address wrongCaller = makeAddr("wrongCaller");
+
+        vm.prank(upgradeAuthority);
+        swapper.proposeAuthorityTransfer(upgradeAuthorityRole, newAuthority);
+
+        vm.prank(wrongCaller);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NotPendingAuthority.selector));
+        swapper.acceptAuthority(upgradeAuthorityRole);
+    }
+
+    function test_cancelAuthorityTransfer_reverts_whenNoPendingAuthority_operations() public {
         vm.prank(operationsAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.NoPendingAuthorityTransfer.selector));
-        swapper.cancelOperationsAuthorityTransfer();
+        swapper.cancelAuthorityTransfer(operationsAuthorityRole);
     }
 
-    function test_cancelPauseAuthorityTransfer_reverts_whenNoPendingAuthority() public {
+    function test_cancelAuthorityTransfer_reverts_whenNoPendingAuthority_pause() public {
         vm.prank(pauseAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.NoPendingAuthorityTransfer.selector));
-        swapper.cancelPauseAuthorityTransfer();
+        swapper.cancelAuthorityTransfer(pauseAuthorityRole);
     }
 
-    function test_cancelUpgradeAuthorityTransfer_reverts_whenNoPendingAuthority() public {
+    function test_cancelAuthorityTransfer_reverts_whenNoPendingAuthority_upgrade() public {
         vm.prank(upgradeAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.NoPendingAuthorityTransfer.selector));
-        swapper.cancelUpgradeAuthorityTransfer();
+        swapper.cancelAuthorityTransfer(upgradeAuthorityRole);
     }
 
     /*//////////////////////////////////////////////////////////////
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
 
-    function test_proposeOperationsAuthorityTransfer_proposesAndAcceptsTransfer() public {
+    function test_proposeAuthorityTransfer_proposesAndAcceptsTransfer_operations() public {
         address newOpsAuthority = makeAddr("newOpsAuthority");
 
         vm.prank(operationsAuthority);
-        swapper.proposeOperationsAuthorityTransfer(newOpsAuthority);
+        swapper.proposeAuthorityTransfer(operationsAuthorityRole, newOpsAuthority);
 
-        assertEq(swapper.pendingOperationsAuthority(), newOpsAuthority);
+        assertEq(swapper.getPendingAuthority(operationsAuthorityRole), newOpsAuthority);
 
         vm.prank(newOpsAuthority);
-        swapper.acceptOperationsAuthority();
+        swapper.acceptAuthority(operationsAuthorityRole);
 
-        assertTrue(swapper.hasRole(swapper.OPERATIONS_AUTHORITY(), newOpsAuthority));
-        assertFalse(swapper.hasRole(swapper.OPERATIONS_AUTHORITY(), operationsAuthority));
-        assertEq(swapper.pendingOperationsAuthority(), address(0));
+        assertTrue(swapper.hasRole(operationsAuthorityRole, newOpsAuthority));
+        assertFalse(swapper.hasRole(operationsAuthorityRole, operationsAuthority));
+        assertEq(swapper.getPendingAuthority(operationsAuthorityRole), address(0));
     }
 
-    function test_proposePauseAuthorityTransfer_proposesAndAcceptsTransfer() public {
+    function test_proposeAuthorityTransfer_proposesAndAcceptsTransfer_pause() public {
         address newPauseAuthority = makeAddr("newPauseAuthority");
 
         vm.prank(pauseAuthority);
-        swapper.proposePauseAuthorityTransfer(newPauseAuthority);
+        swapper.proposeAuthorityTransfer(pauseAuthorityRole, newPauseAuthority);
 
-        assertEq(swapper.pendingPauseAuthority(), newPauseAuthority);
+        assertEq(swapper.getPendingAuthority(pauseAuthorityRole), newPauseAuthority);
 
         vm.prank(newPauseAuthority);
-        swapper.acceptPauseAuthority();
+        swapper.acceptAuthority(pauseAuthorityRole);
 
-        assertTrue(swapper.hasRole(swapper.PAUSE_AUTHORITY(), newPauseAuthority));
-        assertFalse(swapper.hasRole(swapper.PAUSE_AUTHORITY(), pauseAuthority));
-        assertEq(swapper.pendingPauseAuthority(), address(0));
+        assertTrue(swapper.hasRole(pauseAuthorityRole, newPauseAuthority));
+        assertFalse(swapper.hasRole(pauseAuthorityRole, pauseAuthority));
+        assertEq(swapper.getPendingAuthority(pauseAuthorityRole), address(0));
     }
 
-    function test_proposeUpgradeAuthorityTransfer_proposesAndAcceptsTransfer() public {
+    function test_proposeAuthorityTransfer_proposesAndAcceptsTransfer_upgrade() public {
         address newUpgradeAuthority = makeAddr("newUpgradeAuthority");
 
         vm.prank(upgradeAuthority);
-        swapper.proposeUpgradeAuthorityTransfer(newUpgradeAuthority);
+        swapper.proposeAuthorityTransfer(upgradeAuthorityRole, newUpgradeAuthority);
 
-        assertEq(swapper.pendingUpgradeAuthority(), newUpgradeAuthority);
+        assertEq(swapper.getPendingAuthority(upgradeAuthorityRole), newUpgradeAuthority);
 
         vm.prank(newUpgradeAuthority);
-        swapper.acceptUpgradeAuthority();
+        swapper.acceptAuthority(upgradeAuthorityRole);
 
-        assertTrue(swapper.hasRole(swapper.UPGRADE_AUTHORITY(), newUpgradeAuthority));
-        assertFalse(swapper.hasRole(swapper.UPGRADE_AUTHORITY(), upgradeAuthority));
-        assertEq(swapper.pendingUpgradeAuthority(), address(0));
+        assertTrue(swapper.hasRole(upgradeAuthorityRole, newUpgradeAuthority));
+        assertFalse(swapper.hasRole(upgradeAuthorityRole, upgradeAuthority));
+        assertEq(swapper.getPendingAuthority(upgradeAuthorityRole), address(0));
     }
 
-    function test_cancelOperationsAuthorityTransfer_cancelsTransfer() public {
+    function test_cancelAuthorityTransfer_cancelsTransfer_operations() public {
         address newOpsAuthority = makeAddr("newOpsAuthority");
 
         vm.prank(operationsAuthority);
-        swapper.proposeOperationsAuthorityTransfer(newOpsAuthority);
+        swapper.proposeAuthorityTransfer(operationsAuthorityRole, newOpsAuthority);
 
-        assertEq(swapper.pendingOperationsAuthority(), newOpsAuthority);
+        assertEq(swapper.getPendingAuthority(operationsAuthorityRole), newOpsAuthority);
 
         vm.prank(operationsAuthority);
-        swapper.cancelOperationsAuthorityTransfer();
-        assertEq(swapper.pendingOperationsAuthority(), address(0));
+        swapper.cancelAuthorityTransfer(operationsAuthorityRole);
+        assertEq(swapper.getPendingAuthority(operationsAuthorityRole), address(0));
     }
 
-    function test_cancelPauseAuthorityTransfer_cancelsTransfer() public {
+    function test_cancelAuthorityTransfer_cancelsTransfer_pause() public {
         address newPauseAuthority = makeAddr("newPauseAuthority");
 
         vm.prank(pauseAuthority);
-        swapper.proposePauseAuthorityTransfer(newPauseAuthority);
+        swapper.proposeAuthorityTransfer(pauseAuthorityRole, newPauseAuthority);
 
-        assertEq(swapper.pendingPauseAuthority(), newPauseAuthority);
+        assertEq(swapper.getPendingAuthority(pauseAuthorityRole), newPauseAuthority);
 
         vm.prank(pauseAuthority);
-        swapper.cancelPauseAuthorityTransfer();
-        assertEq(swapper.pendingPauseAuthority(), address(0));
+        swapper.cancelAuthorityTransfer(pauseAuthorityRole);
+        assertEq(swapper.getPendingAuthority(pauseAuthorityRole), address(0));
     }
 
-    function test_cancelUpgradeAuthorityTransfer_cancelsTransfer() public {
+    function test_cancelAuthorityTransfer_cancelsTransfer_upgrade() public {
         address newUpgradeAuthority = makeAddr("newUpgradeAuthority");
 
         vm.prank(upgradeAuthority);
-        swapper.proposeUpgradeAuthorityTransfer(newUpgradeAuthority);
+        swapper.proposeAuthorityTransfer(upgradeAuthorityRole, newUpgradeAuthority);
 
-        assertEq(swapper.pendingUpgradeAuthority(), newUpgradeAuthority);
+        assertEq(swapper.getPendingAuthority(upgradeAuthorityRole), newUpgradeAuthority);
 
         vm.prank(upgradeAuthority);
-        swapper.cancelUpgradeAuthorityTransfer();
-        assertEq(swapper.pendingUpgradeAuthority(), address(0));
+        swapper.cancelAuthorityTransfer(upgradeAuthorityRole);
+        assertEq(swapper.getPendingAuthority(upgradeAuthorityRole), address(0));
     }
 }
