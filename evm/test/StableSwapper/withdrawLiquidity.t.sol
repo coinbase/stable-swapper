@@ -118,9 +118,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
         assertEq(usdc.balanceOf(operationsAuthority), initialBalance + withdrawAmount);
     }
 
-    function testFuzz_withdrawLiquidity_allowsWithdrawal_regardlessOfReservedAmount(uint256 withdrawAmountSeed)
-        public
-    {
+    function testFuzz_withdrawLiquidity_allowsWithdrawal_regardlessOfReservedAmount(uint256 withdrawAmountSeed) public {
         uint64 liquidityAmount = 100 * 10 ** 6;
         uint64 reservedAmount = 100 * 10 ** 6;
         uint64 withdrawAmount = uint64(bound(withdrawAmountSeed, 1, liquidityAmount));

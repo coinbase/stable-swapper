@@ -43,9 +43,7 @@ contract UpdateReservedAmountTest is StableSwapperBase {
      * @notice Fuzz test: Any reserved amount greater than liquidity amount should revert
      * @dev Tests that reserved amount cannot exceed liquidity amount
      */
-    function testFuzz_updateReservedAmount_reverts_whenReservedAmountExceedsBalance(uint256 reservedAmountSeed)
-        public
-    {
+    function testFuzz_updateReservedAmount_reverts_whenReservedAmountExceedsBalance(uint256 reservedAmountSeed) public {
         uint64 liquidityAmount = 100 * 10 ** 6;
         uint64 reservedAmount = uint64(bound(reservedAmountSeed, liquidityAmount + 1, type(uint64).max));
 
