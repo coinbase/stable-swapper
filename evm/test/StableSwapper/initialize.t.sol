@@ -8,7 +8,7 @@ import {StableSwapperBase} from "./StableSwapperBase.sol";
  * @notice Tests for the StableSwapper initialize function
  */
 contract InitializeTest is StableSwapperBase {
-    function test_setsAllInitialValues() public view {
+    function test_initialize_setsAllInitialValues() public view {
         assertTrue(swapper.hasRole(swapper.UPGRADE_AUTHORITY(), upgradeAuthority));
         assertTrue(swapper.hasRole(swapper.OPERATIONS_AUTHORITY(), operationsAuthority));
         assertTrue(swapper.hasRole(swapper.PAUSE_AUTHORITY(), pauseAuthority));

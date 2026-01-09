@@ -395,7 +395,7 @@ contract StableSwapper is Initializable, AccessControlEnumerableUpgradeable, UUP
      * @param token Address of the token to deposit
      * @param amount Amount of tokens to deposit
      */
-    function deposit_liquidity(address token, uint64 amount) external onlyRole(OPERATIONS_AUTHORITY) {
+    function depositLiquidity(address token, uint64 amount) external onlyRole(OPERATIONS_AUTHORITY) {
         require(token != address(0), CannotBeZeroAddress());
         require(!liquidityPaused, LiquidityCannotBePaused());
         require(_supportedTokens.contains(token), TokenNotSupported(token));
@@ -494,7 +494,7 @@ contract StableSwapper is Initializable, AccessControlEnumerableUpgradeable, UUP
      * @param token Address of the token to withdraw
      * @param amount Amount of tokens to withdraw (operations authority can withdraw regardless of reserved amount)
      */
-    function withdraw_liquidity(address token, uint64 amount) external onlyRole(OPERATIONS_AUTHORITY) {
+    function withdrawLiquidity(address token, uint64 amount) external onlyRole(OPERATIONS_AUTHORITY) {
         require(token != address(0), CannotBeZeroAddress());
         require(!liquidityPaused, LiquidityCannotBePaused());
         require(_supportedTokens.contains(token), TokenNotSupported(token));

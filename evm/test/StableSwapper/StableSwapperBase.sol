@@ -92,10 +92,10 @@ contract StableSwapperBase is Test {
         swapper.addToken(address(appStable));
         
         usdc.approve(address(swapper), 500 * 10 ** 6);
-        swapper.deposit_liquidity(address(usdc), 500 * 10 ** 6);
+        swapper.depositLiquidity(address(usdc), 500 * 10 ** 6);
         
         appStable.approve(address(swapper), 500 * 10 ** 6);
-        swapper.deposit_liquidity(address(appStable), 500 * 10 ** 6);
+        swapper.depositLiquidity(address(appStable), 500 * 10 ** 6);
         vm.stopPrank();
     }
 }

@@ -13,7 +13,7 @@ contract UpdateReservedAmountTest is StableSwapperBase {
                               REVERT TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_revertsWhenUnauthorizedUserTriesToUpdateReservedAmount() public {
+    function test_updateReservedAmount_reverts_whenUnauthorizedUser() public {
         vm.prank(operationsAuthority);
         swapper.addToken(address(usdc));
         
@@ -28,13 +28,15 @@ contract UpdateReservedAmountTest is StableSwapperBase {
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_updatesReservedAmount() public {
+    function test_updateReservedAmount_updatesReservedAmount() public {
+        uint64 depositAmount = 500 * 10 ** 6;
+        
         vm.prank(operationsAuthority);
         swapper.addToken(address(usdc));
         
         vm.startPrank(operationsAuthority);
-        usdc.approve(address(swapper), 500 * 10 ** 6);
-        swapper.deposit_liquidity(address(usdc), 500 * 10 ** 6);
+        usdc.approve(address(swapper), depositAmount);
+        swapper.depositLiquidity(address(usdc), depositAmount);
         vm.stopPrank();
         
         uint64 reservedAmount = 50 * 10 ** 6;

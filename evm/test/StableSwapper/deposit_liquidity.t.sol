@@ -6,14 +6,14 @@ import {StableSwapper} from "../../src/StableSwapper.sol";
 
 /**
  * @title DepositLiquidityTest
- * @notice Tests for the StableSwapper deposit_liquidity function
+ * @notice Tests for the StableSwapper depositLiquidity function
  */
 contract DepositLiquidityTest is StableSwapperBase {
     /*//////////////////////////////////////////////////////////////
                               REVERT TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_revertsWhenUnauthorizedUserTriesToDeposit() public {
+    function test_depositLiquidity_reverts_whenUnauthorizedUser() public {
         vm.prank(operationsAuthority);
         swapper.addToken(address(usdc));
         
@@ -23,11 +23,11 @@ contract DepositLiquidityTest is StableSwapperBase {
         vm.startPrank(unauthorized);
         usdc.approve(address(swapper), 10 * 10 ** 6);
         vm.expectRevert();
-        swapper.deposit_liquidity(address(usdc), 10 * 10 ** 6);
+        swapper.depositLiquidity(address(usdc), 10 * 10 ** 6);
         vm.stopPrank();
     }
     
-    function test_revertsWhenLiquidityPaused() public {
+    function test_depositLiquidity_reverts_whenLiquidityPaused() public {
         vm.prank(operationsAuthority);
         swapper.addToken(address(usdc));
         
@@ -40,7 +40,7 @@ contract DepositLiquidityTest is StableSwapperBase {
         vm.startPrank(operationsAuthority);
         usdc.approve(address(swapper), depositAmount);
         vm.expectRevert(StableSwapper.LiquidityCannotBePaused.selector);
-        swapper.deposit_liquidity(address(usdc), depositAmount);
+        swapper.depositLiquidity(address(usdc), depositAmount);
         vm.stopPrank();
         
         // Unpause liquidity
@@ -48,20 +48,20 @@ contract DepositLiquidityTest is StableSwapperBase {
         swapper.unpauseLiquidity();
     }
     
-    function test_revertsWhenDepositingZeroAmount() public {
+    function test_depositLiquidity_reverts_whenDepositingZeroAmount() public {
         vm.prank(operationsAuthority);
         swapper.addToken(address(usdc));
         
         vm.prank(operationsAuthority);
         vm.expectRevert(StableSwapper.CannotBeZeroAmount.selector);
-        swapper.deposit_liquidity(address(usdc), 0);
+        swapper.depositLiquidity(address(usdc), 0);
     }
     
     /*//////////////////////////////////////////////////////////////
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_depositsUsdcLiquidity() public {
+    function test_depositLiquidity_depositsUsdcLiquidity() public {
         vm.prank(operationsAuthority);
         swapper.addToken(address(usdc));
         
@@ -69,13 +69,13 @@ contract DepositLiquidityTest is StableSwapperBase {
         
         vm.startPrank(operationsAuthority);
         usdc.approve(address(swapper), depositAmount);
-        swapper.deposit_liquidity(address(usdc), depositAmount);
+        swapper.depositLiquidity(address(usdc), depositAmount);
         vm.stopPrank();
         
         assertEq(usdc.balanceOf(address(swapper)), depositAmount);
     }
     
-    function test_depositsAppStableLiquidity() public {
+    function test_depositLiquidity_depositsAppStableLiquidity() public {
         vm.prank(operationsAuthority);
         swapper.addToken(address(appStable));
         
@@ -83,7 +83,7 @@ contract DepositLiquidityTest is StableSwapperBase {
         
         vm.startPrank(operationsAuthority);
         appStable.approve(address(swapper), depositAmount);
-        swapper.deposit_liquidity(address(appStable), depositAmount);
+        swapper.depositLiquidity(address(appStable), depositAmount);
         vm.stopPrank();
         
         assertEq(appStable.balanceOf(address(swapper)), depositAmount);

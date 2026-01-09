@@ -13,7 +13,7 @@ contract UpdateTokenStatusTest is StableSwapperBase {
                               REVERT TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_revertsWhenUnauthorizedUserTriesToDisableToken() public {
+    function test_updateTokenStatus_reverts_whenUnauthorizedUser() public {
         vm.prank(operationsAuthority);
         swapper.addToken(address(usdc));
         
@@ -28,24 +28,29 @@ contract UpdateTokenStatusTest is StableSwapperBase {
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_disablesTokenAndPreventsSwaps() public {
+    function test_updateTokenStatus_disablesToken() public {
         setupBasicSwapEnvironment();
+        
+        bool disabledStatus = false;
         
         // Disable USDC
         vm.prank(pauseAuthority);
-        swapper.updateTokenStatus(address(usdc), false);
+        swapper.updateTokenStatus(address(usdc), disabledStatus);
         
         StableSwapper.TokenVault memory vault = swapper.getVault(address(usdc));
         assertFalse(vault.isEnabled);
     }
     
-    function test_reEnablesTokenAndAllowsSwapsAgain() public {
+    function test_updateTokenStatus_reEnablesToken() public {
         setupBasicSwapEnvironment();
+        
+        bool disabledStatus = false;
+        bool enabledStatus = true;
         
         // Disable then re-enable USDC
         vm.startPrank(pauseAuthority);
-        swapper.updateTokenStatus(address(usdc), false);
-        swapper.updateTokenStatus(address(usdc), true);
+        swapper.updateTokenStatus(address(usdc), disabledStatus);
+        swapper.updateTokenStatus(address(usdc), enabledStatus);
         vm.stopPrank();
         
         StableSwapper.TokenVault memory vault = swapper.getVault(address(usdc));
@@ -53,10 +58,11 @@ contract UpdateTokenStatusTest is StableSwapperBase {
         
         // Swap should succeed
         uint64 swapAmount = 10 * 10 ** 6;
+        uint64 minAmountOut = 10 * 10 ** 6;
         
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet0);
+        swapper.swap(address(usdc), address(appStable), swapAmount, minAmountOut, wallet0);
         vm.stopPrank();
     }
 }

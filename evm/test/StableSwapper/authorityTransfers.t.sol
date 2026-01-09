@@ -12,7 +12,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
                     OPERATIONS AUTHORITY TRANSFER
     //////////////////////////////////////////////////////////////*/
     
-    function test_revertsWhenPauseAuthorityTriesToUpdateOperationsAuthority() public {
+    function test_proposeOperationsAuthorityTransfer_reverts_whenCalledByPauseAuthority() public {
         address newAuthority = makeAddr("newAuthority");
         
         vm.prank(pauseAuthority);
@@ -20,7 +20,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         swapper.proposeOperationsAuthorityTransfer(newAuthority);
     }
     
-    function test_proposesAndAcceptsOperationsAuthorityTransfer() public {
+    function test_proposeOperationsAuthorityTransfer_proposesAndAcceptsTransfer() public {
         address newOpsAuthority = makeAddr("newOpsAuthority");
         
         vm.prank(operationsAuthority);
@@ -40,7 +40,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
                       PAUSE AUTHORITY TRANSFER
     //////////////////////////////////////////////////////////////*/
     
-    function test_revertsWhenOperationsAuthorityTriesToUpdatePauseAuthority() public {
+    function test_proposePauseAuthorityTransfer_reverts_whenCalledByOperationsAuthority() public {
         address newAuthority = makeAddr("newAuthority");
         
         vm.prank(operationsAuthority);
@@ -48,7 +48,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         swapper.proposePauseAuthorityTransfer(newAuthority);
     }
     
-    function test_proposesAndAcceptsPauseAuthorityTransfer() public {
+    function test_proposePauseAuthorityTransfer_proposesAndAcceptsTransfer() public {
         address newPauseAuthority = makeAddr("newPauseAuthority");
         
         vm.prank(pauseAuthority);

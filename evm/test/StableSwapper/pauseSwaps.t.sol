@@ -8,7 +8,7 @@ import {StableSwapperBase} from "./StableSwapperBase.sol";
  * @notice Tests for the StableSwapper pauseSwaps/unpauseSwaps functions
  */
 contract PauseSwapsTest is StableSwapperBase {
-    function test_pausesSwaps() public {
+    function test_pauseSwaps_pausesSwaps() public {
         vm.prank(pauseAuthority);
         swapper.pauseSwaps();
         
@@ -16,7 +16,7 @@ contract PauseSwapsTest is StableSwapperBase {
         assertFalse(swapper.liquidityPaused());
     }
     
-    function test_unpausesSwaps() public {
+    function test_unpauseSwaps_unpausesSwaps() public {
         vm.startPrank(pauseAuthority);
         swapper.pauseSwaps();
         swapper.unpauseSwaps();

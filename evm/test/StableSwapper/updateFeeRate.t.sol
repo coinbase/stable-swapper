@@ -13,7 +13,7 @@ contract UpdateFeeRateTest is StableSwapperBase {
                               REVERT TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_revertsWhenUnauthorizedUserTriesToUpdateFeeRate() public {
+    function test_updateFeeRate_reverts_whenUnauthorizedUser() public {
         address unauthorized = makeAddr("unauthorized");
         
         vm.prank(unauthorized);
@@ -21,7 +21,7 @@ contract UpdateFeeRateTest is StableSwapperBase {
         swapper.updateFeeRate(50);
     }
     
-    function test_revertsWhenFeeRateExceedsMaximum() public {
+    function test_updateFeeRate_reverts_whenFeeRateExceedsMaximum() public {
         uint64 excessiveFeeRate = 1001; // > 10%
         
         vm.prank(operationsAuthority);
@@ -33,7 +33,7 @@ contract UpdateFeeRateTest is StableSwapperBase {
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_updatesFeeRate() public {
+    function test_updateFeeRate_updatesFeeRate() public {
         uint64 newFeeRate = 25; // 0.25%
         
         vm.prank(operationsAuthority);
@@ -42,11 +42,12 @@ contract UpdateFeeRateTest is StableSwapperBase {
         assertEq(swapper.feeRate(), newFeeRate);
         
         // Reset
+        uint64 resetFeeRate = 0;
         vm.prank(operationsAuthority);
-        swapper.updateFeeRate(0);
+        swapper.updateFeeRate(resetFeeRate);
     }
     
-    function test_allowsMaximumFeeRate() public {
+    function test_updateFeeRate_allowsMaximumFeeRate() public {
         uint64 maxFeeRate = 1000; // 10%
         
         vm.prank(operationsAuthority);
@@ -55,8 +56,9 @@ contract UpdateFeeRateTest is StableSwapperBase {
         assertEq(swapper.feeRate(), maxFeeRate);
         
         // Reset
+        uint64 resetFeeRate = 0;
         vm.prank(operationsAuthority);
-        swapper.updateFeeRate(0);
+        swapper.updateFeeRate(resetFeeRate);
     }
 }
 

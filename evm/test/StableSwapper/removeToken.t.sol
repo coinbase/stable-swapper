@@ -13,7 +13,7 @@ contract RemoveTokenTest is StableSwapperBase {
                               REVERT TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_revertsWhenUnauthorizedUserTriesToRemoveToken() public {
+    function test_removeToken_reverts_whenUnauthorizedUser() public {
         MockERC20 testToken = new MockERC20("Test Token", "TEST", 6);
         
         vm.prank(operationsAuthority);
@@ -29,7 +29,7 @@ contract RemoveTokenTest is StableSwapperBase {
         swapper.removeToken(address(testToken));
     }
     
-    function test_revertsWhenTokenIsNotDisabled() public {
+    function test_removeToken_reverts_whenTokenIsNotDisabled() public {
         MockERC20 testToken = new MockERC20("Test Token", "TEST", 6);
         
         vm.startPrank(operationsAuthority);
@@ -40,7 +40,7 @@ contract RemoveTokenTest is StableSwapperBase {
         vm.stopPrank();
     }
     
-    function test_revertsWhenTokenHasNonZeroBalance() public {
+    function test_removeToken_reverts_whenTokenHasNonZeroBalance() public {
         MockERC20 testToken = new MockERC20("Test Token", "TEST", 6);
         testToken.mint(operationsAuthority, 1000000);
         
@@ -49,7 +49,7 @@ contract RemoveTokenTest is StableSwapperBase {
         
         // Deposit liquidity
         testToken.approve(address(swapper), 100000);
-        swapper.deposit_liquidity(address(testToken), 100000);
+        swapper.depositLiquidity(address(testToken), 100000);
         vm.stopPrank();
         
         // Disable token
@@ -66,16 +66,19 @@ contract RemoveTokenTest is StableSwapperBase {
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_removesTokenAfterWithdrawingAllLiquidity() public {
+    function test_removeToken_removesTokenAfterWithdrawingAllLiquidity() public {
         MockERC20 testToken = new MockERC20("Test Token", "TEST", 6);
-        testToken.mint(operationsAuthority, 1000000);
+        uint256 initialMintAmount = 1000000;
+        uint64 depositAmount = 100000;
+        
+        testToken.mint(operationsAuthority, initialMintAmount);
         
         vm.startPrank(operationsAuthority);
         swapper.addToken(address(testToken));
         
         // Deposit liquidity
-        testToken.approve(address(swapper), 100000);
-        swapper.deposit_liquidity(address(testToken), 100000);
+        testToken.approve(address(swapper), depositAmount);
+        swapper.depositLiquidity(address(testToken), depositAmount);
         vm.stopPrank();
         
         // Disable token
@@ -84,13 +87,14 @@ contract RemoveTokenTest is StableSwapperBase {
         
         // Withdraw all liquidity
         vm.prank(operationsAuthority);
-        swapper.withdraw_liquidity(address(testToken), 100000);
+        swapper.withdrawLiquidity(address(testToken), depositAmount);
         
         // Now remove token
         vm.prank(operationsAuthority);
         swapper.removeToken(address(testToken));
         
-        assertEq(swapper.getSupportedTokensCount(), 0);
+        uint256 expectedTokenCount = 0;
+        assertEq(swapper.getSupportedTokensCount(), expectedTokenCount);
     }
 }
 

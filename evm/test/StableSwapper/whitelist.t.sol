@@ -13,7 +13,7 @@ contract WhitelistTest is StableSwapperBase {
                               REVERT TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_revertsWhenUnauthorizedUserTriesToManageWhitelist() public {
+    function test_addToWhitelist_reverts_whenUnauthorizedUser() public {
         address unauthorized = makeAddr("unauthorized");
         
         vm.prank(unauthorized);
@@ -21,7 +21,7 @@ contract WhitelistTest is StableSwapperBase {
         swapper.addToWhitelist(unauthorized);
     }
     
-    function test_revertsWhenAddingDuplicateAddress() public {
+    function test_addToWhitelist_reverts_whenAddingDuplicateAddress() public {
         vm.startPrank(pauseAuthority);
         swapper.addToWhitelist(wallet1);
         
@@ -30,24 +30,25 @@ contract WhitelistTest is StableSwapperBase {
         vm.stopPrank();
     }
     
-    function test_revertsWhenMaxWhitelistAddressesReached() public {
+    function test_addToWhitelist_reverts_whenMaxWhitelistAddressesReached() public {
         vm.startPrank(pauseAuthority);
         
+        uint256 maxWhitelistSize = 100;
         // Add 100 addresses
-        for (uint256 i = 0; i < 100; i++) {
+        for (uint256 i = 0; i < maxWhitelistSize; i++) {
             address addr = makeAddr(string(abi.encodePacked("user", vm.toString(i))));
             swapper.addToWhitelist(addr);
         }
         
         // Try to add 101st address
         address extraAddr = makeAddr("extraUser");
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.WhitelistExceedsMaximum.selector, uint64(100)));
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.WhitelistExceedsMaximum.selector, uint64(maxWhitelistSize)));
         swapper.addToWhitelist(extraAddr);
         
         vm.stopPrank();
     }
     
-    function test_revertsWhenRemovingMissingAddress() public {
+    function test_removeFromWhitelist_reverts_whenAddressNotInWhitelist() public {
         address missingAddress = makeAddr("missingAddress");
         
         vm.prank(pauseAuthority);
@@ -55,7 +56,7 @@ contract WhitelistTest is StableSwapperBase {
         swapper.removeFromWhitelist(missingAddress);
     }
     
-    function test_revertsWhenNonWhitelistedUserTriesToSwap() public {
+    function test_swap_reverts_whenNonWhitelistedUser() public {
         setupBasicSwapEnvironment();
         
         // Add wallet1 to whitelist and enable whitelist
@@ -76,7 +77,7 @@ contract WhitelistTest is StableSwapperBase {
         vm.stopPrank();
     }
     
-    function test_revertsWhenPreviouslyWhitelistedUserTriesToSwapAfterRemoval() public {
+    function test_swap_reverts_whenPreviouslyWhitelistedUserRemovedFromWhitelist() public {
         setupBasicSwapEnvironment();
         
         // Add wallet1 to whitelist, enable whitelist, then remove wallet1
@@ -102,32 +103,34 @@ contract WhitelistTest is StableSwapperBase {
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_addsUserToWhitelist() public {
+    function test_addToWhitelist_addsUserToWhitelist() public {
         vm.prank(pauseAuthority);
         swapper.addToWhitelist(wallet1);
         
-        assertEq(swapper.getWhitelistedAddressesCount(), 1);
+        uint256 expectedCount = 1;
+        assertEq(swapper.getWhitelistedAddressesCount(), expectedCount);
         address[] memory whitelisted = swapper.getWhitelistedAddresses();
         assertEq(whitelisted[0], wallet1);
     }
     
-    function test_removesUserFromWhitelist() public {
+    function test_removeFromWhitelist_removesUserFromWhitelist() public {
         vm.startPrank(pauseAuthority);
         swapper.addToWhitelist(wallet1);
         swapper.removeFromWhitelist(wallet1);
         vm.stopPrank();
         
-        assertEq(swapper.getWhitelistedAddressesCount(), 0);
+        uint256 expectedCount = 0;
+        assertEq(swapper.getWhitelistedAddressesCount(), expectedCount);
     }
     
-    function test_enablesWhitelist() public {
+    function test_enableWhitelist_enablesWhitelist() public {
         vm.prank(pauseAuthority);
         swapper.enableWhitelist();
         
         assertTrue(swapper.whitelistEnabled());
     }
     
-    function test_disablesWhitelist() public {
+    function test_disableWhitelist_disablesWhitelist() public {
         vm.startPrank(pauseAuthority);
         swapper.enableWhitelist();
         swapper.disableWhitelist();
@@ -136,7 +139,7 @@ contract WhitelistTest is StableSwapperBase {
         assertFalse(swapper.whitelistEnabled());
     }
     
-    function test_allowsAnyUserToSwapWhenWhitelistDisabled() public {
+    function test_swap_allowsAnyUser_whenWhitelistDisabled() public {
         setupBasicSwapEnvironment();
         
         // Mint tokens to wallet2
@@ -152,7 +155,7 @@ contract WhitelistTest is StableSwapperBase {
         assertEq(appStable.balanceOf(wallet1), swapAmount);
     }
     
-    function test_allowsWhitelistedUserToSwap() public {
+    function test_swap_allowsWhitelistedUser() public {
         setupBasicSwapEnvironment();
         
         // Add wallet1 to whitelist and enable whitelist
@@ -174,7 +177,7 @@ contract WhitelistTest is StableSwapperBase {
         assertEq(appStable.balanceOf(wallet1), swapAmount);
     }
     
-    function test_allowsAnyUserToSwapAfterWhitelistDisabled() public {
+    function test_swap_allowsAnyUser_afterWhitelistDisabled() public {
         setupBasicSwapEnvironment();
         
         // Enable then disable whitelist

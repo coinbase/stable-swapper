@@ -8,22 +8,25 @@ import {StableSwapperBase} from "./StableSwapperBase.sol";
  * @notice Tests for the StableSwapper updateFeeRecipient function
  */
 contract UpdateFeeRecipientTest is StableSwapperBase {
-    function test_updatesFeeRecipientAndCollectsFeesToNewRecipient() public {
+    function test_updateFeeRecipient_collectsFeesToNewRecipient() public {
         address newFeeRecipient = makeAddr("newFeeRecipient");
+        
+        uint64 liquidityAmount = 500 * 10 ** 6;
+        uint64 feeRate = 100; // 1%
         
         vm.startPrank(operationsAuthority);
         swapper.addToken(address(usdc));
         swapper.addToken(address(appStable));
         
-        usdc.approve(address(swapper), 500 * 10 ** 6);
-        swapper.deposit_liquidity(address(usdc), 500 * 10 ** 6);
+        usdc.approve(address(swapper), liquidityAmount);
+        swapper.depositLiquidity(address(usdc), liquidityAmount);
         
-        appStable.approve(address(swapper), 500 * 10 ** 6);
-        swapper.deposit_liquidity(address(appStable), 500 * 10 ** 6);
+        appStable.approve(address(swapper), liquidityAmount);
+        swapper.depositLiquidity(address(appStable), liquidityAmount);
         
         // Update fee recipient and set 1% fee
         swapper.updateFeeRecipient(newFeeRecipient);
-        swapper.updateFeeRate(100);
+        swapper.updateFeeRate(feeRate);
         vm.stopPrank();
         
         uint64 swapAmount = 100 * 10 ** 6;
@@ -38,9 +41,10 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
         assertEq(usdc.balanceOf(newFeeRecipient), expectedFee);
         
         // Reset
+        uint64 resetFeeRate = 0;
         vm.startPrank(operationsAuthority);
         swapper.updateFeeRecipient(feeRecipient);
-        swapper.updateFeeRate(0);
+        swapper.updateFeeRate(resetFeeRate);
         vm.stopPrank();
     }
 }
