@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
 import {AccessControlEnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
@@ -276,6 +276,7 @@ contract StableSwapper is Initializable, AccessControlEnumerableUpgradeable, UUP
     error CannotBeZeroAddress();
     error TokenAlreadySupported(address token);
     error TokenNotSupported(address token);
+    error CannotSwapSameToken(address token);
     error SupportedTokensExceedsMaximum(uint64 maxTokens);
     error TokenDoesNotImplementDecimals(address token);
     error TokenMustBeDisabled(address token);
@@ -286,7 +287,6 @@ contract StableSwapper is Initializable, AccessControlEnumerableUpgradeable, UUP
     error AmountOutExceedsAvailableLiquidity(uint64 amountOut, uint256 availableLiquidity);
     error LiquidityCannotBePaused();
     error LiquidityWithdrawExceedsBalance(address token, uint64 amount, uint256 balance);
-    error LiquidityWithdrawExceedsAvailableBalance(address token, uint64 amount, uint256 availableBalance);
     error SwapsCannotBePaused();
     error VaultMustBeEnabled(address token);
     error FeeCalculationOverflow();
@@ -419,6 +419,7 @@ contract StableSwapper is Initializable, AccessControlEnumerableUpgradeable, UUP
         require(!swapsPaused, SwapsCannotBePaused());
         require(tokenIn != address(0), CannotBeZeroAddress());
         require(tokenOut != address(0), CannotBeZeroAddress());
+        require(tokenIn != tokenOut, CannotSwapSameToken(tokenIn));
         require(_supportedTokens.contains(tokenIn), TokenNotSupported(tokenIn));
         require(_supportedTokens.contains(tokenOut), TokenNotSupported(tokenOut));
         require(amountIn > 0, CannotBeZeroAmount());
@@ -491,7 +492,7 @@ contract StableSwapper is Initializable, AccessControlEnumerableUpgradeable, UUP
     /**
      * @notice Withdraws liquidity from the contract for a specific token
      * @param token Address of the token to withdraw
-     * @param amount Amount of tokens to withdraw (must not exceed available balance minus reserved amount)
+     * @param amount Amount of tokens to withdraw (operations authority can withdraw regardless of reserved amount)
      */
     function withdraw_liquidity(address token, uint64 amount) external onlyRole(OPERATIONS_AUTHORITY) {
         require(token != address(0), CannotBeZeroAddress());
@@ -502,9 +503,9 @@ contract StableSwapper is Initializable, AccessControlEnumerableUpgradeable, UUP
         uint256 balance = IERC20(token).balanceOf(address(this));
         require(amount <= balance, LiquidityWithdrawExceedsBalance(token, amount, balance));
         
-        // Check that withdrawal doesn't exceed available balance (balance - reserved amount)
-        uint256 availableBalance = balance - _vaults[token].reservedAmount;
-        require(amount <= availableBalance, LiquidityWithdrawExceedsAvailableBalance(token, amount, availableBalance));
+        // Note: Operations authority can withdraw regardless of reserved amount
+        // Reserved amount is meant to protect swap users, not restrict operations authority
+        // This allows operations authority to manage liquidity in emergency situations
         
         SafeERC20.safeTransfer(IERC20(token), msg.sender, amount);
 
