@@ -48,8 +48,8 @@ contract DeployStableSwapperTest is Test {
         assertEq(stableSwapper.contractVersion(), 1, "Contract version should be 1");
         assertEq(stableSwapper.feeRecipient(), feeRecipient, "Fee recipient should match");
         assertEq(stableSwapper.feeRate(), feeRate, "Fee rate should match");
-        assertFalse(stableSwapper.swapsPaused(), "Swaps should not be paused");
-        assertFalse(stableSwapper.liquidityPaused(), "Liquidity should not be paused");
+        assertTrue(stableSwapper.swapsEnabled(), "Swaps should be enabled");
+        assertTrue(stableSwapper.liquidityEnabled(), "Liquidity should be enabled");
         assertFalse(stableSwapper.whitelistEnabled(), "Whitelist should not be enabled");
         assertEq(stableSwapper.getSupportedTokensCount(), 0, "Should have no supported tokens");
 
@@ -71,15 +71,15 @@ contract DeployStableSwapperTest is Test {
         stableSwapper.updateFeeRate(200);
         assertEq(stableSwapper.feeRate(), 200, "Operations authority should be able to update fee rate");
 
-        // Test pause authority can pause swaps
+        // Test pause authority can disable swaps
         vm.prank(pauseAuthority);
-        stableSwapper.pauseSwaps();
-        assertTrue(stableSwapper.swapsPaused(), "Pause authority should be able to pause swaps");
+        stableSwapper.updateSwapStatus(false);
+        assertFalse(stableSwapper.swapsEnabled(), "Pause authority should be able to disable swaps");
 
-        // Test pause authority can unpause swaps
+        // Test pause authority can enable swaps
         vm.prank(pauseAuthority);
-        stableSwapper.unpauseSwaps();
-        assertFalse(stableSwapper.swapsPaused(), "Pause authority should be able to unpause swaps");
+        stableSwapper.updateSwapStatus(true);
+        assertTrue(stableSwapper.swapsEnabled(), "Pause authority should be able to enable swaps");
     }
 
     function test_deploy_implementation_cannot_be_initialized() public {

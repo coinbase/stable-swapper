@@ -55,13 +55,13 @@ contract VerifyDeployment is Script {
         console.log("Fee Rate (basis points):", feeRate);
         console.log("Fee Rate (percentage):", (uint256(feeRate) * 100) / 10000, "%");
 
-        // Pause state
-        console.log("\n--- Pause State ---");
-        bool swapsPaused = stableSwapper.swapsPaused();
-        console.log("Swaps Paused:", swapsPaused ? "YES" : "NO");
+        // Status state
+        console.log("\n--- Status State ---");
+        bool swapsEnabled = stableSwapper.swapsEnabled();
+        console.log("Swaps Enabled:", swapsEnabled ? "YES" : "NO");
 
-        bool liquidityPaused = stableSwapper.liquidityPaused();
-        console.log("Liquidity Paused:", liquidityPaused ? "YES" : "NO");
+        bool liquidityEnabled = stableSwapper.liquidityEnabled();
+        console.log("Liquidity Enabled:", liquidityEnabled ? "YES" : "NO");
 
         bool whitelistEnabled = stableSwapper.whitelistEnabled();
         console.log("Whitelist Enabled:", whitelistEnabled ? "YES" : "NO");
@@ -148,8 +148,8 @@ contract VerifyDeployment is Script {
             upgradeAuth != address(0) && opsAuth != address(0) && pauseAuth != address(0) ? "YES" : "NO"
         );
         console.log("[OK] Tokens Configured:", tokenCount);
-        console.log("[OK] Swaps Status:", swapsPaused ? "PAUSED" : "ACTIVE");
-        console.log("[OK] Liquidity Status:", liquidityPaused ? "PAUSED" : "ACTIVE");
+        console.log("[OK] Swaps Status:", swapsEnabled ? "ENABLED" : "DISABLED");
+        console.log("[OK] Liquidity Status:", liquidityEnabled ? "ENABLED" : "DISABLED");
         console.log("============================\n");
     }
 }

@@ -5,51 +5,39 @@ import {StableSwapperBase} from "./StableSwapperBase.sol";
 
 /**
  * @title PauseSwapsTest
- * @notice Tests for the StableSwapper pauseSwaps/unpauseSwaps functions
+ * @notice Tests for the StableSwapper updateSwapStatus/updateLiquidityStatus functions
  */
 contract PauseSwapsTest is StableSwapperBase {
     /*//////////////////////////////////////////////////////////////
                               REVERT TESTS
     //////////////////////////////////////////////////////////////*/
 
-    function test_pauseSwaps_reverts_whenUnauthorizedUser() public {
+    function test_updateSwapStatus_reverts_whenUnauthorizedUser() public {
         address unauthorized = makeAddr("unauthorized");
 
         vm.prank(unauthorized);
         vm.expectRevert();
-        swapper.pauseSwaps();
-    }
-
-    function test_unpauseSwaps_reverts_whenUnauthorizedUser() public {
-        // First pause swaps
-        vm.prank(pauseAuthority);
-        swapper.pauseSwaps();
-
-        // Try to unpause with unauthorized user
-        address unauthorized = makeAddr("unauthorized");
-        vm.prank(unauthorized);
-        vm.expectRevert();
-        swapper.unpauseSwaps();
+        swapper.updateSwapStatus(false);
     }
 
     /*//////////////////////////////////////////////////////////////
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
 
-    function test_pauseSwaps_pausesSwaps() public {
+    function test_updateSwapStatus_pausesSwaps() public {
         vm.prank(pauseAuthority);
-        swapper.pauseSwaps();
+        swapper.updateSwapStatus(false);
 
-        assertTrue(swapper.swapsPaused());
-        assertFalse(swapper.liquidityPaused());
+        assertFalse(swapper.swapsEnabled());
+        assertTrue(swapper.liquidityEnabled());
     }
 
-    function test_unpauseSwaps_unpausesSwaps() public {
+    function test_updateSwapStatus_unpausesSwaps() public {
         vm.startPrank(pauseAuthority);
-        swapper.pauseSwaps();
-        swapper.unpauseSwaps();
+        swapper.updateSwapStatus(false);
+        swapper.updateSwapStatus(true);
         vm.stopPrank();
 
-        assertFalse(swapper.swapsPaused());
+        assertTrue(swapper.swapsEnabled());
     }
 }

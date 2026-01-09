@@ -36,9 +36,9 @@ contract DepositLiquidityTest is StableSwapperBase {
         vm.prank(operationsAuthority);
         swapper.addToken(address(usdc));
 
-        // Pause liquidity
+        // Disable liquidity
         vm.prank(pauseAuthority);
-        swapper.pauseLiquidity();
+        swapper.updateLiquidityStatus(false);
 
         uint64 depositAmount = 10 * 10 ** 6;
 
@@ -48,9 +48,9 @@ contract DepositLiquidityTest is StableSwapperBase {
         swapper.depositLiquidity(address(usdc), depositAmount);
         vm.stopPrank();
 
-        // Unpause liquidity
+        // Enable liquidity
         vm.prank(pauseAuthority);
-        swapper.unpauseLiquidity();
+        swapper.updateLiquidityStatus(true);
     }
 
     function test_depositLiquidity_reverts_whenTokenNotSupported() public {

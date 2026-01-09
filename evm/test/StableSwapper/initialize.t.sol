@@ -51,8 +51,8 @@ contract InitializeTest is StableSwapperBase {
         assertTrue(swapper.hasRole(swapper.PAUSE_AUTHORITY(), pauseAuthority));
         assertEq(swapper.feeRecipient(), feeRecipient);
         assertEq(swapper.feeRate(), 0);
-        assertFalse(swapper.swapsPaused());
-        assertFalse(swapper.liquidityPaused());
+        assertTrue(swapper.swapsEnabled());
+        assertTrue(swapper.liquidityEnabled());
         assertEq(swapper.getSupportedTokensCount(), 0);
         assertFalse(swapper.whitelistEnabled());
     }

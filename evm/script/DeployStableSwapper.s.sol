@@ -157,8 +157,8 @@ contract DeployStableSwapper is Script {
         require(stableSwapper.feeRate() == feeRate, "Fee rate not set correctly");
 
         // Verify initial state
-        require(!stableSwapper.swapsPaused(), "Swaps should not be paused");
-        require(!stableSwapper.liquidityPaused(), "Liquidity should not be paused");
+        require(stableSwapper.swapsEnabled(), "Swaps should be enabled");
+        require(stableSwapper.liquidityEnabled(), "Liquidity should be enabled");
         require(!stableSwapper.whitelistEnabled(), "Whitelist should not be enabled");
         require(stableSwapper.getSupportedTokensCount() == 0, "No tokens should be supported initially");
 

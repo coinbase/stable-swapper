@@ -42,9 +42,9 @@ contract WithdrawLiquidityTest is StableSwapperBase {
         swapper.depositLiquidity(address(usdc), depositAmount);
         vm.stopPrank();
 
-        // Pause liquidity
+        // Disable liquidity
         vm.prank(pauseAuthority);
-        swapper.pauseLiquidity();
+        swapper.updateLiquidityStatus(false);
 
         uint64 withdrawAmount = 10 * 10 ** 6;
 
@@ -52,9 +52,9 @@ contract WithdrawLiquidityTest is StableSwapperBase {
         vm.expectRevert(StableSwapper.LiquidityCannotBePaused.selector);
         swapper.withdrawLiquidity(address(usdc), withdrawAmount);
 
-        // Unpause liquidity
+        // Enable liquidity
         vm.prank(pauseAuthority);
-        swapper.unpauseLiquidity();
+        swapper.updateLiquidityStatus(true);
     }
 
     function test_withdrawLiquidity_reverts_whenTokenNotSupported() public {

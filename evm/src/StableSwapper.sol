@@ -74,11 +74,11 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @notice Whether whitelist enforcement is currently enabled
     bool public whitelistEnabled;
 
-    /// @notice Whether swap operations are currently paused
-    bool public swapsPaused;
+    /// @notice Whether swap operations are currently enabled
+    bool public swapsEnabled;
 
-    /// @notice Whether liquidity operations (deposits and withdrawals) are currently paused
-    bool public liquidityPaused;
+    /// @notice Whether liquidity operations (deposits and withdrawals) are currently enabled
+    bool public liquidityEnabled;
 
     /// @dev This empty reserved space is put in place to allow future versions to add new
     /// variables without shifting down storage in the inheritance chain.
@@ -139,17 +139,13 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @param newFeeRate New fee rate in basis points (e.g., 100 = 1%)
     event FeeRateUpdated(uint64 newFeeRate);
 
-    /// @notice Emitted when swap operations are paused
-    event SwapsPaused();
+    /// @notice Emitted when swap status is updated
+    /// @param isEnabled True if swaps are enabled, false if disabled
+    event SwapStatusUpdated(bool isEnabled);
 
-    /// @notice Emitted when swap operations are unpaused
-    event SwapsUnpaused();
-
-    /// @notice Emitted when liquidity operations (deposits and withdrawals) are paused
-    event LiquidityPaused();
-
-    /// @notice Emitted when liquidity operations are unpaused
-    event LiquidityUnpaused();
+    /// @notice Emitted when liquidity status is updated
+    /// @param isEnabled True if liquidity operations are enabled, false if disabled
+    event LiquidityStatusUpdated(bool isEnabled);
 
     /// @notice Emitted when a token's reserved amount is updated
     ///
@@ -233,8 +229,8 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
 
         feeRecipient = initialFeeRecipient;
         feeRate = initialFeeRate;
-        swapsPaused = false;
-        liquidityPaused = false;
+        swapsEnabled = true;
+        liquidityEnabled = true;
         whitelistEnabled = false;
         contractVersion = 1;
 
@@ -301,7 +297,7 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @param amount Amount of tokens to deposit
     function depositLiquidity(address token, uint64 amount) external onlyRole(OPERATIONS_AUTHORITY) {
         require(token != address(0), CannotBeZeroAddress());
-        require(!liquidityPaused, LiquidityCannotBePaused());
+        require(liquidityEnabled, LiquidityCannotBePaused());
         require(_supportedTokens.contains(token), TokenNotSupported(token));
         require(amount > 0, CannotBeZeroAmount());
 
@@ -322,7 +318,7 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
         nonReentrant
     {
         // CHECKS: All validation and calculations
-        require(!swapsPaused, SwapsCannotBePaused());
+        require(swapsEnabled, SwapsCannotBePaused());
         require(tokenIn != address(0), CannotBeZeroAddress());
         require(tokenOut != address(0), CannotBeZeroAddress());
         require(tokenIn != tokenOut, CannotSwapSameToken(tokenIn));
@@ -403,7 +399,7 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @param amount Amount of tokens to withdraw (operations authority can withdraw regardless of reserved amount)
     function withdrawLiquidity(address token, uint64 amount) external onlyRole(OPERATIONS_AUTHORITY) {
         require(token != address(0), CannotBeZeroAddress());
-        require(!liquidityPaused, LiquidityCannotBePaused());
+        require(liquidityEnabled, LiquidityCannotBePaused());
         require(_supportedTokens.contains(token), TokenNotSupported(token));
         require(amount > 0, CannotBeZeroAmount());
 
@@ -437,28 +433,18 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
         emit FeeRateUpdated(newFeeRate);
     }
 
-    /// @notice Pauses all swap operations
-    function pauseSwaps() external onlyRole(PAUSE_AUTHORITY) {
-        swapsPaused = true;
-        emit SwapsPaused();
+    /// @notice Updates the swap operations status
+    /// @param isEnabled True to enable swaps, false to disable
+    function updateSwapStatus(bool isEnabled) external onlyRole(PAUSE_AUTHORITY) {
+        swapsEnabled = isEnabled;
+        emit SwapStatusUpdated(isEnabled);
     }
 
-    /// @notice Unpauses swap operations
-    function unpauseSwaps() external onlyRole(PAUSE_AUTHORITY) {
-        swapsPaused = false;
-        emit SwapsUnpaused();
-    }
-
-    /// @notice Pauses all liquidity deposit and withdrawal operations
-    function pauseLiquidity() external onlyRole(PAUSE_AUTHORITY) {
-        liquidityPaused = true;
-        emit LiquidityPaused();
-    }
-
-    /// @notice Unpauses liquidity operations
-    function unpauseLiquidity() external onlyRole(PAUSE_AUTHORITY) {
-        liquidityPaused = false;
-        emit LiquidityUnpaused();
+    /// @notice Updates the liquidity operations status
+    /// @param isEnabled True to enable liquidity operations, false to disable
+    function updateLiquidityStatus(bool isEnabled) external onlyRole(PAUSE_AUTHORITY) {
+        liquidityEnabled = isEnabled;
+        emit LiquidityStatusUpdated(isEnabled);
     }
 
     /// @notice Updates the reserved amount for a token (amount that cannot be withdrawn)

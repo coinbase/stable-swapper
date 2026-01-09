@@ -17,7 +17,7 @@ contract SwapTest is StableSwapperBase {
         setupBasicSwapEnvironment();
 
         vm.prank(pauseAuthority);
-        swapper.pauseSwaps();
+        swapper.updateSwapStatus(false);
 
         uint64 swapAmount = 10 * 10 ** 6;
 
@@ -28,7 +28,7 @@ contract SwapTest is StableSwapperBase {
         vm.stopPrank();
 
         vm.prank(pauseAuthority);
-        swapper.unpauseSwaps();
+        swapper.updateSwapStatus(true);
     }
 
     function test_swap_reverts_whenTokenInIsZeroAddress() public {
