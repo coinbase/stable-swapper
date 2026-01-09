@@ -14,7 +14,7 @@ import {StableSwapper} from "../src/StableSwapper.sol";
  */
 contract DeployStableSwapperTest is Test {
     DeployStableSwapper deployer;
-    
+
     address upgradeAuthority = makeAddr("upgradeAuthority");
     address operationsAuthority = makeAddr("operationsAuthority");
     address pauseAuthority = makeAddr("pauseAuthority");
@@ -29,17 +29,12 @@ contract DeployStableSwapperTest is Test {
         // Test that deployment triggers the Initialized event from StableSwapper
         vm.recordLogs();
 
-        (address implementation, address proxy) = deployer.deploy(
-            upgradeAuthority,
-            operationsAuthority,
-            pauseAuthority,
-            feeRecipient,
-            feeRate
-        );
+        (address implementation, address proxy) =
+            deployer.deploy(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate);
 
         // Get recorded logs
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        
+
         // Verify that at least one log was emitted
         assertTrue(logs.length > 0, "Should emit at least one event");
 
@@ -50,7 +45,7 @@ contract DeployStableSwapperTest is Test {
 
         // Verify proxy is initialized correctly
         StableSwapper stableSwapper = StableSwapper(proxy);
-        
+
         assertEq(stableSwapper.contractVersion(), 1, "Contract version should be 1");
         assertEq(stableSwapper.feeRecipient(), feeRecipient, "Fee recipient should match");
         assertEq(stableSwapper.feeRate(), feeRate, "Fee rate should match");
@@ -69,8 +64,7 @@ contract DeployStableSwapperTest is Test {
             "Operations authority should be set"
         );
         assertTrue(
-            stableSwapper.hasRole(stableSwapper.PAUSE_AUTHORITY(), pauseAuthority),
-            "Pause authority should be set"
+            stableSwapper.hasRole(stableSwapper.PAUSE_AUTHORITY(), pauseAuthority), "Pause authority should be set"
         );
 
         // Test operations authority can update fee rate
@@ -90,47 +84,24 @@ contract DeployStableSwapperTest is Test {
     }
 
     function test_deploy_implementation_cannot_be_initialized() public {
-        (address implementation,) = deployer.deploy(
-            upgradeAuthority,
-            operationsAuthority,
-            pauseAuthority,
-            feeRecipient,
-            feeRate
-        );
+        (address implementation,) =
+            deployer.deploy(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate);
 
         // Try to initialize the implementation directly (should fail)
         StableSwapper impl = StableSwapper(implementation);
-        
+
         vm.expectRevert();
-        impl.initialize(
-            upgradeAuthority,
-            operationsAuthority,
-            pauseAuthority,
-            feeRecipient,
-            feeRate
-        );
+        impl.initialize(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate);
     }
 
     function test_deploy_proxy_cannot_be_initialized_twice() public {
-        (, address proxy) = deployer.deploy(
-            upgradeAuthority,
-            operationsAuthority,
-            pauseAuthority,
-            feeRecipient,
-            feeRate
-        );
+        (, address proxy) =
+            deployer.deploy(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate);
 
         StableSwapper stableSwapper = StableSwapper(proxy);
 
         // Try to initialize again (should fail)
         vm.expectRevert();
-        stableSwapper.initialize(
-            upgradeAuthority,
-            operationsAuthority,
-            pauseAuthority,
-            feeRecipient,
-            feeRate
-        );
+        stableSwapper.initialize(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate);
     }
 }
-

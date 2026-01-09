@@ -32,19 +32,19 @@ contract MockERC20 is ERC20 {
 contract StableSwapperBase is Test {
     StableSwapper public implementation;
     StableSwapper public swapper;
-    
+
     MockERC20 public usdc;
     MockERC20 public appStable;
-    
+
     address public upgradeAuthority;
     address public operationsAuthority;
     address public pauseAuthority;
     address public feeRecipient;
-    
+
     address public wallet0;
     address public wallet1;
     address public wallet2;
-    
+
     function setUp() public virtual {
         // Setup test accounts
         upgradeAuthority = makeAddr("upgradeAuthority");
@@ -54,14 +54,14 @@ contract StableSwapperBase is Test {
         wallet0 = makeAddr("wallet0");
         wallet1 = makeAddr("wallet1");
         wallet2 = makeAddr("wallet2");
-        
+
         // Deploy tokens
         usdc = new MockERC20("USD Coin", "USDC", 6);
         appStable = new MockERC20("App Stable", "APPSTABLE", 6);
-        
+
         // Deploy implementation
         implementation = new StableSwapper();
-        
+
         // Deploy proxy and initialize
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
@@ -71,19 +71,19 @@ contract StableSwapperBase is Test {
             feeRecipient,
             uint64(0) // 0% fee initially
         );
-        
+
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
         swapper = StableSwapper(address(proxy));
-        
+
         // Mint tokens to wallet0
         usdc.mint(wallet0, 1000 * 10 ** 6); // 1000 USDC
         appStable.mint(wallet0, 1000 * 10 ** 6); // 1000 AppStable
-        
+
         // Mint tokens to operations authority for liquidity deposits
         usdc.mint(operationsAuthority, 1000 * 10 ** 6);
         appStable.mint(operationsAuthority, 1000 * 10 ** 6);
     }
-    
+
     /**
      * @notice Helper function to setup basic two-token swap environment
      */
@@ -91,13 +91,12 @@ contract StableSwapperBase is Test {
         vm.startPrank(operationsAuthority);
         swapper.addToken(address(usdc));
         swapper.addToken(address(appStable));
-        
+
         usdc.approve(address(swapper), 500 * 10 ** 6);
         swapper.depositLiquidity(address(usdc), 500 * 10 ** 6);
-        
+
         appStable.approve(address(swapper), 500 * 10 ** 6);
         swapper.depositLiquidity(address(appStable), 500 * 10 ** 6);
         vm.stopPrank();
     }
 }
-

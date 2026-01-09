@@ -9,14 +9,13 @@ import {StableSwapperBase} from "./StableSwapperBase.sol";
  * @notice Tests for the StableSwapper authority transfer functions
  */
 contract AuthorityTransfersTest is StableSwapperBase {
-
     /*//////////////////////////////////////////////////////////////
                               REVERT TESTS
     //////////////////////////////////////////////////////////////*/
-   
+
     function test_proposeOperationsAuthorityTransfer_reverts_whenCalledByPauseAuthority() public {
         address newAuthority = makeAddr("newAuthority");
-        
+
         vm.prank(pauseAuthority);
         vm.expectRevert();
         swapper.proposeOperationsAuthorityTransfer(newAuthority);
@@ -24,7 +23,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
     function test_proposeOperationsAuthorityTransfer_reverts_whenCalledByUpgradeAuthority() public {
         address newAuthority = makeAddr("newAuthority");
-        
+
         vm.prank(upgradeAuthority);
         vm.expectRevert();
         swapper.proposeOperationsAuthorityTransfer(newAuthority);
@@ -32,7 +31,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
     function test_proposePauseAuthorityTransfer_reverts_whenCalledByOperationsAuthority() public {
         address newAuthority = makeAddr("newAuthority");
-        
+
         vm.prank(operationsAuthority);
         vm.expectRevert();
         swapper.proposePauseAuthorityTransfer(newAuthority);
@@ -40,7 +39,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
     function test_proposePauseAuthorityTransfer_reverts_whenCalledByUpgradeAuthority() public {
         address newAuthority = makeAddr("newAuthority");
-        
+
         vm.prank(upgradeAuthority);
         vm.expectRevert();
         swapper.proposePauseAuthorityTransfer(newAuthority);
@@ -48,15 +47,15 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
     function test_proposeUpgradeAuthorityTransfer_reverts_whenCalledByOperationsAuthority() public {
         address newAuthority = makeAddr("newAuthority");
-        
+
         vm.prank(operationsAuthority);
         vm.expectRevert();
         swapper.proposeUpgradeAuthorityTransfer(newAuthority);
     }
-    
+
     function test_proposeUpgradeAuthorityTransfer_reverts_whenCalledByPauseAuthority() public {
         address newAuthority = makeAddr("newAuthority");
-        
+
         vm.prank(pauseAuthority);
         vm.expectRevert();
         swapper.proposeUpgradeAuthorityTransfer(newAuthority);
@@ -73,7 +72,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
         swapper.proposePauseAuthorityTransfer(address(0));
     }
-    
+
     function test_proposeUpgradeAuthorityTransfer_reverts_whenNewAuthorityIsZeroAddress() public {
         vm.prank(upgradeAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
@@ -82,21 +81,21 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
     function test_proposeOperationsAuthorityTransfer_reverts_whenPendingAuthorityIsAlreadySet() public {
         address newAuthority = makeAddr("newAuthority");
-        
+
         vm.prank(operationsAuthority);
         swapper.proposeOperationsAuthorityTransfer(newAuthority);
-        
+
         vm.prank(operationsAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.PendingAuthorityAlreadySet.selector));
         swapper.proposeOperationsAuthorityTransfer(newAuthority);
     }
-    
+
     function test_proposePauseAuthorityTransfer_reverts_whenPendingAuthorityIsAlreadySet() public {
         address newAuthority = makeAddr("newAuthority");
-        
+
         vm.prank(pauseAuthority);
         swapper.proposePauseAuthorityTransfer(newAuthority);
-        
+
         vm.prank(pauseAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.PendingAuthorityAlreadySet.selector));
         swapper.proposePauseAuthorityTransfer(newAuthority);
@@ -104,10 +103,10 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
     function test_proposeUpgradeAuthorityTransfer_reverts_whenPendingAuthorityIsAlreadySet() public {
         address newAuthority = makeAddr("newAuthority");
-        
+
         vm.prank(upgradeAuthority);
         swapper.proposeUpgradeAuthorityTransfer(newAuthority);
-        
+
         vm.prank(upgradeAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.PendingAuthorityAlreadySet.selector));
         swapper.proposeUpgradeAuthorityTransfer(newAuthority);
@@ -200,34 +199,34 @@ contract AuthorityTransfersTest is StableSwapperBase {
     /*//////////////////////////////////////////////////////////////
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
-    
+
     function test_proposeOperationsAuthorityTransfer_proposesAndAcceptsTransfer() public {
         address newOpsAuthority = makeAddr("newOpsAuthority");
-        
+
         vm.prank(operationsAuthority);
         swapper.proposeOperationsAuthorityTransfer(newOpsAuthority);
-        
+
         assertEq(swapper.pendingOperationsAuthority(), newOpsAuthority);
-        
+
         vm.prank(newOpsAuthority);
         swapper.acceptOperationsAuthority();
-        
+
         assertTrue(swapper.hasRole(swapper.OPERATIONS_AUTHORITY(), newOpsAuthority));
         assertFalse(swapper.hasRole(swapper.OPERATIONS_AUTHORITY(), operationsAuthority));
         assertEq(swapper.pendingOperationsAuthority(), address(0));
     }
-    
+
     function test_proposePauseAuthorityTransfer_proposesAndAcceptsTransfer() public {
         address newPauseAuthority = makeAddr("newPauseAuthority");
-        
+
         vm.prank(pauseAuthority);
         swapper.proposePauseAuthorityTransfer(newPauseAuthority);
-        
+
         assertEq(swapper.pendingPauseAuthority(), newPauseAuthority);
-        
+
         vm.prank(newPauseAuthority);
         swapper.acceptPauseAuthority();
-        
+
         assertTrue(swapper.hasRole(swapper.PAUSE_AUTHORITY(), newPauseAuthority));
         assertFalse(swapper.hasRole(swapper.PAUSE_AUTHORITY(), pauseAuthority));
         assertEq(swapper.pendingPauseAuthority(), address(0));
@@ -235,15 +234,15 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
     function test_proposeUpgradeAuthorityTransfer_proposesAndAcceptsTransfer() public {
         address newUpgradeAuthority = makeAddr("newUpgradeAuthority");
-        
+
         vm.prank(upgradeAuthority);
         swapper.proposeUpgradeAuthorityTransfer(newUpgradeAuthority);
-        
+
         assertEq(swapper.pendingUpgradeAuthority(), newUpgradeAuthority);
 
         vm.prank(newUpgradeAuthority);
         swapper.acceptUpgradeAuthority();
-        
+
         assertTrue(swapper.hasRole(swapper.UPGRADE_AUTHORITY(), newUpgradeAuthority));
         assertFalse(swapper.hasRole(swapper.UPGRADE_AUTHORITY(), upgradeAuthority));
         assertEq(swapper.pendingUpgradeAuthority(), address(0));
@@ -251,12 +250,12 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
     function test_cancelOperationsAuthorityTransfer_cancelsTransfer() public {
         address newOpsAuthority = makeAddr("newOpsAuthority");
-        
+
         vm.prank(operationsAuthority);
         swapper.proposeOperationsAuthorityTransfer(newOpsAuthority);
-        
+
         assertEq(swapper.pendingOperationsAuthority(), newOpsAuthority);
-        
+
         vm.prank(operationsAuthority);
         swapper.cancelOperationsAuthorityTransfer();
         assertEq(swapper.pendingOperationsAuthority(), address(0));
@@ -264,12 +263,12 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
     function test_cancelPauseAuthorityTransfer_cancelsTransfer() public {
         address newPauseAuthority = makeAddr("newPauseAuthority");
-        
+
         vm.prank(pauseAuthority);
         swapper.proposePauseAuthorityTransfer(newPauseAuthority);
-        
+
         assertEq(swapper.pendingPauseAuthority(), newPauseAuthority);
-        
+
         vm.prank(pauseAuthority);
         swapper.cancelPauseAuthorityTransfer();
         assertEq(swapper.pendingPauseAuthority(), address(0));
@@ -277,15 +276,14 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
     function test_cancelUpgradeAuthorityTransfer_cancelsTransfer() public {
         address newUpgradeAuthority = makeAddr("newUpgradeAuthority");
-        
+
         vm.prank(upgradeAuthority);
         swapper.proposeUpgradeAuthorityTransfer(newUpgradeAuthority);
-        
+
         assertEq(swapper.pendingUpgradeAuthority(), newUpgradeAuthority);
-        
+
         vm.prank(upgradeAuthority);
         swapper.cancelUpgradeAuthorityTransfer();
         assertEq(swapper.pendingUpgradeAuthority(), address(0));
     }
 }
-

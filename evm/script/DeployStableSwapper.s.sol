@@ -14,7 +14,7 @@ import {StableSwapper} from "../src/StableSwapper.sol";
  *      1. StableSwapper implementation contract
  *      2. ERC1967Proxy pointing to the implementation
  *      3. Initializes the proxy with authorities and fee configuration
- * 
+ *
  * Usage:
  *   Set environment variables:
  *     - UPGRADE_AUTHORITY: Address with upgrade authority role
@@ -22,13 +22,13 @@ import {StableSwapper} from "../src/StableSwapper.sol";
  *     - PAUSE_AUTHORITY: Address with pause authority role
  *     - FEE_RECIPIENT: Address that receives swap fees
  *     - FEE_RATE: Fee rate in basis points (e.g., 100 = 1%)
- * 
+ *
  *   Deploy to network:
  *     forge script script/DeployStableSwapper.s.sol:DeployStableSwapper \
  *       --rpc-url $RPC_URL \
  *       --broadcast \
  *       --verify
- * 
+ *
  *   Dry run (no broadcast):
  *     forge script script/DeployStableSwapper.s.sol:DeployStableSwapper \
  *       --rpc-url $RPC_URL
@@ -77,13 +77,8 @@ contract DeployStableSwapper is Script {
         vm.startBroadcast();
 
         // Deploy contracts
-        (address implementation, address proxy) = deploy(
-            upgradeAuthority,
-            operationsAuthority,
-            pauseAuthority,
-            feeRecipient,
-            feeRate
-        );
+        (address implementation, address proxy) =
+            deploy(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate);
 
         vm.stopBroadcast();
 
@@ -95,13 +90,7 @@ contract DeployStableSwapper is Script {
 
         // Emit deployment event
         emit Deployed(
-            implementation,
-            proxy,
-            upgradeAuthority,
-            operationsAuthority,
-            pauseAuthority,
-            feeRecipient,
-            feeRate
+            implementation, proxy, upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate
         );
     }
 
@@ -146,10 +135,10 @@ contract DeployStableSwapper is Script {
 
         // Step 4: Verify initialization
         StableSwapper stableSwapper = StableSwapper(proxy);
-        
+
         // Verify contract version
         require(stableSwapper.contractVersion() == 1, "Contract version mismatch");
-        
+
         // Verify authorities
         require(
             stableSwapper.hasRole(stableSwapper.UPGRADE_AUTHORITY(), upgradeAuthority),
@@ -160,23 +149,21 @@ contract DeployStableSwapper is Script {
             "Operations authority not set correctly"
         );
         require(
-            stableSwapper.hasRole(stableSwapper.PAUSE_AUTHORITY(), pauseAuthority),
-            "Pause authority not set correctly"
+            stableSwapper.hasRole(stableSwapper.PAUSE_AUTHORITY(), pauseAuthority), "Pause authority not set correctly"
         );
-        
+
         // Verify fee configuration
         require(stableSwapper.feeRecipient() == feeRecipient, "Fee recipient not set correctly");
         require(stableSwapper.feeRate() == feeRate, "Fee rate not set correctly");
-        
+
         // Verify initial state
         require(!stableSwapper.swapsPaused(), "Swaps should not be paused");
         require(!stableSwapper.liquidityPaused(), "Liquidity should not be paused");
         require(!stableSwapper.whitelistEnabled(), "Whitelist should not be enabled");
         require(stableSwapper.getSupportedTokensCount() == 0, "No tokens should be supported initially");
-        
+
         console.log("Deployment verification successful!");
 
         return (implementation, proxy);
     }
 }
-
