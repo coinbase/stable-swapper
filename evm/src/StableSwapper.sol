@@ -8,9 +8,9 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {SingleRoleAuthority} from "./SingleRoleAuthority.sol";
+import {TwoStepSingleRoleAuthority} from "./TwoStepSingleRoleAuthority.sol";
 
-contract StableSwapper is Initializable, SingleRoleAuthority, UUPSUpgradeable, ReentrancyGuardTransient {
+contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgradeable, ReentrancyGuardTransient {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     /// @notice Vault information for a supported token
@@ -79,9 +79,6 @@ contract StableSwapper is Initializable, SingleRoleAuthority, UUPSUpgradeable, R
 
     /// @notice Whether liquidity operations (deposits and withdrawals) are currently paused
     bool public liquidityPaused;
-
-    /// @dev Mapping from role identifier to pending authority in 2-step transfer process
-    mapping(bytes32 => address) private _pendingAuthorities;
 
     /// @dev This empty reserved space is put in place to allow future versions to add new
     /// variables without shifting down storage in the inheritance chain.
@@ -154,28 +151,6 @@ contract StableSwapper is Initializable, SingleRoleAuthority, UUPSUpgradeable, R
     /// @notice Emitted when liquidity operations are unpaused
     event LiquidityUnpaused();
 
-    /// @notice Emitted when a transfer of an authority role is proposed
-    ///
-    /// @param role The role identifier being transferred
-    /// @param currentAuthority Address of the current authority proposing the transfer
-    /// @param pendingAuthority Address that will receive authority if they accept
-    event AuthorityTransferProposed(
-        bytes32 indexed role, address indexed currentAuthority, address indexed pendingAuthority
-    );
-
-    /// @notice Emitted when an authority role is transferred to a new address
-    ///
-    /// @param role The role identifier that was transferred
-    /// @param previousAuthority Address of the previous authority
-    /// @param newAuthority Address of the new authority
-    event AuthorityTransferred(bytes32 indexed role, address indexed previousAuthority, address indexed newAuthority);
-
-    /// @notice Emitted when a pending authority transfer is cancelled
-    ///
-    /// @param role The role identifier for which the transfer was cancelled
-    /// @param cancelledAuthority Address of the pending authority that was cancelled
-    event AuthorityTransferCancelled(bytes32 indexed role, address indexed cancelledAuthority);
-
     /// @notice Emitted when a token's reserved amount is updated
     ///
     /// @param token Address of the token whose reserved amount was updated
@@ -228,9 +203,6 @@ contract StableSwapper is Initializable, SingleRoleAuthority, UUPSUpgradeable, R
     error AddressAlreadyInWhitelist(address addr);
     error AddressNotInWhitelist(address addr);
     error DecimalNormalizationOverflow();
-    error NoPendingAuthorityTransfer();
-    error NotPendingAuthority();
-    error PendingAuthorityAlreadySet();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -487,60 +459,6 @@ contract StableSwapper is Initializable, SingleRoleAuthority, UUPSUpgradeable, R
     function unpauseLiquidity() external onlyRole(PAUSE_AUTHORITY) {
         liquidityPaused = false;
         emit LiquidityUnpaused();
-    }
-
-    /// @notice Proposes a transfer of an authority role to a new address (step 1 of 2)
-    ///
-    /// @dev The new authority must call acceptAuthority() to complete the transfer
-    ///
-    /// @param role The role identifier to transfer (e.g., UPGRADE_AUTHORITY, OPERATIONS_AUTHORITY, PAUSE_AUTHORITY)
-    /// @param newAuthority New address to receive the authority role
-    function proposeAuthorityTransfer(bytes32 role, address newAuthority) external onlyRole(role) {
-        require(newAuthority != address(0), CannotBeZeroAddress());
-        require(_pendingAuthorities[role] == address(0), PendingAuthorityAlreadySet());
-        _pendingAuthorities[role] = newAuthority;
-        emit AuthorityTransferProposed(role, msg.sender, newAuthority);
-    }
-
-    /// @notice Accepts an authority role transfer (step 2 of 2)
-    ///
-    /// @dev Can only be called by the pending authority for the specified role
-    ///
-    /// @param role The role identifier to accept (e.g., UPGRADE_AUTHORITY, OPERATIONS_AUTHORITY, PAUSE_AUTHORITY)
-    function acceptAuthority(bytes32 role) external {
-        address pendingAuthority = _pendingAuthorities[role];
-        require(pendingAuthority != address(0), NoPendingAuthorityTransfer());
-        require(msg.sender == pendingAuthority, NotPendingAuthority());
-
-        address previousAuthority = getRoleHolder(role);
-
-        // Clear pending state first (CEI pattern)
-        delete _pendingAuthorities[role];
-
-        // Transfer role (automatically revokes from previous holder via _grantRole)
-        _grantRole(role, msg.sender);
-
-        emit AuthorityTransferred(role, previousAuthority, msg.sender);
-    }
-
-    /// @notice Cancels a pending authority transfer
-    ///
-    /// @dev Can only be called by the current authority for the specified role
-    ///
-    /// @param role The role identifier for which to cancel the pending transfer
-    function cancelAuthorityTransfer(bytes32 role) external onlyRole(role) {
-        address pendingAuthority = _pendingAuthorities[role];
-        require(pendingAuthority != address(0), NoPendingAuthorityTransfer());
-        delete _pendingAuthorities[role];
-        emit AuthorityTransferCancelled(role, pendingAuthority);
-    }
-
-    /// @notice Gets the pending authority for a specific role
-    ///
-    /// @param role The role identifier to query
-    /// @return The address of the pending authority, or address(0) if none
-    function getPendingAuthority(bytes32 role) external view returns (address) {
-        return _pendingAuthorities[role];
     }
 
     /// @notice Updates the reserved amount for a token (amount that cannot be withdrawn)

@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {StableSwapper} from "../../src/StableSwapper.sol";
 import {StableSwapperBase} from "./StableSwapperBase.sol";
+import {TwoStepSingleRoleAuthority} from "../../src/TwoStepSingleRoleAuthority.sol";
 
 /**
  * @title AuthorityTransfersTest
@@ -62,19 +63,19 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
     function test_proposeAuthorityTransfer_reverts_whenNewAuthorityIsZeroAddress_operations() public {
         vm.prank(operationsAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.InvalidAddress.selector));
         swapper.proposeAuthorityTransfer(operationsAuthorityRole, address(0));
     }
 
     function test_proposeAuthorityTransfer_reverts_whenNewAuthorityIsZeroAddress_pause() public {
         vm.prank(pauseAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.InvalidAddress.selector));
         swapper.proposeAuthorityTransfer(pauseAuthorityRole, address(0));
     }
 
     function test_proposeAuthorityTransfer_reverts_whenNewAuthorityIsZeroAddress_upgrade() public {
         vm.prank(upgradeAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.InvalidAddress.selector));
         swapper.proposeAuthorityTransfer(upgradeAuthorityRole, address(0));
     }
 
@@ -85,7 +86,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         swapper.proposeAuthorityTransfer(operationsAuthorityRole, newAuthority);
 
         vm.prank(operationsAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.PendingAuthorityAlreadySet.selector));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.PendingAuthorityAlreadySet.selector));
         swapper.proposeAuthorityTransfer(operationsAuthorityRole, newAuthority);
     }
 
@@ -96,7 +97,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         swapper.proposeAuthorityTransfer(pauseAuthorityRole, newAuthority);
 
         vm.prank(pauseAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.PendingAuthorityAlreadySet.selector));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.PendingAuthorityAlreadySet.selector));
         swapper.proposeAuthorityTransfer(pauseAuthorityRole, newAuthority);
     }
 
@@ -107,7 +108,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         swapper.proposeAuthorityTransfer(upgradeAuthorityRole, newAuthority);
 
         vm.prank(upgradeAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.PendingAuthorityAlreadySet.selector));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.PendingAuthorityAlreadySet.selector));
         swapper.proposeAuthorityTransfer(upgradeAuthorityRole, newAuthority);
     }
 
@@ -115,7 +116,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         address newAuthority = makeAddr("newAuthority");
 
         vm.prank(newAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NoPendingAuthorityTransfer.selector));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.NoPendingAuthorityTransfer.selector));
         swapper.acceptAuthority(operationsAuthorityRole);
     }
 
@@ -123,7 +124,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         address newAuthority = makeAddr("newAuthority");
 
         vm.prank(newAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NoPendingAuthorityTransfer.selector));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.NoPendingAuthorityTransfer.selector));
         swapper.acceptAuthority(pauseAuthorityRole);
     }
 
@@ -131,7 +132,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         address newAuthority = makeAddr("newAuthority");
 
         vm.prank(newAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NoPendingAuthorityTransfer.selector));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.NoPendingAuthorityTransfer.selector));
         swapper.acceptAuthority(upgradeAuthorityRole);
     }
 
@@ -143,7 +144,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         swapper.proposeAuthorityTransfer(operationsAuthorityRole, newAuthority);
 
         vm.prank(wrongCaller);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NotPendingAuthority.selector));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.NotPendingAuthority.selector));
         swapper.acceptAuthority(operationsAuthorityRole);
     }
 
@@ -155,7 +156,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         swapper.proposeAuthorityTransfer(pauseAuthorityRole, newAuthority);
 
         vm.prank(wrongCaller);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NotPendingAuthority.selector));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.NotPendingAuthority.selector));
         swapper.acceptAuthority(pauseAuthorityRole);
     }
 
@@ -167,25 +168,25 @@ contract AuthorityTransfersTest is StableSwapperBase {
         swapper.proposeAuthorityTransfer(upgradeAuthorityRole, newAuthority);
 
         vm.prank(wrongCaller);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NotPendingAuthority.selector));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.NotPendingAuthority.selector));
         swapper.acceptAuthority(upgradeAuthorityRole);
     }
 
     function test_cancelAuthorityTransfer_reverts_whenNoPendingAuthority_operations() public {
         vm.prank(operationsAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NoPendingAuthorityTransfer.selector));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.NoPendingAuthorityTransfer.selector));
         swapper.cancelAuthorityTransfer(operationsAuthorityRole);
     }
 
     function test_cancelAuthorityTransfer_reverts_whenNoPendingAuthority_pause() public {
         vm.prank(pauseAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NoPendingAuthorityTransfer.selector));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.NoPendingAuthorityTransfer.selector));
         swapper.cancelAuthorityTransfer(pauseAuthorityRole);
     }
 
     function test_cancelAuthorityTransfer_reverts_whenNoPendingAuthority_upgrade() public {
         vm.prank(upgradeAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.NoPendingAuthorityTransfer.selector));
+        vm.expectRevert(abi.encodeWithSelector(TwoStepSingleRoleAuthority.NoPendingAuthorityTransfer.selector));
         swapper.cancelAuthorityTransfer(upgradeAuthorityRole);
     }
 
