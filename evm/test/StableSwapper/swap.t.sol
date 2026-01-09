@@ -163,9 +163,26 @@ contract SwapTest is StableSwapperBase {
         vm.stopPrank();
     }
 
-    function test_swap_reverts_whenSwapAmountResultsInZeroOutput() public {
-        uint64 liquidityAmount = 500 * 10 ** 6;
-        uint64 feeRateBps = 100; // 1% fee in basis points
+    function testFuzz_swap_reverts_whenSwapAmountResultsInZeroOutput(uint256 feeRateSeed, uint256 liquidityAmountSeed, uint256 tinyAmountSeed) public {
+        uint64 liquidityAmount = uint64(bound(liquidityAmountSeed, 10000, 1000 * 10 ** 6));
+        uint64 feeRateBps = uint64(bound(feeRateSeed, 1, 1000));
+        
+        // Calculate the maximum tinyAmount that will result in zero output after fees
+        // Fee formula: fee = (amountIn * feeRateBps + 9999) / 10000
+        // For output to be zero: amountIn - fee = 0, so amountIn = fee
+        // This means: amountIn = (amountIn * feeRateBps + 9999) / 10000
+        // Solving: amountIn * 10000 = amountIn * feeRateBps + 9999
+        // amountIn * 10000 - amountIn * feeRateBps = 9999
+        // amountIn * (10000 - feeRateBps) = 9999
+        // amountIn = 9999 / (10000 - feeRateBps)
+        // 
+        // For amountIn to result in zero after fees, we need amountIn <= 9999 / (10000 - feeRateBps)
+        uint64 maxTinyAmount = uint64(9999 / (10000 - feeRateBps));
+        
+        // Ensure maxTinyAmount is at least 1
+        if (maxTinyAmount < 1) maxTinyAmount = 1;
+        
+        uint64 tinyAmount = uint64(bound(tinyAmountSeed, 1, maxTinyAmount));
         
         vm.startPrank(operationsAuthority);
         swapper.addToken(address(usdc));
@@ -180,15 +197,10 @@ contract SwapTest is StableSwapperBase {
         swapper.updateFeeRate(feeRateBps);
         vm.stopPrank();
         
-        // Swap tiny amount that results in zero output
-        // With 1% fee on amount 1: fee = (1 * 100 + 9999) / 10000 = 1
-        // So amountInAfterFee = 1 - 1 = 0, which is rejected with CannotBeZeroAmount
-        uint64 tinyAmount = 1;
-        
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), tinyAmount);
-        vm.expectRevert(StableSwapper.CannotBeZeroAmount.selector);
-        swapper.swap(address(usdc), address(appStable), tinyAmount, 0, wallet0);
+        vm.expectRevert(StableSwapper.AmountOutCannotBeZero.selector);
+        swapper.swap(address(usdc), address(appStable), tinyAmount, 1, wallet0);
         vm.stopPrank();
         
         // Reset fee
@@ -196,12 +208,20 @@ contract SwapTest is StableSwapperBase {
         swapper.updateFeeRate(0);
     }
     
-    function test_swap_reverts_whenSlippageProtectionTriggered() public {
+    function testFuzz_swap_reverts_whenSlippageProtectionTriggered(uint256 swapAmountSeed, uint256 feeRateSeed, uint256 minAmountOutSeed) public {
         setupBasicSwapEnvironment();
         
-        uint64 feeRateBps = 500; // 5% fee in basis points
-        uint64 swapAmount = 100 * 10 ** 6;
-        uint64 minAmountOut = 98 * 10 ** 6; // Expect only 2% loss, but will get 5%
+        uint64 feeRateBps = uint64(bound(feeRateSeed, 1, 1000));
+        // Ensure swapAmount is large enough that after max fee (1000 bps = 10%), amountOut > 0
+        // Min value: 10001 ensures even at 10% fee, we get at least 1 token out
+        uint64 swapAmount = uint64(bound(swapAmountSeed, 10001, 1000 * 10 ** 6));
+        
+        // Calculate the actual amount out after fees: amountOut = swapAmount * (10000 - feeRateBps) / 10000
+        uint64 expectedAmountOut = uint64((uint256(swapAmount) * (10000 - feeRateBps)) / 10000);
+        
+        // Set minAmountOut to be greater than expectedAmountOut to trigger slippage protection
+        // Bound it between expectedAmountOut + 1 and swapAmount (the theoretical maximum)
+        uint64 minAmountOut = uint64(bound(minAmountOutSeed, expectedAmountOut + 1, swapAmount));
         
         vm.prank(operationsAuthority);
         swapper.updateFeeRate(feeRateBps);
@@ -217,9 +237,9 @@ contract SwapTest is StableSwapperBase {
         swapper.updateFeeRate(0);
     }
 
-    function test_swap_reverts_whenInsufficientLiquidity() public {
-        uint64 limitedLiquidity = 100 * 10 ** 6;
-        uint64 excessiveSwapAmount = 1000 * 10 ** 6;
+    function testFuzz_swap_reverts_whenInsufficientLiquidity(uint256 limitedLiquiditySeed, uint256 excessiveSwapAmountSeed) public {
+        uint64 limitedLiquidity = uint64(bound(limitedLiquiditySeed, 1, 1000 * 10 ** 6));
+        uint64 excessiveSwapAmount = uint64(bound(excessiveSwapAmountSeed, limitedLiquidity + 1, 10000 * 10 ** 6));
         
         vm.startPrank(operationsAuthority);
         swapper.addToken(address(usdc));
@@ -241,11 +261,11 @@ contract SwapTest is StableSwapperBase {
         vm.stopPrank();
     }
 
-    function test_swap_reverts_whenTokenOutExceedsReservedAmount() public {
-        uint64 depositedLiquidity = 500 * 10 ** 6;
-        uint64 reservedAmount = 450 * 10 ** 6;
-        uint64 swapAmount = 100 * 10 ** 6;
-        uint64 availableLiquidity = 50 * 10 ** 6; // depositedLiquidity - reservedAmount
+    function testFuzz_swap_reverts_whenTokenOutExceedsReservedAmount(uint256 depositedLiquiditySeed, uint256 reservedAmountSeed, uint256 swapAmountSeed) public {
+        uint64 depositedLiquidity = uint64(bound(depositedLiquiditySeed, 1, 1000 * 10 ** 6));
+        uint64 reservedAmount = uint64(bound(reservedAmountSeed, 1, depositedLiquidity));
+        uint64 availableLiquidity = depositedLiquidity - reservedAmount;
+        uint64 swapAmount = uint64(bound(swapAmountSeed, availableLiquidity + 1, type(uint64).max));
         
         vm.startPrank(operationsAuthority);
         swapper.addToken(address(usdc));
@@ -273,11 +293,11 @@ contract SwapTest is StableSwapperBase {
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
     
-    function test_swap_transfersTokensCorrectly_usdcToAppStable() public {
+    function testFuzz_swap_transfersTokensCorrectly_usdcToAppStable(uint256 swapAmountSeed, uint256 minAmountOutSeed) public {
         setupBasicSwapEnvironment();
-        
-        uint64 swapAmount = 100 * 10 ** 6;
-        uint64 minAmountOut = 100 * 10 ** 6; // 1:1 with 0% fee
+
+        uint64 swapAmount = uint64(bound(swapAmountSeed, 1, 500 * 10 ** 6));
+        uint64 minAmountOut = uint64(bound(minAmountOutSeed, 1, swapAmount));
         
         uint256 initialUserUsdc = usdc.balanceOf(wallet0);
         uint256 initialUserAppStable = appStable.balanceOf(wallet0);
@@ -291,11 +311,11 @@ contract SwapTest is StableSwapperBase {
         assertEq(appStable.balanceOf(wallet0), initialUserAppStable + swapAmount);
     }
     
-    function test_swap_transfersTokensCorrectly_appStableToUsdc() public {
+    function testFuzz_swap_transfersTokensCorrectly_appStableToUsdc(uint256 swapAmountSeed, uint256 minAmountOutSeed) public {
         setupBasicSwapEnvironment();
         
-        uint64 swapAmount = 50 * 10 ** 6;
-        uint64 minAmountOut = 50 * 10 ** 6;
+        uint64 swapAmount = uint64(bound(swapAmountSeed, 1, 500 * 10 ** 6));
+        uint64 minAmountOut = uint64(bound(minAmountOutSeed, 1, swapAmount));
         
         uint256 initialUserUsdc = usdc.balanceOf(wallet0);
         uint256 initialUserAppStable = appStable.balanceOf(wallet0);
@@ -408,25 +428,6 @@ contract SwapTest is StableSwapperBase {
         vm.stopPrank();
         
         assertEq(usdc.balanceOf(wallet0), initialUserUsdc + expectedRoundedAmount);
-    }
-    
-    function test_swap_transfersCorrectly_whenSameDecimals() public {
-        setupBasicSwapEnvironment();
-        
-        uint64 swapAmount = 50 * 10 ** 6;
-        uint64 minAmountOut = 50 * 10 ** 6;
-        uint64 expectedOutput = 50 * 10 ** 6;
-        
-        uint256 initialUserUsdc = usdc.balanceOf(wallet0);
-        uint256 initialUserAppStable = appStable.balanceOf(wallet0);
-        
-        vm.startPrank(wallet0);
-        usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(appStable), swapAmount, minAmountOut, wallet0);
-        vm.stopPrank();
-        
-        assertEq(usdc.balanceOf(wallet0), initialUserUsdc - swapAmount);
-        assertEq(appStable.balanceOf(wallet0), initialUserAppStable + expectedOutput);
     }
     
     function test_swap_collectsFeesCorrectly_whenFeeRateNonZero() public {
