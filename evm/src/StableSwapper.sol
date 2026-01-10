@@ -128,8 +128,9 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @notice Emitted when liquidity is withdrawn from a token vault
     ///
     /// @param token Address of the token that was withdrawn
+    /// @param recipient Address that received the withdrawn tokens
     /// @param amount Amount of tokens withdrawn
-    event LiquidityWithdrawn(address indexed token, uint64 amount);
+    event LiquidityWithdrawn(address indexed token, address indexed recipient, uint64 amount);
 
     /// @notice Emitted when the fee recipient address is updated
     /// @param newFeeRecipient New address that will receive swap fees
@@ -396,9 +397,14 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @notice Withdraws liquidity from the contract for a specific token
     ///
     /// @param token Address of the token to withdraw
+    /// @param recipient Address to receive the withdrawn tokens
     /// @param amount Amount of tokens to withdraw (operations authority can withdraw regardless of reserved amount)
-    function withdrawLiquidity(address token, uint64 amount) external onlyRole(OPERATIONS_AUTHORITY) {
+    function withdrawLiquidity(address token, address recipient, uint64 amount)
+        external
+        onlyRole(OPERATIONS_AUTHORITY)
+    {
         require(token != address(0), CannotBeZeroAddress());
+        require(recipient != address(0), CannotBeZeroAddress());
         require(liquidityEnabled, LiquidityCannotBePaused());
         require(_supportedTokens.contains(token), TokenNotSupported(token));
         require(amount > 0, CannotBeZeroAmount());
@@ -410,9 +416,9 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
         // Reserved amount is meant to protect swap users, not restrict operations authority
         // This allows operations authority to manage liquidity in emergency situations
 
-        SafeERC20.safeTransfer(IERC20(token), msg.sender, amount);
+        SafeERC20.safeTransfer(IERC20(token), recipient, amount);
 
-        emit LiquidityWithdrawn(token, amount);
+        emit LiquidityWithdrawn(token, recipient, amount);
     }
 
     /// @notice Updates the address that receives swap fees

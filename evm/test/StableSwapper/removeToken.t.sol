@@ -99,7 +99,7 @@ contract RemoveTokenTest is StableSwapperBase {
 
         // Withdraw all liquidity
         vm.prank(operationsAuthority);
-        swapper.withdrawLiquidity(address(testToken), depositAmount);
+        swapper.withdrawLiquidity(address(testToken), operationsAuthority, depositAmount);
 
         // Now remove token
         vm.prank(operationsAuthority);
