@@ -80,11 +80,6 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @notice Whether liquidity operations (deposits and withdrawals) are currently enabled
     bool public liquidityEnabled;
 
-    /// @dev This empty reserved space is put in place to allow future versions to add new
-    /// variables without shifting down storage in the inheritance chain.
-    /// See https://docs.openzeppelin.com/contracts/5.x/upgradeable#storage_gaps
-    uint256[50] private __gap;
-
     /// @notice Emitted when the contract is initialized with initial authorities and fee configuration
     ///
     /// @param upgradeAuthority Address granted the UPGRADE_AUTHORITY role
@@ -584,4 +579,9 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
             return uint64(uint256(amount) / divisor);
         }
     }
+
+    /// @dev This empty reserved space is put in place to allow future versions to add new
+    /// variables without shifting down storage in the inheritance chain.
+    /// See https://docs.openzeppelin.com/contracts/5.x/upgradeable#storage_gaps
+    uint256[50] private __gap;
 }
