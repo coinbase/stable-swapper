@@ -11,6 +11,10 @@ abstract contract SingleRoleAuthority is Initializable {
     /// @dev Mapping from role identifier to the single address that holds that role
     mapping(bytes32 => address) private _roleHolders;
 
+    /// @dev This empty reserved space is put in place to allow future versions to add new
+    /// variables without shifting down storage in the inheritance chain.
+    uint256[49] private __gap;
+
     /// @notice Emitted when a role was granted to an address
     ///
     /// @param role The role identifier
@@ -103,9 +107,5 @@ abstract contract SingleRoleAuthority is Initializable {
             emit RoleRevoked(role, account, msg.sender);
         }
     }
-
-    /// @dev This empty reserved space is put in place to allow future versions to add new
-    /// variables without shifting down storage in the inheritance chain.
-    uint256[49] private __gap;
 }
 

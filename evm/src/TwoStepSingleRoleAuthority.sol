@@ -11,6 +11,10 @@ abstract contract TwoStepSingleRoleAuthority is SingleRoleAuthority {
     /// @dev Mapping from role identifier to pending authority in 2-step transfer process
     mapping(bytes32 => address) private _pendingAuthorities;
 
+    /// @dev This empty reserved space is put in place to allow future versions to add new
+    /// variables without shifting down storage in the inheritance chain.
+    uint256[49] private __gap;
+
     /// @notice Emitted when a transfer of an authority role is proposed
     ///
     /// @param role The role identifier being transferred
@@ -89,9 +93,5 @@ abstract contract TwoStepSingleRoleAuthority is SingleRoleAuthority {
     function getPendingAuthority(bytes32 role) external view returns (address) {
         return _pendingAuthorities[role];
     }
-
-    /// @dev This empty reserved space is put in place to allow future versions to add new
-    /// variables without shifting down storage in the inheritance chain.
-    uint256[49] private __gap;
 }
 
