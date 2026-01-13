@@ -60,31 +60,27 @@ contract DeployStableSwapperTest is Test {
             stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Upgrade authority should be set"
         );
         assertTrue(
-            stableSwapper.hasRole(stableSwapper.TREASURY_AUTHORITY(), treasuryAuthority),
-            "Operations authority should be set"
+            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), treasuryAuthority), "Operations role should be set"
         );
         assertTrue(
-            stableSwapper.hasRole(stableSwapper.CONFIGURE_AUTHORITY(), configureAuthority),
-            "Configure authority should be set"
+            stableSwapper.hasRole(stableSwapper.CONFIGURE_ROLE(), configureAuthority), "Configure role should be set"
         );
-        assertTrue(
-            stableSwapper.hasRole(stableSwapper.PAUSE_AUTHORITY(), pauseAuthority), "Pause authority should be set"
-        );
+        assertTrue(stableSwapper.hasRole(stableSwapper.PAUSE_ROLE(), pauseAuthority), "Pause role should be set");
 
-        // Test configure authority can update fee rate
+        // Test configure role can update fee rate
         vm.prank(configureAuthority);
         stableSwapper.updateFeeRate(200);
-        assertEq(stableSwapper.feeRate(), 200, "Configure authority should be able to update fee rate");
+        assertEq(stableSwapper.feeRate(), 200, "Configure role should be able to update fee rate");
 
-        // Test pause authority can disable swaps
+        // Test pause role can disable swaps
         vm.prank(pauseAuthority);
         stableSwapper.updateSwapStatus(false);
-        assertFalse(stableSwapper.swapsEnabled(), "Pause authority should be able to disable swaps");
+        assertFalse(stableSwapper.swapsEnabled(), "Pause role should be able to disable swaps");
 
-        // Test pause authority can enable swaps
+        // Test pause role can enable swaps
         vm.prank(pauseAuthority);
         stableSwapper.updateSwapStatus(true);
-        assertTrue(stableSwapper.swapsEnabled(), "Pause authority should be able to enable swaps");
+        assertTrue(stableSwapper.swapsEnabled(), "Pause role should be able to enable swaps");
     }
 
     function test_deploy_implementation_cannot_be_initialized() public {

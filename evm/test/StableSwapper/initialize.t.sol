@@ -70,9 +70,9 @@ contract InitializeTest is StableSwapperBase {
 
     function test_initialize_setsAllInitialValues() public view {
         assertTrue(swapper.hasRole(swapper.DEFAULT_ADMIN_ROLE(), defaultAdmin));
-        assertTrue(swapper.hasRole(swapper.TREASURY_AUTHORITY(), treasuryAuthority));
-        assertTrue(swapper.hasRole(swapper.CONFIGURE_AUTHORITY(), configureAuthority));
-        assertTrue(swapper.hasRole(swapper.PAUSE_AUTHORITY(), pauseAuthority));
+        assertTrue(swapper.hasRole(swapper.TREASURY_ROLE(), treasuryAuthority));
+        assertTrue(swapper.hasRole(swapper.CONFIGURE_ROLE(), configureAuthority));
+        assertTrue(swapper.hasRole(swapper.PAUSE_ROLE(), pauseAuthority));
         assertEq(swapper.feeRecipient(), feeRecipient);
         assertEq(swapper.feeRate(), 0);
         assertTrue(swapper.swapsEnabled());

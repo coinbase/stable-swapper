@@ -52,20 +52,20 @@ contract StableSwapper is
     /// @notice Maximum number of decimals a token can have to be supported
     uint8 public constant MAX_DECIMALS = 9;
 
-    /// @notice Role identifier for treasury authority
+    /// @notice Role identifier for treasury role
     /// @dev Can withdraw liquidity and update reserved amounts
     /// @dev Multiple addresses can hold this role simultaneously
-    bytes32 public constant TREASURY_AUTHORITY = keccak256("TREASURY_AUTHORITY");
+    bytes32 public constant TREASURY_ROLE = keccak256("TREASURY_ROLE");
 
-    /// @notice Role identifier for pause authority
+    /// @notice Role identifier for pause role
     /// @dev Can pause/unpause swaps and liquidity operations, and enable/disable individual tokens
     /// @dev Multiple addresses can hold this role simultaneously
-    bytes32 public constant PAUSE_AUTHORITY = keccak256("PAUSE_AUTHORITY");
+    bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
 
-    /// @notice Role identifier for configure authority
+    /// @notice Role identifier for configure role
     /// @dev Can add/remove tokens, update fee configuration, and manage whitelist
     /// @dev Multiple addresses can hold this role simultaneously
-    bytes32 public constant CONFIGURE_AUTHORITY = keccak256("CONFIGURE_AUTHORITY");
+    bytes32 public constant CONFIGURE_ROLE = keccak256("CONFIGURE_ROLE");
 
     /// @notice Version number of the contract implementation
     uint8 public contractVersion;
@@ -94,13 +94,13 @@ contract StableSwapper is
     /// @notice Whether liquidity operations (withdrawals) are currently enabled
     bool public liquidityEnabled;
 
-    /// @notice Emitted when the contract is initialized with initial authorities and fee configuration
+    /// @notice Emitted when the contract is initialized with initial roles and fee configuration
     /// @dev DEFAULT_ADMIN_ROLE can grant/revoke other roles after initialization
     ///
     /// @param defaultAdmin Address granted the DEFAULT_ADMIN_ROLE (only role that can manage other roles)
-    /// @param treasuryAuthority Initial address granted the TREASURY_AUTHORITY role
-    /// @param configureAuthority Initial address granted the CONFIGURE_AUTHORITY role
-    /// @param pauseAuthority Initial address granted the PAUSE_AUTHORITY role
+    /// @param treasuryAuthority Initial address granted the TREASURY_ROLE role
+    /// @param configureAuthority Initial address granted the CONFIGURE_ROLE role
+    /// @param pauseAuthority Initial address granted the PAUSE_ROLE role
     /// @param initialFeeRecipient Address that will receive swap fees
     /// @param initialFeeRate Initial fee rate in basis points (e.g., 100 = 1%)
     event Initialized(
@@ -212,15 +212,15 @@ contract StableSwapper is
         _disableInitializers();
     }
 
-    /// @notice Initializes the StableSwapper contract with authorities and fee configuration
+    /// @notice Initializes the StableSwapper contract with roles and fee configuration
     /// @dev DEFAULT_ADMIN_ROLE uses a 2-step transfer process and can only be held by one address at a time
     /// @dev DEFAULT_ADMIN_ROLE is the only role that can grant/revoke other roles
-    /// @dev Other roles (TREASURY_AUTHORITY, CONFIGURE_AUTHORITY, PAUSE_AUTHORITY) can have multiple holders
+    /// @dev Other roles (TREASURY_ROLE, CONFIGURE_ROLE, PAUSE_ROLE) can have multiple holders
     ///
     /// @param defaultAdmin Address granted DEFAULT_ADMIN_ROLE (can authorize UUPS upgrades and grant/revoke all other roles)
-    /// @param treasuryAuthority Initial address granted TREASURY_AUTHORITY (can withdraw liquidity and update reserved amounts)
-    /// @param configureAuthority Initial address granted CONFIGURE_AUTHORITY (can add/remove tokens, update fees, manage whitelist)
-    /// @param pauseAuthority Initial address granted PAUSE_AUTHORITY (can pause/unpause operations and enable/disable tokens)
+    /// @param treasuryAuthority Initial address granted TREASURY_ROLE (can withdraw liquidity and update reserved amounts)
+    /// @param configureAuthority Initial address granted CONFIGURE_ROLE (can add/remove tokens, update fees, manage whitelist)
+    /// @param pauseAuthority Initial address granted PAUSE_ROLE (can pause/unpause operations and enable/disable tokens)
     /// @param initialFeeRecipient Address that will receive swap fees
     /// @param initialFeeRate Fee rate in basis points (e.g., 100 = 1%)
     /// @param initialAdminTransferDelay Delay in seconds for 2-step DEFAULT_ADMIN_ROLE transfers (security feature)
@@ -237,9 +237,9 @@ contract StableSwapper is
 
         require(initialFeeRate <= MAX_FEE_RATE, FeeRateExceedsMaximum(initialFeeRate));
 
-        _grantRole(TREASURY_AUTHORITY, treasuryAuthority);
-        _grantRole(CONFIGURE_AUTHORITY, configureAuthority);
-        _grantRole(PAUSE_AUTHORITY, pauseAuthority);
+        _grantRole(TREASURY_ROLE, treasuryAuthority);
+        _grantRole(CONFIGURE_ROLE, configureAuthority);
+        _grantRole(PAUSE_ROLE, pauseAuthority);
 
         feeRecipient = initialFeeRecipient;
         feeRate = initialFeeRate;
@@ -262,7 +262,7 @@ contract StableSwapper is
     /// @notice Adds a new token to the list of supported tokens for swapping
     ///
     /// @param token Address of the ERC20 token to add (must have 6-9 decimals)
-    function addToken(address token) external onlyRole(CONFIGURE_AUTHORITY) {
+    function addToken(address token) external onlyRole(CONFIGURE_ROLE) {
         require(token != address(0), CannotBeZeroAddress());
         require(!_supportedTokens.contains(token), TokenAlreadySupported(token));
         require(_supportedTokens.length() < MAX_SUPPORTED_TOKENS, SupportedTokensExceedsMaximum(MAX_SUPPORTED_TOKENS));
@@ -286,7 +286,7 @@ contract StableSwapper is
     /// @notice Removes a token from the list of supported tokens (token must be disabled and have zero balance)
     ///
     /// @param token Address of the token to remove
-    function removeToken(address token) external onlyRole(CONFIGURE_AUTHORITY) {
+    function removeToken(address token) external onlyRole(CONFIGURE_ROLE) {
         require(token != address(0), CannotBeZeroAddress());
         require(_supportedTokens.contains(token), TokenNotSupported(token));
 
@@ -392,13 +392,13 @@ contract StableSwapper is
     }
 
     /// @notice Withdraws liquidity from the contract for a specific token
-    /// @dev Only callable by address with TREASURY_AUTHORITY role
-    /// @dev Treasury authority can withdraw regardless of reserved amount (reserved amount only restricts swaps)
+    /// @dev Only callable by address with TREASURY_ROLE role
+    /// @dev Treasury role can withdraw regardless of reserved amount (reserved amount only restricts swaps)
     ///
     /// @param token Address of the token to withdraw
     /// @param recipient Address to receive the withdrawn tokens
     /// @param amount Amount of tokens to withdraw
-    function withdrawLiquidity(address token, address recipient, uint64 amount) external onlyRole(TREASURY_AUTHORITY) {
+    function withdrawLiquidity(address token, address recipient, uint64 amount) external onlyRole(TREASURY_ROLE) {
         require(token != address(0), CannotBeZeroAddress());
         require(recipient != address(0), CannotBeZeroAddress());
         require(liquidityEnabled, LiquidityCannotBePaused());
@@ -408,9 +408,9 @@ contract StableSwapper is
         uint256 balance = IERC20(token).balanceOf(address(this));
         require(amount <= balance, LiquidityWithdrawExceedsBalance(token, amount, balance));
 
-        // Note: TREASURY_AUTHORITY can withdraw regardless of reserved amount
-        // Reserved amount is meant to protect swap users, not restrict treasury authority
-        // This allows treasury authority to manage liquidity in emergency situations
+        // Note: TREASURY_ROLE can withdraw regardless of reserved amount
+        // Reserved amount is meant to protect swap users, not restrict treasury role
+        // This allows treasury role to manage liquidity in emergency situations
 
         SafeERC20.safeTransfer(IERC20(token), recipient, amount);
 
@@ -420,7 +420,7 @@ contract StableSwapper is
     /// @notice Updates the address that receives swap fees
     ///
     /// @param newFeeRecipient New address to receive fees
-    function updateFeeRecipient(address newFeeRecipient) external onlyRole(CONFIGURE_AUTHORITY) {
+    function updateFeeRecipient(address newFeeRecipient) external onlyRole(CONFIGURE_ROLE) {
         require(newFeeRecipient != address(0), CannotBeZeroAddress());
         feeRecipient = newFeeRecipient;
         emit FeeRecipientUpdated(newFeeRecipient);
@@ -429,7 +429,7 @@ contract StableSwapper is
     /// @notice Updates the fee rate charged on swaps
     ///
     /// @param newFeeRate New fee rate in basis points (e.g., 100 = 1%, max 1000 = 10%)
-    function updateFeeRate(uint64 newFeeRate) external onlyRole(CONFIGURE_AUTHORITY) {
+    function updateFeeRate(uint64 newFeeRate) external onlyRole(CONFIGURE_ROLE) {
         require(newFeeRate <= MAX_FEE_RATE, FeeRateExceedsMaximum(newFeeRate));
         feeRate = newFeeRate;
         emit FeeRateUpdated(newFeeRate);
@@ -437,24 +437,24 @@ contract StableSwapper is
 
     /// @notice Updates the swap operations status
     /// @param isEnabled True to enable swaps, false to disable
-    function updateSwapStatus(bool isEnabled) external onlyRole(PAUSE_AUTHORITY) {
+    function updateSwapStatus(bool isEnabled) external onlyRole(PAUSE_ROLE) {
         swapsEnabled = isEnabled;
         emit SwapStatusUpdated(isEnabled);
     }
 
     /// @notice Updates the liquidity operations status
     /// @param isEnabled True to enable liquidity operations, false to disable
-    function updateLiquidityStatus(bool isEnabled) external onlyRole(PAUSE_AUTHORITY) {
+    function updateLiquidityStatus(bool isEnabled) external onlyRole(PAUSE_ROLE) {
         liquidityEnabled = isEnabled;
         emit LiquidityStatusUpdated(isEnabled);
     }
 
     /// @notice Updates the reserved amount for a token (amount that cannot be withdrawn by swaps)
-    /// @dev Reserved amount does not restrict TREASURY_AUTHORITY withdrawals
+    /// @dev Reserved amount does not restrict TREASURY_ROLE withdrawals
     ///
     /// @param token Address of the token
     /// @param newReservedAmount New reserved amount (must not exceed current balance)
-    function updateReservedAmount(address token, uint64 newReservedAmount) external onlyRole(TREASURY_AUTHORITY) {
+    function updateReservedAmount(address token, uint64 newReservedAmount) external onlyRole(TREASURY_ROLE) {
         require(token != address(0), CannotBeZeroAddress());
         require(_supportedTokens.contains(token), TokenNotSupported(token));
 
@@ -470,7 +470,7 @@ contract StableSwapper is
     ///
     /// @param token Address of the token
     /// @param isEnabled True to enable, false to disable
-    function updateTokenStatus(address token, bool isEnabled) external onlyRole(PAUSE_AUTHORITY) {
+    function updateTokenStatus(address token, bool isEnabled) external onlyRole(PAUSE_ROLE) {
         require(token != address(0), CannotBeZeroAddress());
         require(_supportedTokens.contains(token), TokenNotSupported(token));
         _vaults[token].isEnabled = isEnabled;
@@ -480,7 +480,7 @@ contract StableSwapper is
     /// @notice Adds an address to the whitelist (allowing it to initiate swaps when whitelist is enabled)
     ///
     /// @param addr Address to add to whitelist
-    function addToWhitelist(address addr) external onlyRole(CONFIGURE_AUTHORITY) {
+    function addToWhitelist(address addr) external onlyRole(CONFIGURE_ROLE) {
         require(addr != address(0), CannotBeZeroAddress());
         require(!_whitelistedAddresses.contains(addr), AddressAlreadyInWhitelist(addr));
         require(
@@ -494,7 +494,7 @@ contract StableSwapper is
     /// @notice Removes an address from the whitelist
     ///
     /// @param addr Address to remove from whitelist
-    function removeFromWhitelist(address addr) external onlyRole(CONFIGURE_AUTHORITY) {
+    function removeFromWhitelist(address addr) external onlyRole(CONFIGURE_ROLE) {
         require(addr != address(0), CannotBeZeroAddress());
         require(_whitelistedAddresses.contains(addr), AddressNotInWhitelist(addr));
         _whitelistedAddresses.remove(addr);
@@ -502,13 +502,13 @@ contract StableSwapper is
     }
 
     /// @notice Enables whitelist enforcement (only whitelisted addresses can initiate swaps)
-    function enableWhitelist() external onlyRole(CONFIGURE_AUTHORITY) {
+    function enableWhitelist() external onlyRole(CONFIGURE_ROLE) {
         whitelistEnabled = true;
         emit WhitelistEnabled();
     }
 
     /// @notice Disables whitelist enforcement (any address can initiate swaps)
-    function disableWhitelist() external onlyRole(CONFIGURE_AUTHORITY) {
+    function disableWhitelist() external onlyRole(CONFIGURE_ROLE) {
         whitelistEnabled = false;
         emit WhitelistDisabled();
     }

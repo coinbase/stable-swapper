@@ -18,9 +18,9 @@ import {StableSwapper} from "../src/StableSwapper.sol";
  * Usage:
  *   Set environment variables:
  *     - DEFAULT_ADMIN: Address with DEFAULT_ADMIN_ROLE (can upgrade contract and manage roles)
- *     - TREASURY_AUTHORITY: Address with TREASURY_AUTHORITY role (can manage liquidity)
- *     - CONFIGURE_AUTHORITY: Address with CONFIGURE_AUTHORITY role (can add tokens, update fees)
- *     - PAUSE_AUTHORITY: Address with PAUSE_AUTHORITY role (can pause operations)
+ *     - TREASURY_AUTHORITY: Address with TREASURY_ROLE role (can manage liquidity)
+ *     - CONFIGURE_AUTHORITY: Address with CONFIGURE_ROLE role (can add tokens, update fees)
+ *     - PAUSE_AUTHORITY: Address with PAUSE_ROLE role (can pause operations)
  *     - FEE_RECIPIENT: Address that receives swap fees
  *     - FEE_RATE: Fee rate in basis points (e.g., 100 = 1%)
  *     - ADMIN_TRANSFER_DELAY: Delay in seconds for 2-step admin transfers (e.g., 259200 = 3 days)
@@ -73,9 +73,9 @@ contract DeployStableSwapper is Script {
         // Log deployment configuration
         console.log("\n=== StableSwapper Deployment Configuration ===");
         console.log("Default Admin:", defaultAdmin);
-        console.log("Treasury Authority:", treasuryAuthority);
-        console.log("Configure Authority:", configureAuthority);
-        console.log("Pause Authority:", pauseAuthority);
+        console.log("Treasury Role Holder:", treasuryAuthority);
+        console.log("Configure Role Holder:", configureAuthority);
+        console.log("Pause Role Holder:", pauseAuthority);
         console.log("Fee Recipient:", feeRecipient);
         console.log("Fee Rate (basis points):", feeRate);
         console.log("Fee Rate (percentage):", (uint256(feeRate) * 100) / 10000, "%");
@@ -121,9 +121,9 @@ contract DeployStableSwapper is Script {
     /// @notice Deploys StableSwapper implementation and proxy
     ///
     /// @param defaultAdmin Address with DEFAULT_ADMIN_ROLE
-    /// @param treasuryAuthority Address with TREASURY_AUTHORITY role
-    /// @param configureAuthority Address with CONFIGURE_AUTHORITY role
-    /// @param pauseAuthority Address with PAUSE_AUTHORITY role
+    /// @param treasuryAuthority Address with TREASURY_ROLE role
+    /// @param configureAuthority Address with CONFIGURE_ROLE role
+    /// @param pauseAuthority Address with PAUSE_ROLE role
     /// @param feeRecipient Address that receives swap fees
     /// @param feeRate Fee rate in basis points (e.g., 100 = 1%)
     /// @param adminTransferDelay Delay in seconds for 2-step admin transfers
@@ -174,16 +174,13 @@ contract DeployStableSwapper is Script {
             stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Default admin not set correctly"
         );
         require(
-            stableSwapper.hasRole(stableSwapper.TREASURY_AUTHORITY(), treasuryAuthority),
-            "Treasury authority not set correctly"
+            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), treasuryAuthority), "Treasury role not set correctly"
         );
         require(
-            stableSwapper.hasRole(stableSwapper.CONFIGURE_AUTHORITY(), configureAuthority),
-            "Configure authority not set correctly"
+            stableSwapper.hasRole(stableSwapper.CONFIGURE_ROLE(), configureAuthority),
+            "Configure role not set correctly"
         );
-        require(
-            stableSwapper.hasRole(stableSwapper.PAUSE_AUTHORITY(), pauseAuthority), "Pause authority not set correctly"
-        );
+        require(stableSwapper.hasRole(stableSwapper.PAUSE_ROLE(), pauseAuthority), "Pause role not set correctly");
 
         // Verify fee configuration
         require(stableSwapper.feeRecipient() == feeRecipient, "Fee recipient not set correctly");

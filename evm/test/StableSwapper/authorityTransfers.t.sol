@@ -10,7 +10,7 @@ import {
 
 /**
  * @title AuthorityTransfersTest
- * @notice Tests for the StableSwapper authority management functions
+ * @notice Tests for the StableSwapper role management functions
  * @dev Tests both 2-step DEFAULT_ADMIN_ROLE transfers and standard role grant/revoke for other roles
  */
 contract AuthorityTransfersTest is StableSwapperBase {
@@ -24,9 +24,9 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
         // Cache role identifiers
         defaultAdminRole = swapper.DEFAULT_ADMIN_ROLE();
-        treasuryAuthorityRole = swapper.TREASURY_AUTHORITY();
-        configureAuthorityRole = swapper.CONFIGURE_AUTHORITY();
-        pauseAuthorityRole = swapper.PAUSE_AUTHORITY();
+        treasuryAuthorityRole = swapper.TREASURY_ROLE();
+        configureAuthorityRole = swapper.CONFIGURE_ROLE();
+        pauseAuthorityRole = swapper.PAUSE_ROLE();
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -245,7 +245,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         vm.prank(defaultAdmin);
         swapper.grantRole(treasuryAuthorityRole, newTreasury);
 
-        // New treasury should be able to withdraw
+        // New treasury role holder should be able to withdraw
         vm.prank(newTreasury);
         swapper.withdrawLiquidity(address(usdc), newTreasury, 100 * 10 ** 6);
 
@@ -255,11 +255,11 @@ contract AuthorityTransfersTest is StableSwapperBase {
     function test_newConfigureAuthority_canAddTokens() public {
         address newConfigure = makeAddr("newConfigure");
 
-        // Grant role to new configure authority
+        // Grant role to new configure role holder
         vm.prank(defaultAdmin);
         swapper.grantRole(configureAuthorityRole, newConfigure);
 
-        // New configure authority should be able to add tokens
+        // New configure role holder should be able to add tokens
         vm.prank(newConfigure);
         swapper.addToken(address(usdc));
 
@@ -269,11 +269,11 @@ contract AuthorityTransfersTest is StableSwapperBase {
     function test_newPauseAuthority_canPauseSwaps() public {
         address newPause = makeAddr("newPause");
 
-        // Grant role to new pause authority
+        // Grant role to new pause role holder
         vm.prank(defaultAdmin);
         swapper.grantRole(pauseAuthorityRole, newPause);
 
-        // New pause authority should be able to pause swaps
+        // New pause role holder should be able to pause swaps
         vm.prank(newPause);
         swapper.updateSwapStatus(false);
 
@@ -288,33 +288,33 @@ contract AuthorityTransfersTest is StableSwapperBase {
         vm.prank(treasuryAuthority);
         usdc.transfer(address(swapper), 500 * 10 ** 6);
 
-        // Revoke treasury authority
+        // Revoke treasury role
         vm.prank(defaultAdmin);
         swapper.revokeRole(treasuryAuthorityRole, treasuryAuthority);
 
-        // Original treasury should not be able to withdraw
+        // Original treasury role holder should not be able to withdraw
         vm.prank(treasuryAuthority);
         vm.expectRevert();
         swapper.withdrawLiquidity(address(usdc), treasuryAuthority, 100 * 10 ** 6);
     }
 
     function test_revokedConfigureAuthority_cannotAddTokens() public {
-        // Revoke configure authority
+        // Revoke configure role
         vm.prank(defaultAdmin);
         swapper.revokeRole(configureAuthorityRole, configureAuthority);
 
-        // Original configure authority should not be able to add tokens
+        // Original configure role holder should not be able to add tokens
         vm.prank(configureAuthority);
         vm.expectRevert();
         swapper.addToken(address(usdc));
     }
 
     function test_revokedPauseAuthority_cannotPauseSwaps() public {
-        // Revoke pause authority
+        // Revoke pause role
         vm.prank(defaultAdmin);
         swapper.revokeRole(pauseAuthorityRole, pauseAuthority);
 
-        // Original pause authority should not be able to pause swaps
+        // Original pause role holder should not be able to pause swaps
         vm.prank(pauseAuthority);
         vm.expectRevert();
         swapper.updateSwapStatus(false);

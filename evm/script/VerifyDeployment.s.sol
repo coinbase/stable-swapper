@@ -69,9 +69,9 @@ contract VerifyDeployment is Script {
         // Authorities
         console.log("\n--- Authorities ---");
         bytes32 defaultAdminRole = stableSwapper.DEFAULT_ADMIN_ROLE();
-        bytes32 treasuryAuthRole = stableSwapper.TREASURY_AUTHORITY();
-        bytes32 configureAuthRole = stableSwapper.CONFIGURE_AUTHORITY();
-        bytes32 pauseAuthRole = stableSwapper.PAUSE_AUTHORITY();
+        bytes32 treasuryAuthRole = stableSwapper.TREASURY_ROLE();
+        bytes32 configureAuthRole = stableSwapper.CONFIGURE_ROLE();
+        bytes32 pauseAuthRole = stableSwapper.PAUSE_ROLE();
 
         // Note: DEFAULT_ADMIN_ROLE is single-holder via AccessControlDefaultAdminRules
         address defaultAdminAddr = stableSwapper.defaultAdmin();
@@ -80,14 +80,10 @@ contract VerifyDeployment is Script {
 
         // Other roles can have multiple holders, so we just check if anyone has them
         // For display purposes, we could use getRoleMemberCount() but it's not exposed
-        // So we'll just note if the initial authorities still have their roles
-        console.log(
-            "Treasury Authority Role Exists:", stableSwapper.hasRole(treasuryAuthRole, address(0)) ? "NO" : "YES"
-        );
-        console.log(
-            "Configure Authority Role Exists:", stableSwapper.hasRole(configureAuthRole, address(0)) ? "NO" : "YES"
-        );
-        console.log("Pause Authority Role Exists:", stableSwapper.hasRole(pauseAuthRole, address(0)) ? "NO" : "YES");
+        // So we'll just note if the initial role holders still have their roles
+        console.log("Treasury Role Exists:", stableSwapper.hasRole(treasuryAuthRole, address(0)) ? "NO" : "YES");
+        console.log("Configure Role Exists:", stableSwapper.hasRole(configureAuthRole, address(0)) ? "NO" : "YES");
+        console.log("Pause Role Exists:", stableSwapper.hasRole(pauseAuthRole, address(0)) ? "NO" : "YES");
 
         // Pending DEFAULT_ADMIN_ROLE transfer
         console.log("\n--- Pending Admin Transfer ---");
