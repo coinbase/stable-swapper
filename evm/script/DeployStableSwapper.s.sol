@@ -17,11 +17,13 @@ import {StableSwapper} from "../src/StableSwapper.sol";
  *
  * Usage:
  *   Set environment variables:
- *     - UPGRADE_AUTHORITY: Address with upgrade authority role
- *     - OPERATIONS_AUTHORITY: Address with operations authority role
- *     - PAUSE_AUTHORITY: Address with pause authority role
+ *     - DEFAULT_ADMIN: Address with DEFAULT_ADMIN_ROLE (can upgrade contract and manage roles)
+ *     - TREASURY_AUTHORITY: Address with TREASURY_AUTHORITY role (can manage liquidity)
+ *     - CONFIGURE_AUTHORITY: Address with CONFIGURE_AUTHORITY role (can add tokens, update fees)
+ *     - PAUSE_AUTHORITY: Address with PAUSE_AUTHORITY role (can pause operations)
  *     - FEE_RECIPIENT: Address that receives swap fees
  *     - FEE_RATE: Fee rate in basis points (e.g., 100 = 1%)
+ *     - ADMIN_TRANSFER_DELAY: Delay in seconds for 2-step admin transfers (e.g., 259200 = 3 days)
  *
  *   Deploy to network:
  *     forge script script/DeployStableSwapper.s.sol:DeployStableSwapper \
@@ -38,11 +40,13 @@ contract DeployStableSwapper is Script {
     event Deployed(
         address indexed implementation,
         address indexed proxy,
-        address upgradeAuthority,
-        address operationsAuthority,
+        address defaultAdmin,
+        address treasuryAuthority,
+        address configureAuthority,
         address pauseAuthority,
         address feeRecipient,
-        uint64 feeRate
+        uint64 feeRate,
+        uint48 adminTransferDelay
     );
 
     /// @notice Main deployment function
@@ -50,35 +54,47 @@ contract DeployStableSwapper is Script {
     /// @dev Reads configuration from environment variables and deploys contracts
     function run() external {
         // Read configuration from environment variables
-        address upgradeAuthority = vm.envAddress("UPGRADE_AUTHORITY");
-        address operationsAuthority = vm.envAddress("OPERATIONS_AUTHORITY");
+        address defaultAdmin = vm.envAddress("DEFAULT_ADMIN");
+        address treasuryAuthority = vm.envAddress("TREASURY_AUTHORITY");
+        address configureAuthority = vm.envAddress("CONFIGURE_AUTHORITY");
         address pauseAuthority = vm.envAddress("PAUSE_AUTHORITY");
         address feeRecipient = vm.envAddress("FEE_RECIPIENT");
         uint64 feeRate = uint64(vm.envUint("FEE_RATE"));
+        uint48 adminTransferDelay = uint48(vm.envUint("ADMIN_TRANSFER_DELAY"));
 
         // Validate configuration
-        require(upgradeAuthority != address(0), "UPGRADE_AUTHORITY cannot be zero address");
-        require(operationsAuthority != address(0), "OPERATIONS_AUTHORITY cannot be zero address");
+        require(defaultAdmin != address(0), "DEFAULT_ADMIN cannot be zero address");
+        require(treasuryAuthority != address(0), "TREASURY_AUTHORITY cannot be zero address");
+        require(configureAuthority != address(0), "CONFIGURE_AUTHORITY cannot be zero address");
         require(pauseAuthority != address(0), "PAUSE_AUTHORITY cannot be zero address");
         require(feeRecipient != address(0), "FEE_RECIPIENT cannot be zero address");
         require(feeRate <= 1000, "FEE_RATE must be <= 1000 (10%)");
 
         // Log deployment configuration
         console.log("\n=== StableSwapper Deployment Configuration ===");
-        console.log("Upgrade Authority:", upgradeAuthority);
-        console.log("Operations Authority:", operationsAuthority);
+        console.log("Default Admin:", defaultAdmin);
+        console.log("Treasury Authority:", treasuryAuthority);
+        console.log("Configure Authority:", configureAuthority);
         console.log("Pause Authority:", pauseAuthority);
         console.log("Fee Recipient:", feeRecipient);
         console.log("Fee Rate (basis points):", feeRate);
         console.log("Fee Rate (percentage):", (uint256(feeRate) * 100) / 10000, "%");
+        console.log("Admin Transfer Delay (seconds):", adminTransferDelay);
         console.log("===========================================\n");
 
         // Start broadcasting transactions
         vm.startBroadcast();
 
         // Deploy contracts
-        (address implementation, address proxy) =
-            deploy(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate);
+        (address implementation, address proxy) = deploy(
+            defaultAdmin,
+            treasuryAuthority,
+            configureAuthority,
+            pauseAuthority,
+            feeRecipient,
+            feeRate,
+            adminTransferDelay
+        );
 
         vm.stopBroadcast();
 
@@ -90,26 +106,38 @@ contract DeployStableSwapper is Script {
 
         // Emit deployment event
         emit Deployed(
-            implementation, proxy, upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate
+            implementation,
+            proxy,
+            defaultAdmin,
+            treasuryAuthority,
+            configureAuthority,
+            pauseAuthority,
+            feeRecipient,
+            feeRate,
+            adminTransferDelay
         );
     }
 
     /// @notice Deploys StableSwapper implementation and proxy
     ///
-    /// @param upgradeAuthority Address with upgrade authority role
-    /// @param operationsAuthority Address with operations authority role
-    /// @param pauseAuthority Address with pause authority role
+    /// @param defaultAdmin Address with DEFAULT_ADMIN_ROLE
+    /// @param treasuryAuthority Address with TREASURY_AUTHORITY role
+    /// @param configureAuthority Address with CONFIGURE_AUTHORITY role
+    /// @param pauseAuthority Address with PAUSE_AUTHORITY role
     /// @param feeRecipient Address that receives swap fees
     /// @param feeRate Fee rate in basis points (e.g., 100 = 1%)
+    /// @param adminTransferDelay Delay in seconds for 2-step admin transfers
     ///
     /// @return implementation Address of the implementation contract
     /// @return proxy Address of the proxy contract (main entry point)
     function deploy(
-        address upgradeAuthority,
-        address operationsAuthority,
+        address defaultAdmin,
+        address treasuryAuthority,
+        address configureAuthority,
         address pauseAuthority,
         address feeRecipient,
-        uint64 feeRate
+        uint64 feeRate,
+        uint48 adminTransferDelay
     ) public returns (address implementation, address proxy) {
         // Step 1: Deploy implementation contract
         console.log("Deploying StableSwapper implementation...");
@@ -120,11 +148,13 @@ contract DeployStableSwapper is Script {
         // Step 2: Encode initialization data
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
-            upgradeAuthority,
-            operationsAuthority,
+            defaultAdmin,
+            treasuryAuthority,
+            configureAuthority,
             pauseAuthority,
             feeRecipient,
-            feeRate
+            feeRate,
+            adminTransferDelay
         );
 
         // Step 3: Deploy ERC1967 proxy with initialization
@@ -141,12 +171,15 @@ contract DeployStableSwapper is Script {
 
         // Verify authorities
         require(
-            stableSwapper.hasRole(stableSwapper.UPGRADE_AUTHORITY(), upgradeAuthority),
-            "Upgrade authority not set correctly"
+            stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Default admin not set correctly"
         );
         require(
-            stableSwapper.hasRole(stableSwapper.OPERATIONS_AUTHORITY(), operationsAuthority),
-            "Operations authority not set correctly"
+            stableSwapper.hasRole(stableSwapper.TREASURY_AUTHORITY(), treasuryAuthority),
+            "Treasury authority not set correctly"
+        );
+        require(
+            stableSwapper.hasRole(stableSwapper.CONFIGURE_AUTHORITY(), configureAuthority),
+            "Configure authority not set correctly"
         );
         require(
             stableSwapper.hasRole(stableSwapper.PAUSE_AUTHORITY(), pauseAuthority), "Pause authority not set correctly"

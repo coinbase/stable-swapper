@@ -14,8 +14,9 @@ import {StableSwapper} from "../src/StableSwapper.sol";
 contract DeployStableSwapperTest is Test {
     DeployStableSwapper deployer;
 
-    address upgradeAuthority = makeAddr("upgradeAuthority");
-    address operationsAuthority = makeAddr("operationsAuthority");
+    address defaultAdmin = makeAddr("defaultAdmin");
+    address treasuryAuthority = makeAddr("treasuryAuthority");
+    address configureAuthority = makeAddr("configureAuthority");
     address pauseAuthority = makeAddr("pauseAuthority");
     address feeRecipient = makeAddr("feeRecipient");
     uint64 feeRate = 100; // 1%
@@ -28,8 +29,9 @@ contract DeployStableSwapperTest is Test {
         // Test that deployment triggers the Initialized event from StableSwapper
         vm.recordLogs();
 
-        (address implementation, address proxy) =
-            deployer.deploy(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate);
+        (address implementation, address proxy) = deployer.deploy(
+            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeRate, 0
+        );
 
         // Get recorded logs
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -55,21 +57,24 @@ contract DeployStableSwapperTest is Test {
 
         // Verify authorities
         assertTrue(
-            stableSwapper.hasRole(stableSwapper.UPGRADE_AUTHORITY(), upgradeAuthority),
-            "Upgrade authority should be set"
+            stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Upgrade authority should be set"
         );
         assertTrue(
-            stableSwapper.hasRole(stableSwapper.OPERATIONS_AUTHORITY(), operationsAuthority),
+            stableSwapper.hasRole(stableSwapper.TREASURY_AUTHORITY(), treasuryAuthority),
             "Operations authority should be set"
+        );
+        assertTrue(
+            stableSwapper.hasRole(stableSwapper.CONFIGURE_AUTHORITY(), configureAuthority),
+            "Configure authority should be set"
         );
         assertTrue(
             stableSwapper.hasRole(stableSwapper.PAUSE_AUTHORITY(), pauseAuthority), "Pause authority should be set"
         );
 
-        // Test operations authority can update fee rate
-        vm.prank(operationsAuthority);
+        // Test configure authority can update fee rate
+        vm.prank(configureAuthority);
         stableSwapper.updateFeeRate(200);
-        assertEq(stableSwapper.feeRate(), 200, "Operations authority should be able to update fee rate");
+        assertEq(stableSwapper.feeRate(), 200, "Configure authority should be able to update fee rate");
 
         // Test pause authority can disable swaps
         vm.prank(pauseAuthority);
@@ -83,24 +88,28 @@ contract DeployStableSwapperTest is Test {
     }
 
     function test_deploy_implementation_cannot_be_initialized() public {
-        (address implementation,) =
-            deployer.deploy(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate);
+        (address implementation,) = deployer.deploy(
+            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeRate, 0
+        );
 
         // Try to initialize the implementation directly (should fail)
         StableSwapper impl = StableSwapper(implementation);
 
         vm.expectRevert();
-        impl.initialize(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate);
+        impl.initialize(defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeRate, 0);
     }
 
     function test_deploy_proxy_cannot_be_initialized_twice() public {
-        (, address proxy) =
-            deployer.deploy(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate);
+        (, address proxy) = deployer.deploy(
+            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeRate, 0
+        );
 
         StableSwapper stableSwapper = StableSwapper(proxy);
 
         // Try to initialize again (should fail)
         vm.expectRevert();
-        stableSwapper.initialize(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, feeRate);
+        stableSwapper.initialize(
+            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeRate, 0
+        );
     }
 }

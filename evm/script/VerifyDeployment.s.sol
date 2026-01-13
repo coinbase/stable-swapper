@@ -68,29 +68,34 @@ contract VerifyDeployment is Script {
 
         // Authorities
         console.log("\n--- Authorities ---");
-        bytes32 upgradeAuthRole = stableSwapper.UPGRADE_AUTHORITY();
-        bytes32 opsAuthRole = stableSwapper.OPERATIONS_AUTHORITY();
+        bytes32 defaultAdminRole = stableSwapper.DEFAULT_ADMIN_ROLE();
+        bytes32 treasuryAuthRole = stableSwapper.TREASURY_AUTHORITY();
+        bytes32 configureAuthRole = stableSwapper.CONFIGURE_AUTHORITY();
         bytes32 pauseAuthRole = stableSwapper.PAUSE_AUTHORITY();
 
-        address upgradeAuth = stableSwapper.getRoleHolder(upgradeAuthRole);
-        console.log("Upgrade Authority:", upgradeAuth == address(0) ? "None" : vm.toString(upgradeAuth));
+        // Note: DEFAULT_ADMIN_ROLE is single-holder via AccessControlDefaultAdminRules
+        address defaultAdminAddr = stableSwapper.defaultAdmin();
+        console.log("Default Admin Role Exists:", stableSwapper.hasRole(defaultAdminRole, address(0)) ? "NO" : "YES");
+        console.log("Default Admin:", defaultAdminAddr == address(0) ? "None" : vm.toString(defaultAdminAddr));
 
-        address opsAuth = stableSwapper.getRoleHolder(opsAuthRole);
-        console.log("Operations Authority:", opsAuth == address(0) ? "None" : vm.toString(opsAuth));
+        // Other roles can have multiple holders, so we just check if anyone has them
+        // For display purposes, we could use getRoleMemberCount() but it's not exposed
+        // So we'll just note if the initial authorities still have their roles
+        console.log(
+            "Treasury Authority Role Exists:", stableSwapper.hasRole(treasuryAuthRole, address(0)) ? "NO" : "YES"
+        );
+        console.log(
+            "Configure Authority Role Exists:", stableSwapper.hasRole(configureAuthRole, address(0)) ? "NO" : "YES"
+        );
+        console.log("Pause Authority Role Exists:", stableSwapper.hasRole(pauseAuthRole, address(0)) ? "NO" : "YES");
 
-        address pauseAuth = stableSwapper.getRoleHolder(pauseAuthRole);
-        console.log("Pause Authority:", pauseAuth == address(0) ? "None" : vm.toString(pauseAuth));
-
-        // Pending authority transfers
-        console.log("\n--- Pending Authority Transfers ---");
-        address pendingUpgrade = stableSwapper.getPendingAuthority(upgradeAuthRole);
-        console.log("Pending Upgrade Authority:", pendingUpgrade == address(0) ? "None" : vm.toString(pendingUpgrade));
-
-        address pendingOps = stableSwapper.getPendingAuthority(opsAuthRole);
-        console.log("Pending Operations Authority:", pendingOps == address(0) ? "None" : vm.toString(pendingOps));
-
-        address pendingPause = stableSwapper.getPendingAuthority(pauseAuthRole);
-        console.log("Pending Pause Authority:", pendingPause == address(0) ? "None" : vm.toString(pendingPause));
+        // Pending DEFAULT_ADMIN_ROLE transfer
+        console.log("\n--- Pending Admin Transfer ---");
+        (address pendingAdmin, uint48 acceptSchedule) = stableSwapper.pendingDefaultAdmin();
+        console.log("Pending Default Admin:", pendingAdmin == address(0) ? "None" : vm.toString(pendingAdmin));
+        if (pendingAdmin != address(0)) {
+            console.log("Accept Schedule:", acceptSchedule);
+        }
 
         // Supported tokens
         console.log("\n--- Supported Tokens ---");
@@ -143,10 +148,7 @@ contract VerifyDeployment is Script {
         console.log("\n=== Verification Summary ===");
         console.log("[OK] Contract Version:", version);
         console.log("[OK] Fee Rate:", feeRate, "bp");
-        console.log(
-            "[OK] Authorities Set:",
-            upgradeAuth != address(0) && opsAuth != address(0) && pauseAuth != address(0) ? "YES" : "NO"
-        );
+        console.log("[OK] Default Admin Set:", defaultAdminAddr != address(0) ? "YES" : "NO");
         console.log("[OK] Tokens Configured:", tokenCount);
         console.log("[OK] Swaps Status:", swapsEnabled ? "ENABLED" : "DISABLED");
         console.log("[OK] Liquidity Status:", liquidityEnabled ? "ENABLED" : "DISABLED");

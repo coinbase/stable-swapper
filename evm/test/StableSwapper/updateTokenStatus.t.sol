@@ -14,7 +14,7 @@ contract UpdateTokenStatusTest is StableSwapperBase {
     //////////////////////////////////////////////////////////////*/
 
     function test_updateTokenStatus_reverts_whenUnauthorizedUser() public {
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.addToken(address(usdc));
 
         address unauthorized = makeAddr("unauthorized");

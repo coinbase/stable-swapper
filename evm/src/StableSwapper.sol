@@ -5,12 +5,20 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+import {
+    AccessControlDefaultAdminRulesUpgradeable
+} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {TwoStepSingleRoleAuthority} from "./TwoStepSingleRoleAuthority.sol";
 
-contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgradeable, ReentrancyGuardTransient {
+contract StableSwapper is
+    Initializable,
+    AccessControlDefaultAdminRulesUpgradeable,
+    UUPSUpgradeable,
+    ReentrancyGuardTransient
+{
     using EnumerableSet for EnumerableSet.AddressSet;
 
     /// @notice Vault information for a supported token
@@ -44,14 +52,20 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @notice Maximum number of decimals a token can have to be supported
     uint8 public constant MAX_DECIMALS = 9;
 
-    /// @notice Role identifier for operations authority (can manage tokens, liquidity, and fees)
-    bytes32 public constant OPERATIONS_AUTHORITY = keccak256("OPERATIONS_AUTHORITY");
+    /// @notice Role identifier for treasury authority
+    /// @dev Can withdraw liquidity and update reserved amounts
+    /// @dev Multiple addresses can hold this role simultaneously
+    bytes32 public constant TREASURY_AUTHORITY = keccak256("TREASURY_AUTHORITY");
 
-    /// @notice Role identifier for pause authority (can pause/unpause operations and manage whitelist)
+    /// @notice Role identifier for pause authority
+    /// @dev Can pause/unpause swaps and liquidity operations, and enable/disable individual tokens
+    /// @dev Multiple addresses can hold this role simultaneously
     bytes32 public constant PAUSE_AUTHORITY = keccak256("PAUSE_AUTHORITY");
 
-    /// @notice Role identifier for upgrade authority (can authorize contract upgrades)
-    bytes32 public constant UPGRADE_AUTHORITY = keccak256("UPGRADE_AUTHORITY");
+    /// @notice Role identifier for configure authority
+    /// @dev Can add/remove tokens, update fee configuration, and manage whitelist
+    /// @dev Multiple addresses can hold this role simultaneously
+    bytes32 public constant CONFIGURE_AUTHORITY = keccak256("CONFIGURE_AUTHORITY");
 
     /// @notice Version number of the contract implementation
     uint8 public contractVersion;
@@ -77,19 +91,22 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @notice Whether swap operations are currently enabled
     bool public swapsEnabled;
 
-    /// @notice Whether liquidity operations (deposits and withdrawals) are currently enabled
+    /// @notice Whether liquidity operations (withdrawals) are currently enabled
     bool public liquidityEnabled;
 
     /// @notice Emitted when the contract is initialized with initial authorities and fee configuration
+    /// @dev DEFAULT_ADMIN_ROLE can grant/revoke other roles after initialization
     ///
-    /// @param upgradeAuthority Address granted the UPGRADE_AUTHORITY role
-    /// @param operationsAuthority Address granted the OPERATIONS_AUTHORITY role
-    /// @param pauseAuthority Address granted the PAUSE_AUTHORITY role
+    /// @param defaultAdmin Address granted the DEFAULT_ADMIN_ROLE (only role that can manage other roles)
+    /// @param treasuryAuthority Initial address granted the TREASURY_AUTHORITY role
+    /// @param configureAuthority Initial address granted the CONFIGURE_AUTHORITY role
+    /// @param pauseAuthority Initial address granted the PAUSE_AUTHORITY role
     /// @param initialFeeRecipient Address that will receive swap fees
     /// @param initialFeeRate Initial fee rate in basis points (e.g., 100 = 1%)
     event Initialized(
-        address upgradeAuthority,
-        address operationsAuthority,
+        address defaultAdmin,
+        address treasuryAuthority,
+        address configureAuthority,
         address pauseAuthority,
         address initialFeeRecipient,
         uint64 initialFeeRate
@@ -104,12 +121,6 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @notice Emitted when a token is removed from the supported tokens list
     /// @param token Address of the token that was removed
     event TokenRemoved(address indexed token);
-
-    /// @notice Emitted when liquidity is deposited into a token vault
-    ///
-    /// @param token Address of the token that was deposited
-    /// @param amount Amount of tokens deposited
-    event LiquidityDeposited(address indexed token, uint64 amount);
 
     /// @notice Emitted when a swap is executed
     ///
@@ -202,25 +213,32 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     }
 
     /// @notice Initializes the StableSwapper contract with authorities and fee configuration
+    /// @dev DEFAULT_ADMIN_ROLE uses a 2-step transfer process and can only be held by one address at a time
+    /// @dev DEFAULT_ADMIN_ROLE is the only role that can grant/revoke other roles
+    /// @dev Other roles (TREASURY_AUTHORITY, CONFIGURE_AUTHORITY, PAUSE_AUTHORITY) can have multiple holders
     ///
-    /// @param upgradeAuthority Address that can authorize contract upgrades
-    /// @param operationsAuthority Address that can perform operational tasks (add/remove tokens, manage liquidity)
-    /// @param pauseAuthority Address that can pause/unpause swaps and liquidity operations
+    /// @param defaultAdmin Address granted DEFAULT_ADMIN_ROLE (can authorize UUPS upgrades and grant/revoke all other roles)
+    /// @param treasuryAuthority Initial address granted TREASURY_AUTHORITY (can withdraw liquidity and update reserved amounts)
+    /// @param configureAuthority Initial address granted CONFIGURE_AUTHORITY (can add/remove tokens, update fees, manage whitelist)
+    /// @param pauseAuthority Initial address granted PAUSE_AUTHORITY (can pause/unpause operations and enable/disable tokens)
     /// @param initialFeeRecipient Address that will receive swap fees
     /// @param initialFeeRate Fee rate in basis points (e.g., 100 = 1%)
+    /// @param initialAdminTransferDelay Delay in seconds for 2-step DEFAULT_ADMIN_ROLE transfers (security feature)
     function initialize(
-        address upgradeAuthority,
-        address operationsAuthority,
+        address defaultAdmin,
+        address treasuryAuthority,
+        address configureAuthority,
         address pauseAuthority,
         address initialFeeRecipient,
-        uint64 initialFeeRate
+        uint64 initialFeeRate,
+        uint48 initialAdminTransferDelay
     ) public initializer {
-        __SingleRoleAuthority_init();
+        __AccessControlDefaultAdminRules_init(initialAdminTransferDelay, defaultAdmin);
 
         require(initialFeeRate <= MAX_FEE_RATE, FeeRateExceedsMaximum(initialFeeRate));
 
-        _grantRole(UPGRADE_AUTHORITY, upgradeAuthority);
-        _grantRole(OPERATIONS_AUTHORITY, operationsAuthority);
+        _grantRole(TREASURY_AUTHORITY, treasuryAuthority);
+        _grantRole(CONFIGURE_AUTHORITY, configureAuthority);
         _grantRole(PAUSE_AUTHORITY, pauseAuthority);
 
         feeRecipient = initialFeeRecipient;
@@ -230,22 +248,21 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
         whitelistEnabled = false;
         contractVersion = 1;
 
-        emit Initialized(upgradeAuthority, operationsAuthority, pauseAuthority, initialFeeRecipient, initialFeeRate);
+        emit Initialized(
+            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, initialFeeRecipient, initialFeeRate
+        );
     }
 
     /// @dev Function that authorizes an upgrade to a new implementation
-    /// Only addresses with UPGRADE_AUTHORITY role can authorize upgrades
+    /// @dev Only the single address holding DEFAULT_ADMIN_ROLE can authorize upgrades
     ///
     /// @param newImplementation Address of the new implementation contract
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADE_AUTHORITY) {
-        // Additional upgrade authorization logic can be added here
-        // e.g., timelock checks, version validation, etc.
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
     /// @notice Adds a new token to the list of supported tokens for swapping
     ///
     /// @param token Address of the ERC20 token to add (must have 6-9 decimals)
-    function addToken(address token) external onlyRole(OPERATIONS_AUTHORITY) {
+    function addToken(address token) external onlyRole(CONFIGURE_AUTHORITY) {
         require(token != address(0), CannotBeZeroAddress());
         require(!_supportedTokens.contains(token), TokenAlreadySupported(token));
         require(_supportedTokens.length() < MAX_SUPPORTED_TOKENS, SupportedTokensExceedsMaximum(MAX_SUPPORTED_TOKENS));
@@ -269,7 +286,7 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @notice Removes a token from the list of supported tokens (token must be disabled and have zero balance)
     ///
     /// @param token Address of the token to remove
-    function removeToken(address token) external onlyRole(OPERATIONS_AUTHORITY) {
+    function removeToken(address token) external onlyRole(CONFIGURE_AUTHORITY) {
         require(token != address(0), CannotBeZeroAddress());
         require(_supportedTokens.contains(token), TokenNotSupported(token));
 
@@ -285,21 +302,6 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
         _supportedTokens.remove(token);
         delete _vaults[token];
         emit TokenRemoved(token);
-    }
-
-    /// @notice Deposits liquidity into the contract for a specific token
-    ///
-    /// @param token Address of the token to deposit
-    /// @param amount Amount of tokens to deposit
-    function depositLiquidity(address token, uint64 amount) external onlyRole(OPERATIONS_AUTHORITY) {
-        require(token != address(0), CannotBeZeroAddress());
-        require(liquidityEnabled, LiquidityCannotBePaused());
-        require(_supportedTokens.contains(token), TokenNotSupported(token));
-        require(amount > 0, CannotBeZeroAmount());
-
-        SafeERC20.safeTransferFrom(IERC20(token), msg.sender, address(this), amount);
-
-        emit LiquidityDeposited(token, amount);
     }
 
     /// @notice Swaps one stablecoin for another with automatic decimal normalization and fee deduction
@@ -390,14 +392,13 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     }
 
     /// @notice Withdraws liquidity from the contract for a specific token
+    /// @dev Only callable by address with TREASURY_AUTHORITY role
+    /// @dev Treasury authority can withdraw regardless of reserved amount (reserved amount only restricts swaps)
     ///
     /// @param token Address of the token to withdraw
     /// @param recipient Address to receive the withdrawn tokens
-    /// @param amount Amount of tokens to withdraw (operations authority can withdraw regardless of reserved amount)
-    function withdrawLiquidity(address token, address recipient, uint64 amount)
-        external
-        onlyRole(OPERATIONS_AUTHORITY)
-    {
+    /// @param amount Amount of tokens to withdraw
+    function withdrawLiquidity(address token, address recipient, uint64 amount) external onlyRole(TREASURY_AUTHORITY) {
         require(token != address(0), CannotBeZeroAddress());
         require(recipient != address(0), CannotBeZeroAddress());
         require(liquidityEnabled, LiquidityCannotBePaused());
@@ -407,9 +408,9 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
         uint256 balance = IERC20(token).balanceOf(address(this));
         require(amount <= balance, LiquidityWithdrawExceedsBalance(token, amount, balance));
 
-        // Note: Operations authority can withdraw regardless of reserved amount
-        // Reserved amount is meant to protect swap users, not restrict operations authority
-        // This allows operations authority to manage liquidity in emergency situations
+        // Note: TREASURY_AUTHORITY can withdraw regardless of reserved amount
+        // Reserved amount is meant to protect swap users, not restrict treasury authority
+        // This allows treasury authority to manage liquidity in emergency situations
 
         SafeERC20.safeTransfer(IERC20(token), recipient, amount);
 
@@ -419,7 +420,7 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @notice Updates the address that receives swap fees
     ///
     /// @param newFeeRecipient New address to receive fees
-    function updateFeeRecipient(address newFeeRecipient) external onlyRole(OPERATIONS_AUTHORITY) {
+    function updateFeeRecipient(address newFeeRecipient) external onlyRole(CONFIGURE_AUTHORITY) {
         require(newFeeRecipient != address(0), CannotBeZeroAddress());
         feeRecipient = newFeeRecipient;
         emit FeeRecipientUpdated(newFeeRecipient);
@@ -428,7 +429,7 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @notice Updates the fee rate charged on swaps
     ///
     /// @param newFeeRate New fee rate in basis points (e.g., 100 = 1%, max 1000 = 10%)
-    function updateFeeRate(uint64 newFeeRate) external onlyRole(OPERATIONS_AUTHORITY) {
+    function updateFeeRate(uint64 newFeeRate) external onlyRole(CONFIGURE_AUTHORITY) {
         require(newFeeRate <= MAX_FEE_RATE, FeeRateExceedsMaximum(newFeeRate));
         feeRate = newFeeRate;
         emit FeeRateUpdated(newFeeRate);
@@ -448,11 +449,12 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
         emit LiquidityStatusUpdated(isEnabled);
     }
 
-    /// @notice Updates the reserved amount for a token (amount that cannot be withdrawn)
+    /// @notice Updates the reserved amount for a token (amount that cannot be withdrawn by swaps)
+    /// @dev Reserved amount does not restrict TREASURY_AUTHORITY withdrawals
     ///
     /// @param token Address of the token
     /// @param newReservedAmount New reserved amount (must not exceed current balance)
-    function updateReservedAmount(address token, uint64 newReservedAmount) external onlyRole(OPERATIONS_AUTHORITY) {
+    function updateReservedAmount(address token, uint64 newReservedAmount) external onlyRole(TREASURY_AUTHORITY) {
         require(token != address(0), CannotBeZeroAddress());
         require(_supportedTokens.contains(token), TokenNotSupported(token));
 
@@ -478,7 +480,7 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @notice Adds an address to the whitelist (allowing it to initiate swaps when whitelist is enabled)
     ///
     /// @param addr Address to add to whitelist
-    function addToWhitelist(address addr) external onlyRole(PAUSE_AUTHORITY) {
+    function addToWhitelist(address addr) external onlyRole(CONFIGURE_AUTHORITY) {
         require(addr != address(0), CannotBeZeroAddress());
         require(!_whitelistedAddresses.contains(addr), AddressAlreadyInWhitelist(addr));
         require(
@@ -492,7 +494,7 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     /// @notice Removes an address from the whitelist
     ///
     /// @param addr Address to remove from whitelist
-    function removeFromWhitelist(address addr) external onlyRole(PAUSE_AUTHORITY) {
+    function removeFromWhitelist(address addr) external onlyRole(CONFIGURE_AUTHORITY) {
         require(addr != address(0), CannotBeZeroAddress());
         require(_whitelistedAddresses.contains(addr), AddressNotInWhitelist(addr));
         _whitelistedAddresses.remove(addr);
@@ -500,13 +502,13 @@ contract StableSwapper is Initializable, TwoStepSingleRoleAuthority, UUPSUpgrade
     }
 
     /// @notice Enables whitelist enforcement (only whitelisted addresses can initiate swaps)
-    function enableWhitelist() external onlyRole(PAUSE_AUTHORITY) {
+    function enableWhitelist() external onlyRole(CONFIGURE_AUTHORITY) {
         whitelistEnabled = true;
         emit WhitelistEnabled();
     }
 
     /// @notice Disables whitelist enforcement (any address can initiate swaps)
-    function disableWhitelist() external onlyRole(PAUSE_AUTHORITY) {
+    function disableWhitelist() external onlyRole(CONFIGURE_AUTHORITY) {
         whitelistEnabled = false;
         emit WhitelistDisabled();
     }

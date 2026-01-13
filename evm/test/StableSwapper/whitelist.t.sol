@@ -22,13 +22,13 @@ contract WhitelistTest is StableSwapperBase {
     }
 
     function test_addToWhitelist_reverts_whenAddressIsZeroAddress() public {
-        vm.prank(pauseAuthority);
+        vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
         swapper.addToWhitelist(address(0));
     }
 
     function test_addToWhitelist_reverts_whenAddingDuplicateAddress() public {
-        vm.startPrank(pauseAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToWhitelist(wallet1);
 
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.AddressAlreadyInWhitelist.selector, wallet1));
@@ -37,7 +37,7 @@ contract WhitelistTest is StableSwapperBase {
     }
 
     function test_addToWhitelist_reverts_whenMaxWhitelistAddressesReached() public {
-        vm.startPrank(pauseAuthority);
+        vm.startPrank(configureAuthority);
 
         uint256 maxWhitelistSize = 100;
         // Add 100 addresses
@@ -67,7 +67,7 @@ contract WhitelistTest is StableSwapperBase {
     }
 
     function test_removeFromWhitelist_reverts_whenAddressIsZeroAddress() public {
-        vm.prank(pauseAuthority);
+        vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
         swapper.removeFromWhitelist(address(0));
     }
@@ -91,7 +91,7 @@ contract WhitelistTest is StableSwapperBase {
     function test_removeFromWhitelist_reverts_whenAddressNotInWhitelist() public {
         address missingAddress = makeAddr("missingAddress");
 
-        vm.prank(pauseAuthority);
+        vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.AddressNotInWhitelist.selector, missingAddress));
         swapper.removeFromWhitelist(missingAddress);
     }
@@ -100,7 +100,7 @@ contract WhitelistTest is StableSwapperBase {
         setupBasicSwapEnvironment();
 
         // Add wallet1 to whitelist and enable whitelist
-        vm.startPrank(pauseAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToWhitelist(wallet1);
         swapper.enableWhitelist();
         vm.stopPrank();
@@ -121,7 +121,7 @@ contract WhitelistTest is StableSwapperBase {
         setupBasicSwapEnvironment();
 
         // Add wallet1 to whitelist, enable whitelist, then remove wallet1
-        vm.startPrank(pauseAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToWhitelist(wallet1);
         swapper.enableWhitelist();
         swapper.removeFromWhitelist(wallet1);
@@ -144,7 +144,7 @@ contract WhitelistTest is StableSwapperBase {
     //////////////////////////////////////////////////////////////*/
 
     function test_addToWhitelist_addsUserToWhitelist() public {
-        vm.prank(pauseAuthority);
+        vm.prank(configureAuthority);
         swapper.addToWhitelist(wallet1);
 
         uint256 expectedCount = 1;
@@ -154,7 +154,7 @@ contract WhitelistTest is StableSwapperBase {
     }
 
     function test_removeFromWhitelist_removesUserFromWhitelist() public {
-        vm.startPrank(pauseAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToWhitelist(wallet1);
         swapper.removeFromWhitelist(wallet1);
         vm.stopPrank();
@@ -164,14 +164,14 @@ contract WhitelistTest is StableSwapperBase {
     }
 
     function test_enableWhitelist_enablesWhitelist() public {
-        vm.prank(pauseAuthority);
+        vm.prank(configureAuthority);
         swapper.enableWhitelist();
 
         assertTrue(swapper.whitelistEnabled());
     }
 
     function test_disableWhitelist_disablesWhitelist() public {
-        vm.startPrank(pauseAuthority);
+        vm.startPrank(configureAuthority);
         swapper.enableWhitelist();
         swapper.disableWhitelist();
         vm.stopPrank();
@@ -199,7 +199,7 @@ contract WhitelistTest is StableSwapperBase {
         setupBasicSwapEnvironment();
 
         // Add wallet1 to whitelist and enable whitelist
-        vm.startPrank(pauseAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToWhitelist(wallet1);
         swapper.enableWhitelist();
         vm.stopPrank();
@@ -221,7 +221,7 @@ contract WhitelistTest is StableSwapperBase {
         setupBasicSwapEnvironment();
 
         // Enable then disable whitelist
-        vm.startPrank(pauseAuthority);
+        vm.startPrank(configureAuthority);
         swapper.enableWhitelist();
         swapper.disableWhitelist();
         vm.stopPrank();

@@ -35,8 +35,9 @@ contract StableSwapperBase is Test {
     MockERC20 public usdc;
     MockERC20 public appStable;
 
-    address public upgradeAuthority;
-    address public operationsAuthority;
+    address public defaultAdmin;
+    address public treasuryAuthority;
+    address public configureAuthority;
     address public pauseAuthority;
     address public feeRecipient;
 
@@ -46,8 +47,9 @@ contract StableSwapperBase is Test {
 
     function setUp() public virtual {
         // Setup test accounts
-        upgradeAuthority = makeAddr("upgradeAuthority");
-        operationsAuthority = makeAddr("operationsAuthority");
+        defaultAdmin = makeAddr("defaultAdmin");
+        treasuryAuthority = makeAddr("treasuryAuthority");
+        configureAuthority = makeAddr("configureAuthority");
         pauseAuthority = makeAddr("pauseAuthority");
         feeRecipient = makeAddr("feeRecipient");
         wallet0 = makeAddr("wallet0");
@@ -64,11 +66,13 @@ contract StableSwapperBase is Test {
         // Deploy proxy and initialize
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
-            upgradeAuthority,
-            operationsAuthority,
+            defaultAdmin,
+            treasuryAuthority,
+            configureAuthority,
             pauseAuthority,
             feeRecipient,
-            uint64(0) // 0% fee initially
+            uint64(0), // 0% fee initially
+            uint48(0) // 0 second delay for admin transfers in tests
         );
 
         ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
@@ -78,24 +82,25 @@ contract StableSwapperBase is Test {
         usdc.mint(wallet0, 1000 * 10 ** 6); // 1000 USDC
         appStable.mint(wallet0, 1000 * 10 ** 6); // 1000 AppStable
 
-        // Mint tokens to operations authority for liquidity deposits
-        usdc.mint(operationsAuthority, 1000 * 10 ** 6);
-        appStable.mint(operationsAuthority, 1000 * 10 ** 6);
+        // Mint tokens to treasury authority for liquidity operations
+        usdc.mint(treasuryAuthority, 1000 * 10 ** 6);
+        appStable.mint(treasuryAuthority, 1000 * 10 ** 6);
     }
 
     /**
      * @notice Helper function to setup basic two-token swap environment
      */
     function setupBasicSwapEnvironment() internal {
-        vm.startPrank(operationsAuthority);
+        // Configure authority adds tokens
+        vm.startPrank(configureAuthority);
         swapper.addToken(address(usdc));
         swapper.addToken(address(appStable));
+        vm.stopPrank();
 
-        usdc.approve(address(swapper), 500 * 10 ** 6);
-        swapper.depositLiquidity(address(usdc), 500 * 10 ** 6);
-
-        appStable.approve(address(swapper), 500 * 10 ** 6);
-        swapper.depositLiquidity(address(appStable), 500 * 10 ** 6);
+        // Treasury authority deposits liquidity
+        vm.startPrank(treasuryAuthority);
+        usdc.transfer(address(swapper), 500 * 10 ** 6);
+        appStable.transfer(address(swapper), 500 * 10 ** 6);
         vm.stopPrank();
     }
 }

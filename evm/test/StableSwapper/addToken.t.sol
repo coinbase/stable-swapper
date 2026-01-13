@@ -38,13 +38,13 @@ contract AddTokenTest is StableSwapperBase {
     }
 
     function test_addToken_reverts_whenTokenIsZeroAddress() public {
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
         swapper.addToken(address(0));
     }
 
     function test_addToken_reverts_whenTokenAlreadySupported() public {
-        vm.startPrank(operationsAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToken(address(usdc));
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenAlreadySupported.selector, address(usdc)));
         swapper.addToken(address(usdc));
@@ -54,7 +54,7 @@ contract AddTokenTest is StableSwapperBase {
     function test_addToken_reverts_whenMaxSupportedTokensReached() public {
         uint256 maxTokens = 50;
         // Add tokens up to the limit (50)
-        vm.startPrank(operationsAuthority);
+        vm.startPrank(configureAuthority);
         for (uint256 i = 0; i < maxTokens; i++) {
             MockERC20 token = new MockERC20(
                 string(abi.encodePacked("Token", vm.toString(i))), string(abi.encodePacked("TOK", vm.toString(i))), 6
@@ -73,7 +73,7 @@ contract AddTokenTest is StableSwapperBase {
 
     function test_addToken_reverts_whenTokenDoesNotImplementDecimals() public {
         MockERC20WithoutDecimals token = new MockERC20WithoutDecimals("Token", "TOK");
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenDoesNotImplementDecimals.selector, address(token)));
         swapper.addToken(address(token));
     }
@@ -81,7 +81,7 @@ contract AddTokenTest is StableSwapperBase {
     function test_addToken_reverts_whenTokenDecimalsLessThan6() public {
         MockERC20 invalidToken = new MockERC20("Invalid Token", "INV", 5);
 
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.DecimalsOutOfRange.selector, address(invalidToken), 5));
         swapper.addToken(address(invalidToken));
     }
@@ -89,7 +89,7 @@ contract AddTokenTest is StableSwapperBase {
     function test_addToken_reverts_whenTokenDecimalsGreaterThan9() public {
         MockERC20 invalidToken = new MockERC20("Invalid Token", "INV", 12);
 
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.DecimalsOutOfRange.selector, address(invalidToken), 12));
         swapper.addToken(address(invalidToken));
     }
@@ -99,7 +99,7 @@ contract AddTokenTest is StableSwapperBase {
     //////////////////////////////////////////////////////////////*/
 
     function test_addToken_addsSupportedTokens() public {
-        vm.startPrank(operationsAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToken(address(usdc));
         swapper.addToken(address(appStable));
         vm.stopPrank();
@@ -131,7 +131,7 @@ contract AddTokenTest is StableSwapperBase {
         MockERC20 token8Dec = new MockERC20("8 Decimal Token", "TOK8", 8);
         MockERC20 token9Dec = new MockERC20("9 Decimal Token", "TOK9", 9);
 
-        vm.startPrank(operationsAuthority);
+        vm.startPrank(configureAuthority);
 
         // Should all succeed - valid decimal range
         swapper.addToken(address(token6Dec));

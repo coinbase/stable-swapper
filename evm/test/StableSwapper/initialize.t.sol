@@ -18,7 +18,28 @@ contract InitializeTest is StableSwapperBase {
     function test_initialize_reverts_whenCalledTwice() public {
         // Try to initialize again on already initialized contract
         vm.expectRevert();
-        swapper.initialize(upgradeAuthority, operationsAuthority, pauseAuthority, feeRecipient, 0);
+        swapper.initialize(defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, 0, 0);
+    }
+
+    function test_initialize_reverts_whenDefaultAdminIsZeroAddress() public {
+        // Deploy new implementation
+        StableSwapper newImplementation = new StableSwapper();
+
+        // OpenZeppelin's AccessControlDefaultAdminRules does not allow zero address for DEFAULT_ADMIN_ROLE
+        bytes memory initData = abi.encodeWithSelector(
+            StableSwapper.initialize.selector,
+            address(0), // defaultAdmin - not allowed
+            treasuryAuthority,
+            configureAuthority,
+            pauseAuthority,
+            feeRecipient,
+            uint64(0),
+            uint48(0)
+        );
+
+        // Should revert with AccessControlInvalidDefaultAdmin
+        vm.expectRevert();
+        new ERC1967Proxy(address(newImplementation), initData);
     }
 
     function test_initialize_reverts_whenFeeRateIsExactlyAboveMaximum() public {
@@ -30,11 +51,13 @@ contract InitializeTest is StableSwapperBase {
 
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
-            upgradeAuthority,
-            operationsAuthority,
+            defaultAdmin,
+            treasuryAuthority,
+            configureAuthority,
             pauseAuthority,
             feeRecipient,
-            invalidFeeRate
+            invalidFeeRate,
+            uint48(0)
         );
 
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.FeeRateExceedsMaximum.selector, invalidFeeRate));
@@ -46,8 +69,9 @@ contract InitializeTest is StableSwapperBase {
     //////////////////////////////////////////////////////////////*/
 
     function test_initialize_setsAllInitialValues() public view {
-        assertTrue(swapper.hasRole(swapper.UPGRADE_AUTHORITY(), upgradeAuthority));
-        assertTrue(swapper.hasRole(swapper.OPERATIONS_AUTHORITY(), operationsAuthority));
+        assertTrue(swapper.hasRole(swapper.DEFAULT_ADMIN_ROLE(), defaultAdmin));
+        assertTrue(swapper.hasRole(swapper.TREASURY_AUTHORITY(), treasuryAuthority));
+        assertTrue(swapper.hasRole(swapper.CONFIGURE_AUTHORITY(), configureAuthority));
         assertTrue(swapper.hasRole(swapper.PAUSE_AUTHORITY(), pauseAuthority));
         assertEq(swapper.feeRecipient(), feeRecipient);
         assertEq(swapper.feeRate(), 0);
@@ -65,11 +89,13 @@ contract InitializeTest is StableSwapperBase {
 
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
-            upgradeAuthority,
-            operationsAuthority,
+            defaultAdmin,
+            treasuryAuthority,
+            configureAuthority,
             pauseAuthority,
             feeRecipient,
-            maxFeeRate
+            maxFeeRate,
+            uint48(0)
         );
 
         // Should not revert with maximum fee rate
@@ -79,18 +105,20 @@ contract InitializeTest is StableSwapperBase {
         assertEq(newSwapper.feeRate(), maxFeeRate);
     }
 
-    function test_initialize_allowsZeroAddressForAuthorities() public {
+    function test_initialize_allowsZeroAddressForOtherAuthorities() public {
         // Deploy new implementation
         StableSwapper newImplementation = new StableSwapper();
 
-        // Zero addresses for authorities should be allowed (they just won't have permissions)
+        // Zero addresses for non-admin authorities should be allowed (they just won't have permissions)
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
-            address(0), // upgradeAuthority
-            address(0), // operationsAuthority
-            address(0), // pauseAuthority
-            address(0), // feeRecipient
-            uint64(0)
+            defaultAdmin,
+            address(0), // treasuryAuthority - allowed
+            address(0), // configureAuthority - allowed
+            address(0), // pauseAuthority - allowed
+            address(0), // feeRecipient - allowed
+            uint64(0),
+            uint48(0)
         );
 
         // Should not revert

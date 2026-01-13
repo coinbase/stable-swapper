@@ -20,7 +20,7 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
     }
 
     function test_updateFeeRecipient_reverts_whenZeroAddress() public {
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
         swapper.updateFeeRecipient(address(0));
     }
@@ -35,19 +35,18 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
         uint64 liquidityAmount = 500 * 10 ** 6;
         uint64 feeRate = 100; // 1%
 
-        vm.startPrank(operationsAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToken(address(usdc));
         swapper.addToken(address(appStable));
-
-        usdc.approve(address(swapper), liquidityAmount);
-        swapper.depositLiquidity(address(usdc), liquidityAmount);
-
-        appStable.approve(address(swapper), liquidityAmount);
-        swapper.depositLiquidity(address(appStable), liquidityAmount);
 
         // Update fee recipient and set 1% fee
         swapper.updateFeeRecipient(newFeeRecipient);
         swapper.updateFeeRate(feeRate);
+        vm.stopPrank();
+
+        vm.startPrank(treasuryAuthority);
+        usdc.transfer(address(swapper), liquidityAmount);
+        appStable.transfer(address(swapper), liquidityAmount);
         vm.stopPrank();
 
         uint64 swapAmount = 100 * 10 ** 6;
@@ -63,7 +62,7 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
 
         // Reset
         uint64 resetFeeRate = 0;
-        vm.startPrank(operationsAuthority);
+        vm.startPrank(configureAuthority);
         swapper.updateFeeRecipient(feeRecipient);
         swapper.updateFeeRate(resetFeeRate);
         vm.stopPrank();

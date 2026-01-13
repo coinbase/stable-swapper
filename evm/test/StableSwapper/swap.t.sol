@@ -55,12 +55,11 @@ contract SwapTest is StableSwapperBase {
         uint64 liquidityAmount = 500 * 10 ** 6;
         uint64 swapAmount = 10 * 10 ** 6;
 
-        vm.startPrank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.addToken(address(usdc));
 
-        usdc.approve(address(swapper), liquidityAmount);
-        swapper.depositLiquidity(address(usdc), liquidityAmount);
-        vm.stopPrank();
+        vm.prank(treasuryAuthority);
+        usdc.transfer(address(swapper), liquidityAmount);
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
@@ -188,17 +187,15 @@ contract SwapTest is StableSwapperBase {
 
         uint64 tinyAmount = uint64(bound(tinyAmountSeed, 1, maxTinyAmount));
 
-        vm.startPrank(operationsAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToken(address(usdc));
         swapper.addToken(address(appStable));
-
-        usdc.approve(address(swapper), liquidityAmount);
-        swapper.depositLiquidity(address(usdc), liquidityAmount);
-
-        appStable.approve(address(swapper), liquidityAmount);
-        swapper.depositLiquidity(address(appStable), liquidityAmount);
-
         swapper.updateFeeRate(feeRateBps);
+        vm.stopPrank();
+
+        vm.startPrank(treasuryAuthority);
+        usdc.transfer(address(swapper), liquidityAmount);
+        appStable.transfer(address(swapper), liquidityAmount);
         vm.stopPrank();
 
         vm.startPrank(wallet0);
@@ -208,7 +205,7 @@ contract SwapTest is StableSwapperBase {
         vm.stopPrank();
 
         // Reset fee
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.updateFeeRate(0);
     }
 
@@ -231,7 +228,7 @@ contract SwapTest is StableSwapperBase {
         // Bound it between expectedAmountOut + 1 and swapAmount (the theoretical maximum)
         uint64 minAmountOut = uint64(bound(minAmountOutSeed, expectedAmountOut + 1, swapAmount));
 
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.updateFeeRate(feeRateBps);
 
         vm.startPrank(wallet0);
@@ -241,7 +238,7 @@ contract SwapTest is StableSwapperBase {
         vm.stopPrank();
 
         // Reset fee
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.updateFeeRate(0);
     }
 
@@ -252,16 +249,16 @@ contract SwapTest is StableSwapperBase {
         uint64 limitedLiquidity = uint64(bound(limitedLiquiditySeed, 1, 1000 * 10 ** 6));
         uint64 excessiveSwapAmount = uint64(bound(excessiveSwapAmountSeed, limitedLiquidity + 1, 10000 * 10 ** 6));
 
-        vm.startPrank(operationsAuthority);
+        // Add tokens
+        vm.startPrank(configureAuthority);
         swapper.addToken(address(usdc));
         swapper.addToken(address(appStable));
+        vm.stopPrank();
 
         // Deposit limited liquidity
-        usdc.approve(address(swapper), limitedLiquidity);
-        swapper.depositLiquidity(address(usdc), limitedLiquidity);
-
-        appStable.approve(address(swapper), limitedLiquidity);
-        swapper.depositLiquidity(address(appStable), limitedLiquidity);
+        vm.startPrank(treasuryAuthority);
+        usdc.transfer(address(swapper), limitedLiquidity);
+        appStable.transfer(address(swapper), limitedLiquidity);
         vm.stopPrank();
 
         // Try to swap more than available
@@ -286,15 +283,15 @@ contract SwapTest is StableSwapperBase {
         uint64 availableLiquidity = depositedLiquidity - reservedAmount;
         uint64 swapAmount = uint64(bound(swapAmountSeed, availableLiquidity + 1, type(uint64).max));
 
-        vm.startPrank(operationsAuthority);
+        // Add tokens
+        vm.startPrank(configureAuthority);
         swapper.addToken(address(usdc));
         swapper.addToken(address(appStable));
+        vm.stopPrank();
 
-        usdc.approve(address(swapper), depositedLiquidity);
-        swapper.depositLiquidity(address(usdc), depositedLiquidity);
-
-        appStable.approve(address(swapper), depositedLiquidity);
-        swapper.depositLiquidity(address(appStable), depositedLiquidity);
+        vm.startPrank(treasuryAuthority);
+        usdc.transfer(address(swapper), depositedLiquidity);
+        appStable.transfer(address(swapper), depositedLiquidity);
 
         // Set reserved amount on USDC
         swapper.updateReservedAmount(address(usdc), reservedAmount);
@@ -365,17 +362,16 @@ contract SwapTest is StableSwapperBase {
         uint64 expectedOutput = 100 * 10 ** 9;
 
         MockERC20 token9Dec = new MockERC20("9 Decimal Token", "TOK9", 9);
-        token9Dec.mint(operationsAuthority, initialMint);
+        token9Dec.mint(treasuryAuthority, initialMint);
 
-        vm.startPrank(operationsAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToken(address(usdc));
         swapper.addToken(address(token9Dec));
+        vm.stopPrank();
 
-        usdc.approve(address(swapper), liquidityAmount6Dec);
-        swapper.depositLiquidity(address(usdc), liquidityAmount6Dec);
-
-        token9Dec.approve(address(swapper), liquidityAmount9Dec);
-        swapper.depositLiquidity(address(token9Dec), liquidityAmount9Dec);
+        vm.startPrank(treasuryAuthority);
+        usdc.transfer(address(swapper), liquidityAmount6Dec);
+        token9Dec.transfer(address(swapper), liquidityAmount9Dec);
         vm.stopPrank();
 
         uint256 initialUserUsdc = usdc.balanceOf(wallet0);
@@ -399,18 +395,17 @@ contract SwapTest is StableSwapperBase {
         uint256 expectedUsdc = 100 * 10 ** 6;
 
         MockERC20 token9Dec = new MockERC20("9 Decimal Token", "TOK9", 9);
-        token9Dec.mint(operationsAuthority, initialMint);
+        token9Dec.mint(treasuryAuthority, initialMint);
         token9Dec.mint(wallet0, initialMint);
 
-        vm.startPrank(operationsAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToken(address(usdc));
         swapper.addToken(address(token9Dec));
+        vm.stopPrank();
 
-        usdc.approve(address(swapper), liquidityAmount6Dec);
-        swapper.depositLiquidity(address(usdc), liquidityAmount6Dec);
-
-        token9Dec.approve(address(swapper), liquidityAmount9Dec);
-        swapper.depositLiquidity(address(token9Dec), liquidityAmount9Dec);
+        vm.startPrank(treasuryAuthority);
+        usdc.transfer(address(swapper), liquidityAmount6Dec);
+        token9Dec.transfer(address(swapper), liquidityAmount9Dec);
         vm.stopPrank();
 
         uint256 initialUser9Dec = token9Dec.balanceOf(wallet0);
@@ -433,18 +428,17 @@ contract SwapTest is StableSwapperBase {
         uint64 expectedRoundedAmount = 100_000_000;
 
         MockERC20 token9Dec = new MockERC20("9 Decimal Token", "TOK9", 9);
-        token9Dec.mint(operationsAuthority, initialMint);
+        token9Dec.mint(treasuryAuthority, initialMint);
         token9Dec.mint(wallet0, initialMint);
 
-        vm.startPrank(operationsAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToken(address(usdc));
         swapper.addToken(address(token9Dec));
+        vm.stopPrank();
 
-        usdc.approve(address(swapper), liquidityAmount6Dec);
-        swapper.depositLiquidity(address(usdc), liquidityAmount6Dec);
-
-        token9Dec.approve(address(swapper), liquidityAmount9Dec);
-        swapper.depositLiquidity(address(token9Dec), liquidityAmount9Dec);
+        vm.startPrank(treasuryAuthority);
+        usdc.transfer(address(swapper), liquidityAmount6Dec);
+        token9Dec.transfer(address(swapper), liquidityAmount9Dec);
         vm.stopPrank();
 
         uint256 initialUserUsdc = usdc.balanceOf(wallet0);
@@ -466,7 +460,7 @@ contract SwapTest is StableSwapperBase {
         uint64 expectedNetOutput = 99 * 10 ** 6;
         uint64 minAmountOut = 99 * 10 ** 6;
 
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.updateFeeRate(feeRateBps);
 
         uint256 initialFeeRecipientBalance = usdc.balanceOf(feeRecipient);
@@ -481,7 +475,7 @@ contract SwapTest is StableSwapperBase {
         assertEq(appStable.balanceOf(wallet0), initialUserAppStable + expectedNetOutput);
 
         // Reset fee
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.updateFeeRate(0);
     }
 
@@ -516,7 +510,7 @@ contract SwapTest is StableSwapperBase {
         uint64 minAmountOut = 98_900;
         uint64 expectedFee = 1000;
 
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.updateFeeRate(feeRateBps);
 
         uint256 initialFeeRecipientBalance = usdc.balanceOf(feeRecipient);
@@ -531,7 +525,7 @@ contract SwapTest is StableSwapperBase {
         assertEq(feeCollected, expectedFee, "Fee should round up to 1000 units from 999.99 units");
 
         // Reset fee
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.updateFeeRate(0);
     }
 
@@ -544,7 +538,7 @@ contract SwapTest is StableSwapperBase {
         uint64 minAmountOut = 99 * 10 ** 6;
         uint64 expectedFee = 1 * 10 ** 6;
 
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.updateFeeRate(feeRateBps);
 
         uint256 initialFeeRecipientBalance = usdc.balanceOf(feeRecipient);
@@ -558,7 +552,7 @@ contract SwapTest is StableSwapperBase {
         assertEq(feeCollected, expectedFee);
 
         // Reset
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.updateFeeRate(0);
     }
 }

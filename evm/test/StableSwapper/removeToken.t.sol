@@ -16,7 +16,7 @@ contract RemoveTokenTest is StableSwapperBase {
     function test_removeToken_reverts_whenUnauthorizedUser() public {
         MockERC20 testToken = new MockERC20("Test Token", "TEST", 6);
 
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.addToken(address(testToken));
 
         vm.prank(pauseAuthority);
@@ -30,13 +30,13 @@ contract RemoveTokenTest is StableSwapperBase {
     }
 
     function test_removeToken_reverts_whenTokenIsZeroAddress() public {
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
         swapper.removeToken(address(0));
     }
 
     function test_removeToken_reverts_whenTokenNotSupported() public {
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenNotSupported.selector, address(usdc)));
         swapper.removeToken(address(usdc));
     }
@@ -44,7 +44,7 @@ contract RemoveTokenTest is StableSwapperBase {
     function test_removeToken_reverts_whenTokenIsNotDisabled() public {
         MockERC20 testToken = new MockERC20("Test Token", "TEST", 6);
 
-        vm.startPrank(operationsAuthority);
+        vm.startPrank(configureAuthority);
         swapper.addToken(address(testToken));
 
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenMustBeDisabled.selector, address(testToken)));
@@ -54,22 +54,21 @@ contract RemoveTokenTest is StableSwapperBase {
 
     function test_removeToken_reverts_whenTokenHasNonZeroBalance() public {
         MockERC20 testToken = new MockERC20("Test Token", "TEST", 6);
-        testToken.mint(operationsAuthority, 1000000);
+        testToken.mint(treasuryAuthority, 1000000);
 
-        vm.startPrank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.addToken(address(testToken));
 
-        // Deposit liquidity
-        testToken.approve(address(swapper), 100000);
-        swapper.depositLiquidity(address(testToken), 100000);
-        vm.stopPrank();
+        // Treasury deposits liquidity
+        vm.prank(treasuryAuthority);
+        testToken.transfer(address(swapper), 100000);
 
         // Disable token
         vm.prank(pauseAuthority);
         swapper.updateTokenStatus(address(testToken), false);
 
         // Try to remove with balance
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenHasBalance.selector, address(testToken)));
         swapper.removeToken(address(testToken));
     }
@@ -83,26 +82,25 @@ contract RemoveTokenTest is StableSwapperBase {
         uint256 initialMintAmount = 1000000;
         uint64 depositAmount = 100000;
 
-        testToken.mint(operationsAuthority, initialMintAmount);
+        testToken.mint(treasuryAuthority, initialMintAmount);
 
-        vm.startPrank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.addToken(address(testToken));
 
-        // Deposit liquidity
-        testToken.approve(address(swapper), depositAmount);
-        swapper.depositLiquidity(address(testToken), depositAmount);
-        vm.stopPrank();
+        // Treasury deposits liquidity (send directly to contract)
+        vm.prank(treasuryAuthority);
+        testToken.transfer(address(swapper), depositAmount);
 
         // Disable token
         vm.prank(pauseAuthority);
         swapper.updateTokenStatus(address(testToken), false);
 
         // Withdraw all liquidity
-        vm.prank(operationsAuthority);
-        swapper.withdrawLiquidity(address(testToken), operationsAuthority, depositAmount);
+        vm.prank(treasuryAuthority);
+        swapper.withdrawLiquidity(address(testToken), treasuryAuthority, depositAmount);
 
         // Now remove token
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.removeToken(address(testToken));
 
         uint256 expectedTokenCount = 0;

@@ -29,7 +29,7 @@ contract UpdateFeeRateTest is StableSwapperBase {
         // Bound to invalid range: anything above MAX_FEE_RATE (1000)
         uint64 excessiveFeeRate = uint64(bound(feeRateSeed, 1001, type(uint64).max));
 
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.FeeRateExceedsMaximum.selector, excessiveFeeRate));
         swapper.updateFeeRate(excessiveFeeRate);
 
@@ -49,14 +49,14 @@ contract UpdateFeeRateTest is StableSwapperBase {
         // Bound to valid range: 0-1000 basis points (0-10%)
         uint64 feeRate = uint64(bound(feeRateSeed, 0, 1000));
 
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.updateFeeRate(feeRate);
 
         // Verify fee rate was set correctly
         assertEq(swapper.feeRate(), feeRate, "Fee rate not set correctly");
 
         // Reset
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.updateFeeRate(0);
     }
 }

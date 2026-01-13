@@ -15,7 +15,7 @@ contract UpdateReservedAmountTest is StableSwapperBase {
 
     function test_updateReservedAmount_reverts_whenUnauthorizedUser() public {
         uint64 reservedAmount = 100 * 10 ** 6;
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.addToken(address(usdc));
 
         address unauthorized = makeAddr("unauthorized");
@@ -27,14 +27,14 @@ contract UpdateReservedAmountTest is StableSwapperBase {
 
     function test_updateReservedAmount_reverts_whenTokenIsZeroAddress() public {
         uint64 reservedAmount = 100 * 10 ** 6;
-        vm.prank(operationsAuthority);
+        vm.prank(treasuryAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
         swapper.updateReservedAmount(address(0), reservedAmount);
     }
 
     function test_updateReservedAmount_reverts_whenTokenNotSupported() public {
         uint64 reservedAmount = 100 * 10 ** 6;
-        vm.prank(operationsAuthority);
+        vm.prank(treasuryAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenNotSupported.selector, address(usdc)));
         swapper.updateReservedAmount(address(usdc), reservedAmount);
     }
@@ -47,15 +47,13 @@ contract UpdateReservedAmountTest is StableSwapperBase {
         uint64 liquidityAmount = 100 * 10 ** 6;
         uint64 reservedAmount = uint64(bound(reservedAmountSeed, liquidityAmount + 1, type(uint64).max));
 
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.addToken(address(usdc));
 
-        vm.startPrank(operationsAuthority);
-        usdc.approve(address(swapper), liquidityAmount);
-        swapper.depositLiquidity(address(usdc), liquidityAmount);
-        vm.stopPrank();
+        vm.prank(treasuryAuthority);
+        usdc.transfer(address(swapper), liquidityAmount);
 
-        vm.prank(operationsAuthority);
+        vm.prank(treasuryAuthority);
         vm.expectRevert(
             abi.encodeWithSelector(
                 StableSwapper.ReservedAmountExceedsBalance.selector, address(usdc), reservedAmount, liquidityAmount
@@ -76,15 +74,13 @@ contract UpdateReservedAmountTest is StableSwapperBase {
         uint64 liquidityAmount = 500 * 10 ** 6;
         uint64 reservedAmount = uint64(bound(reservedAmountSeed, 0, liquidityAmount));
 
-        vm.prank(operationsAuthority);
+        vm.prank(configureAuthority);
         swapper.addToken(address(usdc));
 
-        vm.startPrank(operationsAuthority);
-        usdc.approve(address(swapper), liquidityAmount);
-        swapper.depositLiquidity(address(usdc), liquidityAmount);
-        vm.stopPrank();
+        vm.prank(treasuryAuthority);
+        usdc.transfer(address(swapper), liquidityAmount);
 
-        vm.prank(operationsAuthority);
+        vm.prank(treasuryAuthority);
         swapper.updateReservedAmount(address(usdc), reservedAmount);
 
         StableSwapper.TokenVault memory vault = swapper.getVault(address(usdc));
