@@ -27,7 +27,7 @@ contract UpdateFeeRateTest is StableSwapperBase {
      */
     function testFuzz_updateFeeRate_revertsOnExcessiveFeeRate(uint256 feeRateSeed) public {
         // Bound to invalid range: anything above MAX_FEE_RATE (1000)
-        uint64 excessiveFeeRate = uint64(bound(feeRateSeed, 1001, type(uint64).max));
+        uint16 excessiveFeeRate = uint16(bound(feeRateSeed, 1001, type(uint16).max));
 
         vm.prank(configureAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.FeeRateExceedsMaximum.selector, excessiveFeeRate));
@@ -47,7 +47,7 @@ contract UpdateFeeRateTest is StableSwapperBase {
      */
     function testFuzz_updateFeeRate_acceptsValidFeeRates(uint256 feeRateSeed) public {
         // Bound to valid range: 0-1000 basis points (0-10%)
-        uint64 feeRate = uint64(bound(feeRateSeed, 0, 1000));
+        uint16 feeRate = uint16(bound(feeRateSeed, 0, 1000));
 
         vm.prank(configureAuthority);
         swapper.updateFeeRate(feeRate);

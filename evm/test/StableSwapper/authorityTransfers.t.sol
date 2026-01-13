@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {StableSwapper} from "../../src/StableSwapper.sol";
 import {StableSwapperBase} from "./StableSwapperBase.sol";
-import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {
-    IAccessControlDefaultAdminRules
-} from "@openzeppelin/contracts/access/extensions/IAccessControlDefaultAdminRules.sol";
 
 /**
  * @title AuthorityTransfersTest

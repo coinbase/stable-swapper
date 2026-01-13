@@ -5,7 +5,6 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {
     AccessControlDefaultAdminRulesUpgradeable
 } from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
@@ -35,10 +34,10 @@ contract StableSwapper is
     }
 
     /// @notice Maximum fee rate in basis points (10% = 1000 basis points)
-    uint64 public constant MAX_FEE_RATE = 1000;
+    uint16 public constant MAX_FEE_RATE = 1000;
 
     /// @notice Fee denominator for basis points calculation (100% = 10000 basis points)
-    uint64 public constant FEE_DENOMINATOR = 10000;
+    uint16 public constant FEE_DENOMINATOR = 10000;
 
     /// @notice Maximum number of addresses that can be whitelisted
     uint64 public constant MAX_WHITELISTED_ADDRESSES = 100;
@@ -80,7 +79,7 @@ contract StableSwapper is
     address public feeRecipient;
 
     /// @notice Current fee rate in basis points (e.g., 100 = 1%)
-    uint64 public feeRate;
+    uint16 public feeRate;
 
     /// @dev Set of addresses that are whitelisted to initiate swaps (when whitelist is enabled)
     EnumerableSet.AddressSet private _whitelistedAddresses;
@@ -109,7 +108,7 @@ contract StableSwapper is
         address configureAuthority,
         address pauseAuthority,
         address initialFeeRecipient,
-        uint64 initialFeeRate
+        uint16 initialFeeRate
     );
 
     /// @notice Emitted when a new token is added to the supported tokens list
@@ -129,14 +128,14 @@ contract StableSwapper is
     /// @param amountIn Amount of input tokens provided (before fees)
     /// @param amountOut Amount of output tokens sent to recipient (after decimal normalization)
     /// @param fee Fee amount collected in input token
-    event Swap(address indexed tokenIn, address indexed tokenOut, uint64 amountIn, uint64 amountOut, uint64 fee);
+    event Swap(address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut, uint256 fee);
 
     /// @notice Emitted when liquidity is withdrawn from a token vault
     ///
     /// @param token Address of the token that was withdrawn
     /// @param recipient Address that received the withdrawn tokens
     /// @param amount Amount of tokens withdrawn
-    event LiquidityWithdrawn(address indexed token, address indexed recipient, uint64 amount);
+    event LiquidityWithdrawn(address indexed token, address indexed recipient, uint256 amount);
 
     /// @notice Emitted when the fee recipient address is updated
     /// @param newFeeRecipient New address that will receive swap fees
@@ -144,7 +143,7 @@ contract StableSwapper is
 
     /// @notice Emitted when the fee rate is updated
     /// @param newFeeRate New fee rate in basis points (e.g., 100 = 1%)
-    event FeeRateUpdated(uint64 newFeeRate);
+    event FeeRateUpdated(uint16 newFeeRate);
 
     /// @notice Emitted when swap status is updated
     /// @param isEnabled True if swaps are enabled, false if disabled
@@ -158,7 +157,7 @@ contract StableSwapper is
     ///
     /// @param token Address of the token whose reserved amount was updated
     /// @param newReservedAmount New reserved amount (cannot be withdrawn from liquidity)
-    event ReservedAmountUpdated(address indexed token, uint64 newReservedAmount);
+    event ReservedAmountUpdated(address indexed token, uint256 newReservedAmount);
 
     /// @notice Emitted when a token's enabled status is updated
     ///
@@ -193,15 +192,16 @@ contract StableSwapper is
     error CannotBeZeroAmount();
     error SlippageExceeded();
     error AmountOutCannotBeZero();
-    error AmountOutExceedsAvailableLiquidity(uint64 amountOut, uint256 availableLiquidity);
+    error TokenOutBalanceLessThanReservedAmount(address token);
+    error AmountOutExceedsAvailableLiquidity(uint256 amountOut, uint256 availableLiquidity);
     error LiquidityCannotBePaused();
-    error LiquidityWithdrawExceedsBalance(address token, uint64 amount, uint256 balance);
+    error LiquidityWithdrawExceedsBalance(address token, uint256 amount, uint256 balance);
     error SwapsCannotBePaused();
     error VaultMustBeEnabled(address token);
     error FeeCalculationOverflow();
     error DecimalsOutOfRange(address token, uint8 decimals);
-    error FeeRateExceedsMaximum(uint64 feeRate);
-    error ReservedAmountExceedsBalance(address token, uint64 reservedAmount, uint256 balance);
+    error FeeRateExceedsMaximum(uint16 feeRate);
+    error ReservedAmountExceedsBalance(address token, uint256 reservedAmount, uint256 balance);
     error WhitelistExceedsMaximum(uint64 maxAddresses);
     error AddressAlreadyInWhitelist(address addr);
     error AddressNotInWhitelist(address addr);
@@ -230,7 +230,7 @@ contract StableSwapper is
         address configureAuthority,
         address pauseAuthority,
         address initialFeeRecipient,
-        uint64 initialFeeRate,
+        uint16 initialFeeRate,
         uint48 initialAdminTransferDelay
     ) public initializer {
         __AccessControlDefaultAdminRules_init(initialAdminTransferDelay, defaultAdmin);
@@ -311,7 +311,7 @@ contract StableSwapper is
     /// @param amountIn Amount of tokenIn to swap (before fees)
     /// @param minAmountOut Minimum acceptable amount of tokenOut to receive (for slippage protection)
     /// @param recipient Address that will receive the output tokens
-    function swap(address tokenIn, address tokenOut, uint64 amountIn, uint64 minAmountOut, address recipient)
+    function swap(address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, address recipient)
         external
         nonReentrant
     {
@@ -346,27 +346,25 @@ contract StableSwapper is
 
         // Calculate fee (in basis points, e.g., 100 = 1%)
         // Round up to ensure protocol always collects full fee amount
-        uint256 feeNumerator = uint256(amountIn) * uint256(feeRate);
-        uint256 fee256 = (feeNumerator + FEE_DENOMINATOR - 1) / FEE_DENOMINATOR;
-
-        // Fee should never exceed amountIn, but add safety check
-        require(fee256 <= type(uint64).max, FeeCalculationOverflow());
-        // casting to 'uint64' is safe because we check fee256 <= type(uint64).max above
-        // forge-lint: disable-next-line(unsafe-typecast)
-        uint64 fee = uint64(fee256);
+        uint256 feeNumerator = amountIn * feeRate;
+        uint256 fee = (feeNumerator + FEE_DENOMINATOR - 1) / FEE_DENOMINATOR;
 
         // Checked subtraction to prevent underflow (though fee <= amountIn by construction)
         require(fee <= amountIn, FeeCalculationOverflow());
-        uint64 amountInAfterFee = amountIn - fee;
+        uint256 amountInAfterFee = amountIn - fee;
 
-        uint64 amountOut = normalizeDecimals(amountInAfterFee, vaultIn.decimals, vaultOut.decimals);
+        uint256 amountOut = normalizeDecimals(amountInAfterFee, vaultIn.decimals, vaultOut.decimals);
 
         require(amountOut > 0, AmountOutCannotBeZero());
 
         // Slippage protection: ensure normalized output meets user's minimum acceptable amount
         require(amountOut >= minAmountOut, SlippageExceeded());
 
-        uint256 availableLiquidity = IERC20(tokenOut).balanceOf(address(this)) - vaultOut.reservedAmount;
+        uint256 tokenOutBalance = IERC20(tokenOut).balanceOf(address(this));
+        // Prevent underflow, there is no available liquidity if the token out balance is less than the reserved amount
+        require(vaultOut.reservedAmount <= tokenOutBalance, TokenOutBalanceLessThanReservedAmount(tokenOut));
+
+        uint256 availableLiquidity = tokenOutBalance - vaultOut.reservedAmount;
         require(amountOut <= availableLiquidity, AmountOutExceedsAvailableLiquidity(amountOut, availableLiquidity));
 
         // EFFECTS: Cache state variables before external calls
@@ -398,7 +396,7 @@ contract StableSwapper is
     /// @param token Address of the token to withdraw
     /// @param recipient Address to receive the withdrawn tokens
     /// @param amount Amount of tokens to withdraw
-    function withdrawLiquidity(address token, address recipient, uint64 amount) external onlyRole(TREASURY_ROLE) {
+    function withdrawLiquidity(address token, address recipient, uint256 amount) external onlyRole(TREASURY_ROLE) {
         require(token != address(0), CannotBeZeroAddress());
         require(recipient != address(0), CannotBeZeroAddress());
         require(liquidityEnabled, LiquidityCannotBePaused());
@@ -429,7 +427,7 @@ contract StableSwapper is
     /// @notice Updates the fee rate charged on swaps
     ///
     /// @param newFeeRate New fee rate in basis points (e.g., 100 = 1%, max 1000 = 10%)
-    function updateFeeRate(uint64 newFeeRate) external onlyRole(CONFIGURE_ROLE) {
+    function updateFeeRate(uint16 newFeeRate) external onlyRole(CONFIGURE_ROLE) {
         require(newFeeRate <= MAX_FEE_RATE, FeeRateExceedsMaximum(newFeeRate));
         feeRate = newFeeRate;
         emit FeeRateUpdated(newFeeRate);
@@ -454,7 +452,7 @@ contract StableSwapper is
     ///
     /// @param token Address of the token
     /// @param newReservedAmount New reserved amount (must not exceed current balance)
-    function updateReservedAmount(address token, uint64 newReservedAmount) external onlyRole(TREASURY_ROLE) {
+    function updateReservedAmount(address token, uint256 newReservedAmount) external onlyRole(TREASURY_ROLE) {
         require(token != address(0), CannotBeZeroAddress());
         require(_supportedTokens.contains(token), TokenNotSupported(token));
 
@@ -552,7 +550,7 @@ contract StableSwapper is
     }
 
     // Internal helper functions
-    function normalizeDecimals(uint64 amount, uint8 decimalsFrom, uint8 decimalsTo) private pure returns (uint64) {
+    function normalizeDecimals(uint256 amount, uint8 decimalsFrom, uint8 decimalsTo) private pure returns (uint256) {
         if (decimalsFrom == decimalsTo) {
             return amount;
         }
@@ -561,24 +559,18 @@ contract StableSwapper is
             // Scaling up: multiply by 10^decimalsDelta
             uint8 decimalsDelta = decimalsTo - decimalsFrom;
 
-            // Use uint256 to prevent overflow during multiplication
             uint256 multiplier = 10 ** uint256(decimalsDelta);
-            uint256 result = uint256(amount) * multiplier;
+            uint256 result = amount * multiplier;
 
-            // Ensure result fits in uint64
-            require(result <= type(uint64).max, DecimalNormalizationOverflow());
-            // casting to 'uint64' is safe because we check result <= type(uint64).max above
-            // forge-lint: disable-next-line(unsafe-typecast)
-            return uint64(result);
+            return result;
         } else {
             // Scaling down: divide by 10^decimalsDelta (no overflow possible)
             // Division automatically rounds down (floor)
             uint8 decimalsDelta = decimalsFrom - decimalsTo;
             uint256 divisor = 10 ** uint256(decimalsDelta);
-            // casting to 'uint64' is safe because division can only decrease or maintain the value,
-            // and the input amount is already uint64
-            // forge-lint: disable-next-line(unsafe-typecast)
-            return uint64(uint256(amount) / divisor);
+            uint256 result = amount / divisor;
+
+            return result;
         }
     }
 

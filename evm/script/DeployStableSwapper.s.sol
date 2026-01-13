@@ -45,7 +45,7 @@ contract DeployStableSwapper is Script {
         address configureAuthority,
         address pauseAuthority,
         address feeRecipient,
-        uint64 feeRate,
+        uint16 feeRate,
         uint48 adminTransferDelay
     );
 
@@ -59,7 +59,7 @@ contract DeployStableSwapper is Script {
         address configureAuthority = vm.envAddress("CONFIGURE_AUTHORITY");
         address pauseAuthority = vm.envAddress("PAUSE_AUTHORITY");
         address feeRecipient = vm.envAddress("FEE_RECIPIENT");
-        uint64 feeRate = uint64(vm.envUint("FEE_RATE"));
+        uint16 feeRate = uint16(vm.envUint("FEE_RATE"));
         uint48 adminTransferDelay = uint48(vm.envUint("ADMIN_TRANSFER_DELAY"));
 
         // Validate configuration
@@ -136,7 +136,7 @@ contract DeployStableSwapper is Script {
         address configureAuthority,
         address pauseAuthority,
         address feeRecipient,
-        uint64 feeRate,
+        uint16 feeRate,
         uint48 adminTransferDelay
     ) public returns (address implementation, address proxy) {
         // Step 1: Deploy implementation contract

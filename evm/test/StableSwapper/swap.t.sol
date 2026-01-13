@@ -19,7 +19,7 @@ contract SwapTest is StableSwapperBase {
         vm.prank(pauseAuthority);
         swapper.updateSwapStatus(false);
 
-        uint64 swapAmount = 10 * 10 ** 6;
+        uint256 swapAmount = 10 * 10 ** 6;
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
@@ -32,7 +32,7 @@ contract SwapTest is StableSwapperBase {
     }
 
     function test_swap_reverts_whenTokenInIsZeroAddress() public {
-        uint64 swapAmount = 10 * 10 ** 6;
+        uint256 swapAmount = 10 * 10 ** 6;
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
@@ -42,7 +42,7 @@ contract SwapTest is StableSwapperBase {
     }
 
     function test_swap_reverts_whenTokenOutIsZeroAddress() public {
-        uint64 swapAmount = 10 * 10 ** 6;
+        uint256 swapAmount = 10 * 10 ** 6;
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
@@ -52,8 +52,8 @@ contract SwapTest is StableSwapperBase {
     }
 
     function test_swap_reverts_whenSwappingSameToken() public {
-        uint64 liquidityAmount = 500 * 10 ** 6;
-        uint64 swapAmount = 10 * 10 ** 6;
+        uint256 liquidityAmount = 500 * 10 ** 6;
+        uint256 swapAmount = 10 * 10 ** 6;
 
         vm.prank(configureAuthority);
         swapper.addToken(address(usdc));
@@ -77,7 +77,7 @@ contract SwapTest is StableSwapperBase {
         swapper.updateTokenStatus(address(usdc), false);
 
         // Try to swap with disabled input token
-        uint64 swapAmount = 10 * 10 ** 6;
+        uint256 swapAmount = 10 * 10 ** 6;
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
@@ -94,7 +94,7 @@ contract SwapTest is StableSwapperBase {
         swapper.updateTokenStatus(address(usdc), false);
 
         // Try to swap to disabled output token
-        uint64 swapAmount = 10 * 10 ** 6;
+        uint256 swapAmount = 10 * 10 ** 6;
 
         vm.startPrank(wallet0);
         appStable.approve(address(swapper), swapAmount);
@@ -106,8 +106,8 @@ contract SwapTest is StableSwapperBase {
     function test_swap_reverts_whenAmountInIsZero() public {
         setupBasicSwapEnvironment();
 
-        uint64 swapAmount = 10 * 10 ** 6;
-        uint64 minAmountOut = 10 * 10 ** 6;
+        uint256 swapAmount = 10 * 10 ** 6;
+        uint256 minAmountOut = 10 * 10 ** 6;
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
@@ -119,7 +119,7 @@ contract SwapTest is StableSwapperBase {
     function test_swap_reverts_whenMinAmountOutIsZero() public {
         setupBasicSwapEnvironment();
 
-        uint64 swapAmount = 10 * 10 ** 6;
+        uint256 swapAmount = 10 * 10 ** 6;
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
@@ -136,7 +136,7 @@ contract SwapTest is StableSwapperBase {
         swapper.updateTokenStatus(address(usdc), false);
 
         // Try to swap with disabled input token
-        uint64 swapAmount = 10 * 10 ** 6;
+        uint256 swapAmount = 10 * 10 ** 6;
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
@@ -153,7 +153,7 @@ contract SwapTest is StableSwapperBase {
         swapper.updateTokenStatus(address(usdc), false);
 
         // Try to swap to disabled output token
-        uint64 swapAmount = 10 * 10 ** 6;
+        uint256 swapAmount = 10 * 10 ** 6;
 
         vm.startPrank(wallet0);
         appStable.approve(address(swapper), swapAmount);
@@ -162,13 +162,94 @@ contract SwapTest is StableSwapperBase {
         vm.stopPrank();
     }
 
+    function testFuzz_swap_reverts_whenFeeNumeratorOverflows(uint256 feeRateSeed, uint256 amountSeed) public {
+        setupBasicSwapEnvironment();
+
+        // Bound fee rate to valid range [2, MAX_FEE_RATE]
+        // Must be at least 2 to avoid edge case where (max/1)+1 wraps to 0
+        uint16 feeRate = uint16(bound(feeRateSeed, 2, 1000));
+
+        vm.prank(configureAuthority);
+        swapper.updateFeeRate(feeRate);
+
+        // To cause overflow in feeNumerator calculation (line 348):
+        // feeNumerator = amountIn * feeRate
+        // We need: amountIn * feeRate > type(uint256).max
+        // Calculate the maximum safe amount, then use any value above it
+        uint256 maxSafeAmount = type(uint256).max / feeRate;
+        uint256 amountThatCausesOverflow = bound(amountSeed, maxSafeAmount + 1, type(uint256).max);
+
+        // Deal tokens to wallet0 (we can't actually transfer this much, but we can mock the balance)
+        deal(address(usdc), wallet0, amountThatCausesOverflow);
+
+        // Expect panic with code 0x11 (arithmetic overflow) when swap tries to calculate feeNumerator
+        vm.startPrank(wallet0);
+        usdc.approve(address(swapper), amountThatCausesOverflow);
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
+        swapper.swap(address(usdc), address(appStable), amountThatCausesOverflow, 1, wallet0);
+        vm.stopPrank();
+    }
+
+    function testFuzz_swap_reverts_whenBalanceBelowReservedAmount(
+        uint256 initialLiquiditySeed,
+        uint256 reservedAmountSeed,
+        uint256 withdrawAmountSeed,
+        uint256 swapAmountSeed
+    ) public {
+        // Setup: Add tokens and deposit liquidity
+        // Bound to realistic token amounts (1 to 1000 tokens with 6 decimals)
+        uint256 initialLiquidity = bound(initialLiquiditySeed, 100 * 10 ** 6, 1000 * 10 ** 6);
+
+        // Reserved amount must be less than initial liquidity
+        uint256 reservedAmount = bound(reservedAmountSeed, 1, initialLiquidity - 1);
+
+        // Withdraw amount must leave balance < reserved amount
+        // Calculate: initialLiquidity - withdrawAmount < reservedAmount
+        // Therefore: withdrawAmount > initialLiquidity - reservedAmount
+        uint256 minWithdraw = initialLiquidity - reservedAmount + 1;
+        uint256 withdrawAmount = bound(withdrawAmountSeed, minWithdraw, initialLiquidity);
+
+        // Swap amount can be any reasonable amount
+        uint256 swapAmount = bound(swapAmountSeed, 1, 100 * 10 ** 6);
+
+        vm.startPrank(configureAuthority);
+        swapper.addToken(address(usdc));
+        swapper.addToken(address(appStable));
+        vm.stopPrank();
+
+        vm.startPrank(treasuryAuthority);
+        usdc.transfer(address(swapper), initialLiquidity);
+        appStable.transfer(address(swapper), initialLiquidity);
+
+        // Set reserved amount on appStable
+        swapper.updateReservedAmount(address(appStable), reservedAmount);
+
+        // Withdraw liquidity below the reserved amount
+        // This leaves balance < reservedAmount, triggering the check at line 364
+        swapper.withdrawLiquidity(address(appStable), treasuryAuthority, withdrawAmount);
+        vm.stopPrank();
+
+        // Verify the balance is now below reserved amount
+        uint256 currentBalance = appStable.balanceOf(address(swapper));
+        assertLt(currentBalance, reservedAmount, "Balance should be less than reserved amount");
+
+        // Try to swap USDC -> APPSTABLE, should revert because balance <= reserved amount
+        vm.startPrank(wallet0);
+        usdc.approve(address(swapper), swapAmount);
+        vm.expectRevert(
+            abi.encodeWithSelector(StableSwapper.TokenOutBalanceLessThanReservedAmount.selector, address(appStable))
+        );
+        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet0);
+        vm.stopPrank();
+    }
+
     function testFuzz_swap_reverts_whenSwapAmountResultsInZeroOutput(
         uint256 feeRateSeed,
         uint256 liquidityAmountSeed,
         uint256 tinyAmountSeed
     ) public {
-        uint64 liquidityAmount = uint64(bound(liquidityAmountSeed, 10000, 1000 * 10 ** 6));
-        uint64 feeRateBps = uint64(bound(feeRateSeed, 1, 1000));
+        uint256 liquidityAmount = bound(liquidityAmountSeed, 10000, 1000 * 10 ** 6);
+        uint16 feeRateBps = uint16(bound(feeRateSeed, 1, 1000));
 
         // Calculate the maximum tinyAmount that will result in zero output after fees
         // Fee formula: fee = (amountIn * feeRateBps + 9999) / 10000
@@ -180,12 +261,12 @@ contract SwapTest is StableSwapperBase {
         // amountIn = 9999 / (10000 - feeRateBps)
         //
         // For amountIn to result in zero after fees, we need amountIn <= 9999 / (10000 - feeRateBps)
-        uint64 maxTinyAmount = uint64(9999 / (10000 - feeRateBps));
+        uint256 maxTinyAmount = 9999 / (10000 - feeRateBps);
 
         // Ensure maxTinyAmount is at least 1
         if (maxTinyAmount < 1) maxTinyAmount = 1;
 
-        uint64 tinyAmount = uint64(bound(tinyAmountSeed, 1, maxTinyAmount));
+        uint256 tinyAmount = bound(tinyAmountSeed, 1, maxTinyAmount);
 
         vm.startPrank(configureAuthority);
         swapper.addToken(address(usdc));
@@ -216,17 +297,17 @@ contract SwapTest is StableSwapperBase {
     ) public {
         setupBasicSwapEnvironment();
 
-        uint64 feeRateBps = uint64(bound(feeRateSeed, 1, 1000));
+        uint16 feeRateBps = uint16(bound(feeRateSeed, 1, 1000));
         // Ensure swapAmount is large enough that after max fee (1000 bps = 10%), amountOut > 0
         // Min value: 10001 ensures even at 10% fee, we get at least 1 token out
-        uint64 swapAmount = uint64(bound(swapAmountSeed, 10001, 1000 * 10 ** 6));
+        uint256 swapAmount = bound(swapAmountSeed, 10001, 1000 * 10 ** 6);
 
         // Calculate the actual amount out after fees: amountOut = swapAmount * (10000 - feeRateBps) / 10000
-        uint64 expectedAmountOut = uint64((uint256(swapAmount) * (10000 - feeRateBps)) / 10000);
+        uint256 expectedAmountOut = (swapAmount * (10000 - feeRateBps)) / 10000;
 
         // Set minAmountOut to be greater than expectedAmountOut to trigger slippage protection
         // Bound it between expectedAmountOut + 1 and swapAmount (the theoretical maximum)
-        uint64 minAmountOut = uint64(bound(minAmountOutSeed, expectedAmountOut + 1, swapAmount));
+        uint256 minAmountOut = bound(minAmountOutSeed, expectedAmountOut + 1, swapAmount);
 
         vm.prank(configureAuthority);
         swapper.updateFeeRate(feeRateBps);
@@ -246,8 +327,8 @@ contract SwapTest is StableSwapperBase {
         uint256 limitedLiquiditySeed,
         uint256 excessiveSwapAmountSeed
     ) public {
-        uint64 limitedLiquidity = uint64(bound(limitedLiquiditySeed, 1, 1000 * 10 ** 6));
-        uint64 excessiveSwapAmount = uint64(bound(excessiveSwapAmountSeed, limitedLiquidity + 1, 10000 * 10 ** 6));
+        uint256 limitedLiquidity = bound(limitedLiquiditySeed, 1, 1000 * 10 ** 6);
+        uint256 excessiveSwapAmount = bound(excessiveSwapAmountSeed, limitedLiquidity + 1, 10000 * 10 ** 6);
 
         // Add tokens
         vm.startPrank(configureAuthority);
@@ -278,10 +359,10 @@ contract SwapTest is StableSwapperBase {
         uint256 reservedAmountSeed,
         uint256 swapAmountSeed
     ) public {
-        uint64 depositedLiquidity = uint64(bound(depositedLiquiditySeed, 1, 1000 * 10 ** 6));
-        uint64 reservedAmount = uint64(bound(reservedAmountSeed, 1, depositedLiquidity));
-        uint64 availableLiquidity = depositedLiquidity - reservedAmount;
-        uint64 swapAmount = uint64(bound(swapAmountSeed, availableLiquidity + 1, type(uint64).max));
+        uint256 depositedLiquidity = bound(depositedLiquiditySeed, 1, 1000 * 10 ** 6);
+        uint256 reservedAmount = bound(reservedAmountSeed, 1, depositedLiquidity);
+        uint256 availableLiquidity = depositedLiquidity - reservedAmount;
+        uint256 swapAmount = bound(swapAmountSeed, availableLiquidity + 1, type(uint256).max);
 
         // Add tokens
         vm.startPrank(configureAuthority);
@@ -318,8 +399,8 @@ contract SwapTest is StableSwapperBase {
     {
         setupBasicSwapEnvironment();
 
-        uint64 swapAmount = uint64(bound(swapAmountSeed, 1, 500 * 10 ** 6));
-        uint64 minAmountOut = uint64(bound(minAmountOutSeed, 1, swapAmount));
+        uint256 swapAmount = bound(swapAmountSeed, 1, 500 * 10 ** 6);
+        uint256 minAmountOut = bound(minAmountOutSeed, 1, swapAmount);
 
         uint256 initialUserUsdc = usdc.balanceOf(wallet0);
         uint256 initialUserAppStable = appStable.balanceOf(wallet0);
@@ -338,8 +419,8 @@ contract SwapTest is StableSwapperBase {
     {
         setupBasicSwapEnvironment();
 
-        uint64 swapAmount = uint64(bound(swapAmountSeed, 1, 500 * 10 ** 6));
-        uint64 minAmountOut = uint64(bound(minAmountOutSeed, 1, swapAmount));
+        uint256 swapAmount = bound(swapAmountSeed, 1, 500 * 10 ** 6);
+        uint256 minAmountOut = bound(minAmountOutSeed, 1, swapAmount);
 
         uint256 initialUserUsdc = usdc.balanceOf(wallet0);
         uint256 initialUserAppStable = appStable.balanceOf(wallet0);
@@ -355,11 +436,11 @@ contract SwapTest is StableSwapperBase {
 
     function test_swap_scalesCorrectly_from6To9Decimals() public {
         uint256 initialMint = 1000 * 10 ** 9;
-        uint64 liquidityAmount6Dec = 500 * 10 ** 6;
-        uint64 liquidityAmount9Dec = 500 * 10 ** 9;
-        uint64 swapAmount = 100 * 10 ** 6; // 100 USDC (6 decimals)
-        uint64 minAmountOut = 100 * 10 ** 9; // Expect 100 tokens (9 decimals)
-        uint64 expectedOutput = 100 * 10 ** 9;
+        uint256 liquidityAmount6Dec = 500 * 10 ** 6;
+        uint256 liquidityAmount9Dec = 500 * 10 ** 9;
+        uint256 swapAmount = 100 * 10 ** 6; // 100 USDC (6 decimals)
+        uint256 minAmountOut = 100 * 10 ** 9; // Expect 100 tokens (9 decimals)
+        uint256 expectedOutput = 100 * 10 ** 9;
 
         MockERC20 token9Dec = new MockERC20("9 Decimal Token", "TOK9", 9);
         token9Dec.mint(treasuryAuthority, initialMint);
@@ -387,10 +468,10 @@ contract SwapTest is StableSwapperBase {
 
     function test_swap_scalesCorrectly_from9To6Decimals() public {
         uint256 initialMint = 1000 * 10 ** 9;
-        uint64 liquidityAmount6Dec = 500 * 10 ** 6;
-        uint64 liquidityAmount9Dec = 500 * 10 ** 9;
-        uint64 swapAmount = 100 * 10 ** 9; // 100 tokens (9 decimals)
-        uint64 minAmountOut = 100 * 10 ** 6; // Expect 100 USDC (6 decimals)
+        uint256 liquidityAmount6Dec = 500 * 10 ** 6;
+        uint256 liquidityAmount9Dec = 500 * 10 ** 9;
+        uint256 swapAmount = 100 * 10 ** 9; // 100 tokens (9 decimals)
+        uint256 minAmountOut = 100 * 10 ** 6; // Expect 100 USDC (6 decimals)
         uint256 initialUserUsdc = 1000 * 10 ** 6;
         uint256 expectedUsdc = 100 * 10 ** 6;
 
@@ -421,11 +502,11 @@ contract SwapTest is StableSwapperBase {
 
     function test_swap_roundsDown_whenScalingFrom9To6Decimals() public {
         uint256 initialMint = 1000 * 10 ** 9;
-        uint64 liquidityAmount6Dec = 500 * 10 ** 6;
-        uint64 liquidityAmount9Dec = 500 * 10 ** 9;
-        uint64 swapAmount = 100_000_000_123; // 100.000000123 tokens (fractional part will be rounded down)
-        uint64 minAmountOut = 99 * 10 ** 6;
-        uint64 expectedRoundedAmount = 100_000_000;
+        uint256 liquidityAmount6Dec = 500 * 10 ** 6;
+        uint256 liquidityAmount9Dec = 500 * 10 ** 9;
+        uint256 swapAmount = 100_000_000_123; // 100.000000123 tokens (fractional part will be rounded down)
+        uint256 minAmountOut = 99 * 10 ** 6;
+        uint256 expectedRoundedAmount = 100_000_000;
 
         MockERC20 token9Dec = new MockERC20("9 Decimal Token", "TOK9", 9);
         token9Dec.mint(treasuryAuthority, initialMint);
@@ -454,11 +535,11 @@ contract SwapTest is StableSwapperBase {
     function test_swap_collectsFeesCorrectly_whenFeeRateNonZero() public {
         setupBasicSwapEnvironment();
 
-        uint64 feeRateBps = 100; // 1% fee in basis points
-        uint64 swapAmount = 100 * 10 ** 6;
-        uint64 expectedFee = 1 * 10 ** 6; // 1%
-        uint64 expectedNetOutput = 99 * 10 ** 6;
-        uint64 minAmountOut = 99 * 10 ** 6;
+        uint16 feeRateBps = 100; // 1% fee in basis points
+        uint256 swapAmount = 100 * 10 ** 6;
+        uint256 expectedFee = 1 * 10 ** 6; // 1%
+        uint256 expectedNetOutput = 99 * 10 ** 6;
+        uint256 minAmountOut = 99 * 10 ** 6;
 
         vm.prank(configureAuthority);
         swapper.updateFeeRate(feeRateBps);
@@ -482,9 +563,9 @@ contract SwapTest is StableSwapperBase {
     function test_swap_skipsFees_whenFeeRateIsZero() public {
         setupBasicSwapEnvironment();
 
-        uint64 swapAmount = 50 * 10 ** 6;
-        uint64 minAmountOut = 50 * 10 ** 6;
-        uint64 expectedOutput = 50 * 10 ** 6;
+        uint256 swapAmount = 50 * 10 ** 6;
+        uint256 minAmountOut = 50 * 10 ** 6;
+        uint256 expectedOutput = 50 * 10 ** 6;
 
         uint256 initialUserUsdc = usdc.balanceOf(wallet0);
         uint256 initialUserAppStable = appStable.balanceOf(wallet0);
@@ -501,14 +582,14 @@ contract SwapTest is StableSwapperBase {
     function test_swap_roundsUpFees_whenFractionalAmount() public {
         setupBasicSwapEnvironment();
 
-        uint64 feeRateBps = 100; // 1% fee in basis points
+        uint16 feeRateBps = 100; // 1% fee in basis points
         // 99_999 units with 1% fee = 99_999 * 100 / 10000 = 999.99
         // Without ceiling: 999 units fee
         // With ceiling: (99_999 * 100 + 9999) / 10000 = 1000 units fee
         // User receives: 99_999 - 1000 = 98_999 units
-        uint64 swapAmount = 99_999;
-        uint64 minAmountOut = 98_900;
-        uint64 expectedFee = 1000;
+        uint256 swapAmount = 99_999;
+        uint256 minAmountOut = 98_900;
+        uint256 expectedFee = 1000;
 
         vm.prank(configureAuthority);
         swapper.updateFeeRate(feeRateBps);
@@ -532,11 +613,11 @@ contract SwapTest is StableSwapperBase {
     function test_swap_doesNotOverChargeFees_whenPerfectFeeAmount() public {
         setupBasicSwapEnvironment();
 
-        uint64 feeRateBps = 100; // 1% fee in basis points
+        uint16 feeRateBps = 100; // 1% fee in basis points
         // Amount that creates perfect fee: 100 * 10^6 * 1% = 1 * 10^6 exactly
-        uint64 swapAmount = 100 * 10 ** 6;
-        uint64 minAmountOut = 99 * 10 ** 6;
-        uint64 expectedFee = 1 * 10 ** 6;
+        uint256 swapAmount = 100 * 10 ** 6;
+        uint256 minAmountOut = 99 * 10 ** 6;
+        uint256 expectedFee = 1 * 10 ** 6;
 
         vm.prank(configureAuthority);
         swapper.updateFeeRate(feeRateBps);

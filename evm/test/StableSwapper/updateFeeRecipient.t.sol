@@ -33,7 +33,7 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
         address newFeeRecipient = makeAddr("newFeeRecipient");
 
         uint64 liquidityAmount = 500 * 10 ** 6;
-        uint64 feeRate = 100; // 1%
+        uint16 feeRate = 100; // 1%
 
         vm.startPrank(configureAuthority);
         swapper.addToken(address(usdc));
@@ -61,7 +61,7 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
         assertEq(usdc.balanceOf(newFeeRecipient), expectedFee);
 
         // Reset
-        uint64 resetFeeRate = 0;
+        uint16 resetFeeRate = 0;
         vm.startPrank(configureAuthority);
         swapper.updateFeeRecipient(feeRecipient);
         swapper.updateFeeRate(resetFeeRate);

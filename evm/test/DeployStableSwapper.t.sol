@@ -19,7 +19,7 @@ contract DeployStableSwapperTest is Test {
     address configureAuthority = makeAddr("configureAuthority");
     address pauseAuthority = makeAddr("pauseAuthority");
     address feeRecipient = makeAddr("feeRecipient");
-    uint64 feeRate = 100; // 1%
+    uint16 feeRate = 100; // 1%
 
     function setUp() public {
         deployer = new DeployStableSwapper();
