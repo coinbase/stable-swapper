@@ -36,7 +36,7 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
         swapper.swap(address(0), address(appStable), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
     }
@@ -46,7 +46,7 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
         swapper.swap(address(usdc), address(0), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
     }
@@ -111,7 +111,7 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAmount.selector));
+        vm.expectRevert(StableSwapper.CannotBeZeroAmount.selector);
         swapper.swap(address(usdc), address(appStable), 0, minAmountOut, wallet0);
         vm.stopPrank();
     }
@@ -123,7 +123,7 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAmount.selector));
+        vm.expectRevert(StableSwapper.CannotBeZeroAmount.selector);
         swapper.swap(address(usdc), address(appStable), swapAmount, 0, wallet0);
         vm.stopPrank();
     }

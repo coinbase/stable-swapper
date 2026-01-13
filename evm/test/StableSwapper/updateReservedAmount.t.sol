@@ -28,7 +28,7 @@ contract UpdateReservedAmountTest is StableSwapperBase {
     function test_updateReservedAmount_reverts_whenTokenIsZeroAddress() public {
         uint64 reservedAmount = 100 * 10 ** 6;
         vm.prank(treasuryAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
         swapper.updateReservedAmount(address(0), reservedAmount);
     }
 

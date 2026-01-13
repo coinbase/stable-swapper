@@ -71,7 +71,7 @@ contract StableSwapperBase is Test {
             configureAuthority,
             pauseAuthority,
             feeRecipient,
-            uint64(0), // 0% fee initially
+            uint16(0), // 0% fee initially
             uint48(0) // 0 second delay for admin transfers in tests
         );
 

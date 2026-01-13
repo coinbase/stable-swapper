@@ -31,7 +31,7 @@ contract RemoveTokenTest is StableSwapperBase {
 
     function test_removeToken_reverts_whenTokenIsZeroAddress() public {
         vm.prank(configureAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
         swapper.removeToken(address(0));
     }
 

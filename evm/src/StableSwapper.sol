@@ -97,9 +97,9 @@ contract StableSwapper is
     /// @dev DEFAULT_ADMIN_ROLE can grant/revoke other roles after initialization
     ///
     /// @param defaultAdmin Address granted the DEFAULT_ADMIN_ROLE (only role that can manage other roles)
-    /// @param treasuryAuthority Initial address granted the TREASURY_ROLE role
-    /// @param configureAuthority Initial address granted the CONFIGURE_ROLE role
-    /// @param pauseAuthority Initial address granted the PAUSE_ROLE role
+    /// @param treasuryAuthority Initial address granted the TREASURY_ROLE
+    /// @param configureAuthority Initial address granted the CONFIGURE_ROLE
+    /// @param pauseAuthority Initial address granted the PAUSE_ROLE
     /// @param initialFeeRecipient Address that will receive swap fees
     /// @param initialFeeRate Initial fee rate in basis points (e.g., 100 = 1%)
     event Initialized(
@@ -337,12 +337,12 @@ contract StableSwapper is
         require(vaultIn.isEnabled, VaultMustBeEnabled(tokenIn));
         require(vaultOut.isEnabled, VaultMustBeEnabled(tokenOut));
 
-        // Fee Model: Fee is charged on INPUT token (from_mint)
-        // Example: User swaps 100 USDC → SOL with 1% fee
+        // Fee Model: Fee is charged on INPUT token
+        // Example: User swaps 100 USDC → USDT with 1% fee
         //   - User provides: 100 USDC total
-        //   - from_vault receives: 99 USDC (liquidity)
+        //   - Contract receives: 100 USDC
         //   - fee_recipient receives: 1 USDC (protocol fee)
-        //   - to_vault sends: 99 SOL to user (1:1 swap of net amount, normalized for decimals)
+        //   - User receives: 99 USDT (1:1 swap of net amount, normalized for decimals)
 
         // Calculate fee (in basis points, e.g., 100 = 1%)
         // Round up to ensure protocol always collects full fee amount

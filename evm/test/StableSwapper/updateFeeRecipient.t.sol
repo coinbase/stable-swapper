@@ -21,7 +21,7 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
 
     function test_updateFeeRecipient_reverts_whenZeroAddress() public {
         vm.prank(configureAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
         swapper.updateFeeRecipient(address(0));
     }
 

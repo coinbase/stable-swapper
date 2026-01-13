@@ -26,7 +26,7 @@ contract UpdateTokenStatusTest is StableSwapperBase {
 
     function test_updateTokenStatus_reverts_whenTokenIsZeroAddress() public {
         vm.prank(pauseAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
         swapper.updateTokenStatus(address(0), false);
     }
 

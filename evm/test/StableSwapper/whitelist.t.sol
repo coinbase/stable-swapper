@@ -23,7 +23,7 @@ contract WhitelistTest is StableSwapperBase {
 
     function test_addToWhitelist_reverts_whenAddressIsZeroAddress() public {
         vm.prank(configureAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
         swapper.addToWhitelist(address(0));
     }
 
@@ -68,7 +68,7 @@ contract WhitelistTest is StableSwapperBase {
 
     function test_removeFromWhitelist_reverts_whenAddressIsZeroAddress() public {
         vm.prank(configureAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
         swapper.removeFromWhitelist(address(0));
     }
 

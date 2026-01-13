@@ -28,7 +28,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
     function test_withdrawLiquidity_reverts_whenTokenIsZeroAddress() public {
         uint256 liquidityAmount = 100 * 10 ** 6;
         vm.prank(treasuryAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
         swapper.withdrawLiquidity(address(0), treasuryAuthority, liquidityAmount);
     }
 
@@ -38,7 +38,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
         swapper.addToken(address(usdc));
 
         vm.prank(treasuryAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.CannotBeZeroAddress.selector, address(0)));
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
         swapper.withdrawLiquidity(address(usdc), address(0), liquidityAmount);
     }
 

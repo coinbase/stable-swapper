@@ -57,10 +57,10 @@ contract DeployStableSwapperTest is Test {
 
         // Verify authorities
         assertTrue(
-            stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Upgrade authority should be set"
+            stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Default admin role should be set"
         );
         assertTrue(
-            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), treasuryAuthority), "Operations role should be set"
+            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), treasuryAuthority), "Treasury role should be set"
         );
         assertTrue(
             stableSwapper.hasRole(stableSwapper.CONFIGURE_ROLE(), configureAuthority), "Configure role should be set"
