@@ -49,7 +49,7 @@ contract StableSwapper is
     uint8 public constant MIN_DECIMALS = 6;
 
     /// @notice Maximum number of decimals a token can have to be supported
-    uint8 public constant MAX_DECIMALS = 9;
+    uint8 public constant MAX_DECIMALS = 18;
 
     /// @notice Role identifier for treasury role
     /// @dev Can withdraw liquidity and update reserved amounts

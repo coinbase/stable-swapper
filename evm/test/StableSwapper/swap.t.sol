@@ -434,102 +434,115 @@ contract SwapTest is StableSwapperBase {
         assertEq(usdc.balanceOf(wallet0), initialUserUsdc + swapAmount);
     }
 
-    function test_swap_scalesCorrectly_from6To9Decimals() public {
-        uint256 initialMint = 1000 * 10 ** 9;
-        uint256 liquidityAmount6Dec = 500 * 10 ** 6;
-        uint256 liquidityAmount9Dec = 500 * 10 ** 9;
-        uint256 swapAmount = 100 * 10 ** 6; // 100 USDC (6 decimals)
-        uint256 minAmountOut = 100 * 10 ** 9; // Expect 100 tokens (9 decimals)
-        uint256 expectedOutput = 100 * 10 ** 9;
+    function testFuzz_swap_scalesUpCorrectly(uint8 decimalsInSeed, uint8 decimalsOutSeed, uint256 swapAmountSeed)
+        public
+    {
+        uint8 decimalsIn = uint8(bound(decimalsInSeed, 6, 17)); // Max 17 so decimalsOut can be at least 18
+        uint8 decimalsOut = uint8(bound(decimalsOutSeed, decimalsIn + 1, 18));
 
-        MockERC20 token9Dec = new MockERC20("9 Decimal Token", "TOK9", 9);
-        token9Dec.mint(treasuryAuthority, initialMint);
+        // Fuzz the swap amount between 1 and 100 tokens
+        uint256 swapAmountInTokens = bound(swapAmountSeed, 1, 100);
+
+        // Use amounts appropriate for each token's decimals
+        uint256 liquidityAmountIn = 500 * 10 ** decimalsIn; // 500 tokens (in decimals)
+        uint256 liquidityAmountOut = 500 * 10 ** decimalsOut; // 500 tokens (out decimals)
+        uint256 swapAmount = swapAmountInTokens * 10 ** decimalsIn; // Fuzzed tokens (in decimals)
+
+        // Calculate expected output based on the REAL TOKEN VALUE being equal
+        // If we swap 100 tokens worth $100, we should get 100 tokens worth $100 in the other denomination
+        // The token value is: swapAmountInTokens (e.g., 100 tokens)
+        // Expected output in different decimals: same token count, different representation
+        uint256 minAmountOut = swapAmountInTokens * 10 ** decimalsOut; // Expect exact 1:1 value swap
+        uint256 expectedOutput = swapAmountInTokens * 10 ** decimalsOut;
+
+        MockERC20 tokenIn = new MockERC20("In Token", "IN", decimalsIn);
+        // Mint enough for liquidity + swap amount to both treasury and wallet0
+        tokenIn.mint(treasuryAuthority, liquidityAmountIn);
+        tokenIn.mint(wallet0, swapAmount);
+
+        MockERC20 tokenOut = new MockERC20("Out Token", "OUT", decimalsOut);
+        tokenOut.mint(treasuryAuthority, liquidityAmountOut);
 
         vm.startPrank(configureAuthority);
-        swapper.addToken(address(usdc));
-        swapper.addToken(address(token9Dec));
+        swapper.addToken(address(tokenIn));
+        swapper.addToken(address(tokenOut));
         vm.stopPrank();
 
         vm.startPrank(treasuryAuthority);
-        usdc.transfer(address(swapper), liquidityAmount6Dec);
-        token9Dec.transfer(address(swapper), liquidityAmount9Dec);
+        tokenIn.transfer(address(swapper), liquidityAmountIn);
+        tokenOut.transfer(address(swapper), liquidityAmountOut);
         vm.stopPrank();
 
-        uint256 initialUserUsdc = usdc.balanceOf(wallet0);
+        uint256 initialUserIn = tokenIn.balanceOf(wallet0);
 
         vm.startPrank(wallet0);
-        usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(token9Dec), swapAmount, minAmountOut, wallet0);
+        tokenIn.approve(address(swapper), swapAmount);
+        swapper.swap(address(tokenIn), address(tokenOut), swapAmount, minAmountOut, wallet0);
         vm.stopPrank();
 
-        assertEq(usdc.balanceOf(wallet0), initialUserUsdc - swapAmount);
-        assertEq(token9Dec.balanceOf(wallet0), expectedOutput);
+        assertEq(tokenIn.balanceOf(wallet0), initialUserIn - swapAmount);
+        assertEq(tokenOut.balanceOf(wallet0), expectedOutput);
     }
 
-    function test_swap_scalesCorrectly_from9To6Decimals() public {
-        uint256 initialMint = 1000 * 10 ** 9;
-        uint256 liquidityAmount6Dec = 500 * 10 ** 6;
-        uint256 liquidityAmount9Dec = 500 * 10 ** 9;
-        uint256 swapAmount = 100 * 10 ** 9; // 100 tokens (9 decimals)
-        uint256 minAmountOut = 100 * 10 ** 6; // Expect 100 USDC (6 decimals)
-        uint256 initialUserUsdc = 1000 * 10 ** 6;
-        uint256 expectedUsdc = 100 * 10 ** 6;
+    function testFuzz_swap_scalesDownCorrectly(
+        uint256 decimalsInSeed,
+        uint256 decimalsOutSeed,
+        uint256 inDustAmountSeed,
+        uint256 swapAmountSeed
+    ) public {
+        uint8 decimalsIn = uint8(bound(decimalsInSeed, 7, 18)); // Min 7 so decimalsOut can be at least 6
+        uint8 decimalsOut = uint8(bound(decimalsOutSeed, 6, decimalsIn - 1));
 
-        MockERC20 token9Dec = new MockERC20("9 Decimal Token", "TOK9", 9);
-        token9Dec.mint(treasuryAuthority, initialMint);
-        token9Dec.mint(wallet0, initialMint);
+        // Calculate the maximum dust amount (fractional part that will be rounded away)
+        // For example: 6 decimals → 2 decimals means 4 decimals will be lost
+        // 100999999 (100.999999) / 10^4 = 10099.9999 → floors to 10099 (100.99)
+        // The dust (9999, representing 0.009999) gets discarded
+        uint8 decimalsDelta = decimalsIn - decimalsOut;
+        uint256 maxDust = (10 ** decimalsDelta) - 1;
+        uint256 inDustAmount = bound(inDustAmountSeed, 0, maxDust);
+
+        // Fuzz the swap amount between 1 and 100 tokens
+        uint256 swapAmountInTokens = bound(swapAmountSeed, 1, 100);
+
+        // Use amounts appropriate for each token's decimals
+        uint256 liquidityAmountIn = 500 * 10 ** decimalsIn; // 500 tokens (in decimals)
+        uint256 liquidityAmountOut = 500 * 10 ** decimalsOut; // 500 tokens (out decimals)
+        uint256 swapAmount = swapAmountInTokens * 10 ** decimalsIn + inDustAmount; // Fuzzed tokens with dust
+
+        // Calculate expected output based on the REAL TOKEN VALUE being equal
+        // If we swap 100 tokens worth $100, we should get 100 tokens worth $100 in the other denomination
+        // The token value is: swapAmountInTokens (e.g., 100 tokens)
+        // Expected output in different decimals: same token count, different representation
+        uint256 expectedOutput = swapAmountInTokens * 10 ** decimalsOut;
+        uint256 minAmountOut = expectedOutput; // Expect exact 1:1 value swap
+
+        MockERC20 tokenIn = new MockERC20("In Token", "IN", decimalsIn);
+        // Mint enough for liquidity + swap amount to both treasury and wallet0
+        tokenIn.mint(treasuryAuthority, liquidityAmountIn);
+        tokenIn.mint(wallet0, swapAmount);
+
+        MockERC20 tokenOut = new MockERC20("Out Token", "OUT", decimalsOut);
+        tokenOut.mint(treasuryAuthority, liquidityAmountOut);
 
         vm.startPrank(configureAuthority);
-        swapper.addToken(address(usdc));
-        swapper.addToken(address(token9Dec));
+        swapper.addToken(address(tokenIn));
+        swapper.addToken(address(tokenOut));
         vm.stopPrank();
 
         vm.startPrank(treasuryAuthority);
-        usdc.transfer(address(swapper), liquidityAmount6Dec);
-        token9Dec.transfer(address(swapper), liquidityAmount9Dec);
+        tokenIn.transfer(address(swapper), liquidityAmountIn);
+        tokenOut.transfer(address(swapper), liquidityAmountOut);
         vm.stopPrank();
 
-        uint256 initialUser9Dec = token9Dec.balanceOf(wallet0);
+        uint256 initialUserIn = tokenIn.balanceOf(wallet0);
 
         vm.startPrank(wallet0);
-        token9Dec.approve(address(swapper), swapAmount);
-        swapper.swap(address(token9Dec), address(usdc), swapAmount, minAmountOut, wallet0);
+        tokenIn.approve(address(swapper), swapAmount);
+        swapper.swap(address(tokenIn), address(tokenOut), swapAmount, minAmountOut, wallet0);
         vm.stopPrank();
 
-        assertEq(token9Dec.balanceOf(wallet0), initialUser9Dec - swapAmount);
-        assertEq(usdc.balanceOf(wallet0), initialUserUsdc + expectedUsdc);
-    }
-
-    function test_swap_roundsDown_whenScalingFrom9To6Decimals() public {
-        uint256 initialMint = 1000 * 10 ** 9;
-        uint256 liquidityAmount6Dec = 500 * 10 ** 6;
-        uint256 liquidityAmount9Dec = 500 * 10 ** 9;
-        uint256 swapAmount = 100_000_000_123; // 100.000000123 tokens (fractional part will be rounded down)
-        uint256 minAmountOut = 99 * 10 ** 6;
-        uint256 expectedRoundedAmount = 100_000_000;
-
-        MockERC20 token9Dec = new MockERC20("9 Decimal Token", "TOK9", 9);
-        token9Dec.mint(treasuryAuthority, initialMint);
-        token9Dec.mint(wallet0, initialMint);
-
-        vm.startPrank(configureAuthority);
-        swapper.addToken(address(usdc));
-        swapper.addToken(address(token9Dec));
-        vm.stopPrank();
-
-        vm.startPrank(treasuryAuthority);
-        usdc.transfer(address(swapper), liquidityAmount6Dec);
-        token9Dec.transfer(address(swapper), liquidityAmount9Dec);
-        vm.stopPrank();
-
-        uint256 initialUserUsdc = usdc.balanceOf(wallet0);
-
-        vm.startPrank(wallet0);
-        token9Dec.approve(address(swapper), swapAmount);
-        swapper.swap(address(token9Dec), address(usdc), swapAmount, minAmountOut, wallet0);
-        vm.stopPrank();
-
-        assertEq(usdc.balanceOf(wallet0), initialUserUsdc + expectedRoundedAmount);
+        assertEq(tokenIn.balanceOf(wallet0), initialUserIn - swapAmount);
+        assertEq(tokenOut.balanceOf(wallet0), expectedOutput);
     }
 
     function test_swap_collectsFeesCorrectly_whenFeeRateNonZero() public {

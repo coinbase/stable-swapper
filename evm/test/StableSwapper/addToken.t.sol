@@ -78,19 +78,27 @@ contract AddTokenTest is StableSwapperBase {
         swapper.addToken(address(token));
     }
 
-    function test_addToken_reverts_whenTokenDecimalsLessThan6() public {
-        MockERC20 invalidToken = new MockERC20("Invalid Token", "INV", 5);
+    function testFuzz_addToken_reverts_whenTokenDecimalsLessThan6(uint8 decimalsSeed) public {
+        // Fuzz decimals from 0 to 5 (all invalid, below MIN_DECIMALS)
+        uint8 invalidDecimals = uint8(bound(decimalsSeed, 0, 5));
+        MockERC20 invalidToken = new MockERC20("Invalid Token", "INV", invalidDecimals);
 
         vm.prank(configureAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.DecimalsOutOfRange.selector, address(invalidToken), 5));
+        vm.expectRevert(
+            abi.encodeWithSelector(StableSwapper.DecimalsOutOfRange.selector, address(invalidToken), invalidDecimals)
+        );
         swapper.addToken(address(invalidToken));
     }
 
-    function test_addToken_reverts_whenTokenDecimalsGreaterThan9() public {
-        MockERC20 invalidToken = new MockERC20("Invalid Token", "INV", 12);
+    function testFuzz_addToken_reverts_whenTokenDecimalsGreaterThan18(uint8 decimalsSeed) public {
+        // Fuzz decimals from 19 to 255 (all invalid, above MAX_DECIMALS)
+        uint8 invalidDecimals = uint8(bound(decimalsSeed, 19, 255));
+        MockERC20 invalidToken = new MockERC20("Invalid Token", "INV", invalidDecimals);
 
         vm.prank(configureAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.DecimalsOutOfRange.selector, address(invalidToken), 12));
+        vm.expectRevert(
+            abi.encodeWithSelector(StableSwapper.DecimalsOutOfRange.selector, address(invalidToken), invalidDecimals)
+        );
         swapper.addToken(address(invalidToken));
     }
 
@@ -124,36 +132,30 @@ contract AddTokenTest is StableSwapperBase {
         assertEq(appStableVault.reservedAmount, expectedReservedAmount);
     }
 
-    function test_addToken_acceptsTokensWithValidDecimalsInRange() public {
-        // Test that tokens with 6, 7, 8, and 9 decimals are all accepted
-        MockERC20 token6Dec = new MockERC20("6 Decimal Token", "TOK6", 6);
-        MockERC20 token7Dec = new MockERC20("7 Decimal Token", "TOK7", 7);
-        MockERC20 token8Dec = new MockERC20("8 Decimal Token", "TOK8", 8);
-        MockERC20 token9Dec = new MockERC20("9 Decimal Token", "TOK9", 9);
+    function testFuzz_addToken_acceptsTokensWithValidDecimalsInRange(uint8 decimalsSeed) public {
+        // Fuzz decimals from 6 to 18 (all valid, within MIN_DECIMALS and MAX_DECIMALS)
+        uint8 validDecimals = uint8(bound(decimalsSeed, 6, 18));
 
-        vm.startPrank(configureAuthority);
+        MockERC20 token = new MockERC20(
+            string(abi.encodePacked(vm.toString(validDecimals), " Decimal Token")),
+            string(abi.encodePacked("TOK", vm.toString(validDecimals))),
+            validDecimals
+        );
 
-        // Should all succeed - valid decimal range
-        swapper.addToken(address(token6Dec));
-        swapper.addToken(address(token7Dec));
-        swapper.addToken(address(token8Dec));
-        swapper.addToken(address(token9Dec));
+        vm.prank(configureAuthority);
+        swapper.addToken(address(token));
 
-        vm.stopPrank();
+        // Verify token was added successfully
+        assertEq(swapper.getSupportedTokensCount(), 1);
 
-        uint256 expectedTokenCount = 4;
-        uint8 expectedDecimals6 = 6;
-        uint8 expectedDecimals7 = 7;
-        uint8 expectedDecimals8 = 8;
-        uint8 expectedDecimals9 = 9;
+        // Verify vault information is stored correctly
+        StableSwapper.TokenVault memory vault = swapper.getVault(address(token));
+        assertTrue(vault.isEnabled, "Token should be enabled");
+        assertEq(vault.decimals, validDecimals, "Decimals should match");
+        assertEq(vault.reservedAmount, 0, "Reserved amount should be 0");
 
-        // Verify all were added
-        assertEq(swapper.getSupportedTokensCount(), expectedTokenCount);
-
-        // Verify vault decimals are stored correctly
-        assertEq(swapper.getVault(address(token6Dec)).decimals, expectedDecimals6);
-        assertEq(swapper.getVault(address(token7Dec)).decimals, expectedDecimals7);
-        assertEq(swapper.getVault(address(token8Dec)).decimals, expectedDecimals8);
-        assertEq(swapper.getVault(address(token9Dec)).decimals, expectedDecimals9);
+        // Verify token is in the supported tokens list
+        address[] memory supportedTokens = swapper.getSupportedTokens();
+        assertEq(supportedTokens[0], address(token), "Token should be in supported list");
     }
 }
