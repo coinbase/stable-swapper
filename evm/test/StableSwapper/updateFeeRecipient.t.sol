@@ -36,15 +36,20 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
         uint16 feeRate = 100; // 1%
 
         vm.startPrank(configureAuthority);
-        swapper.addToken(address(usdc));
-        swapper.addToken(address(appStable));
+        swapper.listToken(address(usdc));
+        swapper.listToken(address(appStable));
 
         // Update fee recipient and set 1% fee
         swapper.updateFeeRecipient(newFeeRecipient);
-        swapper.updateFeeRate(feeRate);
+        swapper.updateFeeBasisPoints(feeRate);
         vm.stopPrank();
 
-        vm.startPrank(treasuryAuthority);
+        vm.startPrank(pauseAuthority);
+        swapper.updateTokenStatus(address(usdc), true);
+        swapper.updateTokenStatus(address(appStable), true);
+        vm.stopPrank();
+
+        vm.startPrank(withdrawalAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
         appStable.transfer(address(swapper), liquidityAmount);
         vm.stopPrank();
@@ -64,7 +69,7 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
         uint16 resetFeeRate = 0;
         vm.startPrank(configureAuthority);
         swapper.updateFeeRecipient(feeRecipient);
-        swapper.updateFeeRate(resetFeeRate);
+        swapper.updateFeeBasisPoints(resetFeeRate);
         vm.stopPrank();
     }
 }

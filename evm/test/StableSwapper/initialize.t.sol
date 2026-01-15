@@ -18,7 +18,7 @@ contract InitializeTest is StableSwapperBase {
     function test_initialize_reverts_whenCalledTwice() public {
         // Try to initialize again on already initialized contract
         vm.expectRevert();
-        swapper.initialize(defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, 0, 0);
+        swapper.initialize(defaultAdmin, withdrawalAuthority, configureAuthority, pauseAuthority, feeRecipient, 0, 0);
     }
 
     function test_initialize_reverts_whenDefaultAdminIsZeroAddress() public {
@@ -29,7 +29,7 @@ contract InitializeTest is StableSwapperBase {
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             address(0), // defaultAdmin - not allowed
-            treasuryAuthority,
+            withdrawalAuthority,
             configureAuthority,
             pauseAuthority,
             feeRecipient,
@@ -42,67 +42,21 @@ contract InitializeTest is StableSwapperBase {
         new ERC1967Proxy(address(newImplementation), initData);
     }
 
-    function test_initialize_reverts_whenFeeRateIsExactlyAboveMaximum() public {
-        // Deploy new implementation
-        StableSwapper newImplementation = new StableSwapper();
-
-        uint64 maxFeeRate = swapper.MAX_FEE_RATE(); // 1000 basis points (10%)
-        uint64 invalidFeeRate = maxFeeRate + 1;
-
-        bytes memory initData = abi.encodeWithSelector(
-            StableSwapper.initialize.selector,
-            defaultAdmin,
-            treasuryAuthority,
-            configureAuthority,
-            pauseAuthority,
-            feeRecipient,
-            invalidFeeRate,
-            uint48(0)
-        );
-
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.FeeRateExceedsMaximum.selector, invalidFeeRate));
-        new ERC1967Proxy(address(newImplementation), initData);
-    }
-
     /*//////////////////////////////////////////////////////////////
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
 
     function test_initialize_setsAllInitialValues() public view {
         assertTrue(swapper.hasRole(swapper.DEFAULT_ADMIN_ROLE(), defaultAdmin));
-        assertTrue(swapper.hasRole(swapper.TREASURY_ROLE(), treasuryAuthority));
+        assertTrue(swapper.hasRole(swapper.WITHDRAWAL_ROLE(), withdrawalAuthority));
         assertTrue(swapper.hasRole(swapper.CONFIGURE_ROLE(), configureAuthority));
         assertTrue(swapper.hasRole(swapper.PAUSE_ROLE(), pauseAuthority));
         assertEq(swapper.feeRecipient(), feeRecipient);
-        assertEq(swapper.feeRate(), 0);
-        assertTrue(swapper.swapsEnabled());
-        assertTrue(swapper.liquidityEnabled());
-        assertEq(swapper.getSupportedTokensCount(), 0);
-        assertFalse(swapper.whitelistEnabled());
-    }
-
-    function test_initialize_allowsMaximumFeeRate() public {
-        // Deploy new implementation
-        StableSwapper newImplementation = new StableSwapper();
-
-        uint64 maxFeeRate = swapper.MAX_FEE_RATE(); // 1000 basis points (10%)
-
-        bytes memory initData = abi.encodeWithSelector(
-            StableSwapper.initialize.selector,
-            defaultAdmin,
-            treasuryAuthority,
-            configureAuthority,
-            pauseAuthority,
-            feeRecipient,
-            maxFeeRate,
-            uint48(0)
-        );
-
-        // Should not revert with maximum fee rate
-        ERC1967Proxy newProxy = new ERC1967Proxy(address(newImplementation), initData);
-        StableSwapper newSwapper = StableSwapper(address(newProxy));
-
-        assertEq(newSwapper.feeRate(), maxFeeRate);
+        assertEq(swapper.feeBasisPoints(), 0);
+        assertTrue(swapper.isFeatureEnabled(StableSwapper.FeatureFlag.SWAP));
+        assertTrue(swapper.isFeatureEnabled(StableSwapper.FeatureFlag.WITHDRAW));
+        assertEq(swapper.getListedTokensCount(), 0);
+        assertFalse(swapper.isFeatureEnabled(StableSwapper.FeatureFlag.ALLOWLIST));
     }
 
     function test_initialize_allowsZeroAddressForOtherAuthorities() public {
@@ -113,7 +67,7 @@ contract InitializeTest is StableSwapperBase {
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             defaultAdmin,
-            address(0), // treasuryAuthority - allowed
+            address(0), // withdrawalAuthority - allowed
             address(0), // configureAuthority - allowed
             address(0), // pauseAuthority - allowed
             address(0), // feeRecipient - allowed

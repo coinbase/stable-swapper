@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {StableSwapperBase} from "./StableSwapperBase.sol";
+import {StableSwapper} from "../../src/StableSwapper.sol";
 
 /**
  * @title AuthorityTransfersTest
@@ -10,7 +11,7 @@ import {StableSwapperBase} from "./StableSwapperBase.sol";
  */
 contract AuthorityTransfersTest is StableSwapperBase {
     bytes32 public defaultAdminRole;
-    bytes32 public treasuryAuthorityRole;
+    bytes32 public withdrawalAuthorityRole;
     bytes32 public configureAuthorityRole;
     bytes32 public pauseAuthorityRole;
 
@@ -19,7 +20,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
         // Cache role identifiers
         defaultAdminRole = swapper.DEFAULT_ADMIN_ROLE();
-        treasuryAuthorityRole = swapper.TREASURY_ROLE();
+        withdrawalAuthorityRole = swapper.WITHDRAWAL_ROLE();
         configureAuthorityRole = swapper.CONFIGURE_ROLE();
         pauseAuthorityRole = swapper.PAUSE_ROLE();
     }
@@ -31,7 +32,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
     function test_beginDefaultAdminTransfer_reverts_whenCalledByNonAdmin() public {
         address newAdmin = makeAddr("newAdmin");
 
-        vm.prank(treasuryAuthority);
+        vm.prank(withdrawalAuthority);
         vm.expectRevert();
         swapper.beginDefaultAdminTransfer(newAdmin);
     }
@@ -65,17 +66,17 @@ contract AuthorityTransfersTest is StableSwapperBase {
         vm.prank(defaultAdmin);
         swapper.beginDefaultAdminTransfer(newAdmin);
 
-        vm.prank(treasuryAuthority);
+        vm.prank(withdrawalAuthority);
         vm.expectRevert();
         swapper.cancelDefaultAdminTransfer();
     }
 
-    function test_grantRole_reverts_whenCalledByNonAdmin_treasury() public {
-        address newTreasury = makeAddr("newTreasury");
+    function test_grantRole_reverts_whenCalledByNonAdmin_withdrawal() public {
+        address newWithdrawal = makeAddr("newWithdrawal");
 
         vm.prank(configureAuthority);
         vm.expectRevert();
-        swapper.grantRole(treasuryAuthorityRole, newTreasury);
+        swapper.grantRole(withdrawalAuthorityRole, newWithdrawal);
     }
 
     function test_grantRole_reverts_whenCalledByNonAdmin_configure() public {
@@ -89,15 +90,15 @@ contract AuthorityTransfersTest is StableSwapperBase {
     function test_grantRole_reverts_whenCalledByNonAdmin_pause() public {
         address newPause = makeAddr("newPause");
 
-        vm.prank(treasuryAuthority);
+        vm.prank(withdrawalAuthority);
         vm.expectRevert();
         swapper.grantRole(pauseAuthorityRole, newPause);
     }
 
-    function test_revokeRole_reverts_whenCalledByNonAdmin_treasury() public {
+    function test_revokeRole_reverts_whenCalledByNonAdmin_withdrawal() public {
         vm.prank(configureAuthority);
         vm.expectRevert();
-        swapper.revokeRole(treasuryAuthorityRole, treasuryAuthority);
+        swapper.revokeRole(withdrawalAuthorityRole, withdrawalAuthority);
     }
 
     function test_revokeRole_reverts_whenCalledByNonAdmin_configure() public {
@@ -107,7 +108,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
     }
 
     function test_revokeRole_reverts_whenCalledByNonAdmin_pause() public {
-        vm.prank(treasuryAuthority);
+        vm.prank(withdrawalAuthority);
         vm.expectRevert();
         swapper.revokeRole(pauseAuthorityRole, pauseAuthority);
     }
@@ -162,17 +163,17 @@ contract AuthorityTransfersTest is StableSwapperBase {
         assertTrue(swapper.hasRole(defaultAdminRole, defaultAdmin));
     }
 
-    function test_grantRole_grantsRole_treasury() public {
-        address newTreasury = makeAddr("newTreasury");
+    function test_grantRole_grantsRole_withdrawal() public {
+        address newWithdrawal = makeAddr("newWithdrawal");
 
-        assertFalse(swapper.hasRole(treasuryAuthorityRole, newTreasury));
+        assertFalse(swapper.hasRole(withdrawalAuthorityRole, newWithdrawal));
 
         vm.prank(defaultAdmin);
-        swapper.grantRole(treasuryAuthorityRole, newTreasury);
+        swapper.grantRole(withdrawalAuthorityRole, newWithdrawal);
 
-        assertTrue(swapper.hasRole(treasuryAuthorityRole, newTreasury));
-        // Original treasury still has role (multiple holders allowed)
-        assertTrue(swapper.hasRole(treasuryAuthorityRole, treasuryAuthority));
+        assertTrue(swapper.hasRole(withdrawalAuthorityRole, newWithdrawal));
+        // Original withdrawal still has role (multiple holders allowed)
+        assertTrue(swapper.hasRole(withdrawalAuthorityRole, withdrawalAuthority));
     }
 
     function test_grantRole_grantsRole_configure() public {
@@ -201,11 +202,11 @@ contract AuthorityTransfersTest is StableSwapperBase {
         assertTrue(swapper.hasRole(pauseAuthorityRole, pauseAuthority));
     }
 
-    function test_revokeRole_revokesRole_treasury() public {
+    function test_revokeRole_revokesRole_withdrawal() public {
         vm.prank(defaultAdmin);
-        swapper.revokeRole(treasuryAuthorityRole, treasuryAuthority);
+        swapper.revokeRole(withdrawalAuthorityRole, withdrawalAuthority);
 
-        assertFalse(swapper.hasRole(treasuryAuthorityRole, treasuryAuthority));
+        assertFalse(swapper.hasRole(withdrawalAuthorityRole, withdrawalAuthority));
     }
 
     function test_revokeRole_revokesRole_configure() public {
@@ -226,25 +227,25 @@ contract AuthorityTransfersTest is StableSwapperBase {
                     FUNCTIONAL TESTS AFTER ROLE CHANGES
     //////////////////////////////////////////////////////////////*/
 
-    function test_newTreasuryAuthority_canWithdrawLiquidity() public {
-        address newTreasury = makeAddr("newTreasury");
+    function test_newWithdrawalAuthority_canWithdrawLiquidity() public {
+        address newWithdrawal = makeAddr("newWithdrawal");
 
         // Setup tokens and liquidity
         vm.prank(configureAuthority);
-        swapper.addToken(address(usdc));
+        swapper.listToken(address(usdc));
 
-        vm.prank(treasuryAuthority);
+        vm.prank(withdrawalAuthority);
         usdc.transfer(address(swapper), 500 * 10 ** 6);
 
-        // Grant role to new treasury
+        // Grant role to new withdrawal
         vm.prank(defaultAdmin);
-        swapper.grantRole(treasuryAuthorityRole, newTreasury);
+        swapper.grantRole(withdrawalAuthorityRole, newWithdrawal);
 
-        // New treasury role holder should be able to withdraw
-        vm.prank(newTreasury);
-        swapper.withdrawLiquidity(address(usdc), newTreasury, 100 * 10 ** 6);
+        // New withdrawal role holder should be able to withdraw
+        vm.prank(newWithdrawal);
+        swapper.withdrawLiquidity(address(usdc), newWithdrawal, 100 * 10 ** 6);
 
-        assertEq(usdc.balanceOf(newTreasury), 100 * 10 ** 6);
+        assertEq(usdc.balanceOf(newWithdrawal), 100 * 10 ** 6);
     }
 
     function test_newConfigureAuthority_canAddTokens() public {
@@ -256,9 +257,9 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
         // New configure role holder should be able to add tokens
         vm.prank(newConfigure);
-        swapper.addToken(address(usdc));
+        swapper.listToken(address(usdc));
 
-        assertTrue(swapper.getSupportedTokensCount() == 1);
+        assertTrue(swapper.getListedTokensCount() == 1);
     }
 
     function test_newPauseAuthority_canPauseSwaps() public {
@@ -270,27 +271,27 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
         // New pause role holder should be able to pause swaps
         vm.prank(newPause);
-        swapper.updateSwapStatus(false);
+        swapper.setFeatureFlag(StableSwapper.FeatureFlag.SWAP, false);
 
-        assertFalse(swapper.swapsEnabled());
+        assertFalse(swapper.isFeatureEnabled(StableSwapper.FeatureFlag.SWAP));
     }
 
-    function test_revokedTreasuryAuthority_cannotWithdrawLiquidity() public {
+    function test_revokedWithdrawalAuthority_cannotWithdrawLiquidity() public {
         // Setup tokens and liquidity
         vm.prank(configureAuthority);
-        swapper.addToken(address(usdc));
+        swapper.listToken(address(usdc));
 
-        vm.prank(treasuryAuthority);
+        vm.prank(withdrawalAuthority);
         usdc.transfer(address(swapper), 500 * 10 ** 6);
 
-        // Revoke treasury role
+        // Revoke withdrawal role
         vm.prank(defaultAdmin);
-        swapper.revokeRole(treasuryAuthorityRole, treasuryAuthority);
+        swapper.revokeRole(withdrawalAuthorityRole, withdrawalAuthority);
 
-        // Original treasury role holder should not be able to withdraw
-        vm.prank(treasuryAuthority);
+        // Original withdrawal role holder should not be able to withdraw
+        vm.prank(withdrawalAuthority);
         vm.expectRevert();
-        swapper.withdrawLiquidity(address(usdc), treasuryAuthority, 100 * 10 ** 6);
+        swapper.withdrawLiquidity(address(usdc), withdrawalAuthority, 100 * 10 ** 6);
     }
 
     function test_revokedConfigureAuthority_cannotAddTokens() public {
@@ -301,7 +302,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         // Original configure role holder should not be able to add tokens
         vm.prank(configureAuthority);
         vm.expectRevert();
-        swapper.addToken(address(usdc));
+        swapper.listToken(address(usdc));
     }
 
     function test_revokedPauseAuthority_cannotPauseSwaps() public {
@@ -312,12 +313,12 @@ contract AuthorityTransfersTest is StableSwapperBase {
         // Original pause role holder should not be able to pause swaps
         vm.prank(pauseAuthority);
         vm.expectRevert();
-        swapper.updateSwapStatus(false);
+        swapper.setFeatureFlag(StableSwapper.FeatureFlag.SWAP, false);
     }
 
     function test_newDefaultAdmin_canGrantRoles() public {
         address newAdmin = makeAddr("newAdmin");
-        address newTreasury = makeAddr("newTreasury");
+        address newWithdrawal = makeAddr("newWithdrawal");
 
         // Transfer admin role
         vm.prank(defaultAdmin);
@@ -330,8 +331,8 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
         // New admin should be able to grant roles
         vm.prank(newAdmin);
-        swapper.grantRole(treasuryAuthorityRole, newTreasury);
+        swapper.grantRole(withdrawalAuthorityRole, newWithdrawal);
 
-        assertTrue(swapper.hasRole(treasuryAuthorityRole, newTreasury));
+        assertTrue(swapper.hasRole(withdrawalAuthorityRole, newWithdrawal));
     }
 }

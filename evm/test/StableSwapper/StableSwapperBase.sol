@@ -36,7 +36,7 @@ contract StableSwapperBase is Test {
     MockERC20 public appStable;
 
     address public defaultAdmin;
-    address public treasuryAuthority;
+    address public withdrawalAuthority;
     address public configureAuthority;
     address public pauseAuthority;
     address public feeRecipient;
@@ -48,7 +48,7 @@ contract StableSwapperBase is Test {
     function setUp() public virtual {
         // Setup test accounts
         defaultAdmin = makeAddr("defaultAdmin");
-        treasuryAuthority = makeAddr("treasuryAuthority");
+        withdrawalAuthority = makeAddr("withdrawalAuthority");
         configureAuthority = makeAddr("configureAuthority");
         pauseAuthority = makeAddr("pauseAuthority");
         feeRecipient = makeAddr("feeRecipient");
@@ -67,7 +67,7 @@ contract StableSwapperBase is Test {
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             defaultAdmin,
-            treasuryAuthority,
+            withdrawalAuthority,
             configureAuthority,
             pauseAuthority,
             feeRecipient,
@@ -82,23 +82,29 @@ contract StableSwapperBase is Test {
         usdc.mint(wallet0, 1000 * 10 ** 6); // 1000 USDC
         appStable.mint(wallet0, 1000 * 10 ** 6); // 1000 AppStable
 
-        // Mint tokens to treasury authority for liquidity operations
-        usdc.mint(treasuryAuthority, 1000 * 10 ** 6);
-        appStable.mint(treasuryAuthority, 1000 * 10 ** 6);
+        // Mint tokens to withdrawal authority for liquidity operations
+        usdc.mint(withdrawalAuthority, 1000 * 10 ** 6);
+        appStable.mint(withdrawalAuthority, 1000 * 10 ** 6);
     }
 
     /**
      * @notice Helper function to setup basic two-token swap environment
      */
     function setupBasicSwapEnvironment() internal {
-        // Configure authority adds tokens
+        // Configure authority lists tokens
         vm.startPrank(configureAuthority);
-        swapper.addToken(address(usdc));
-        swapper.addToken(address(appStable));
+        swapper.listToken(address(usdc));
+        swapper.listToken(address(appStable));
         vm.stopPrank();
 
-        // Treasury authority deposits liquidity
-        vm.startPrank(treasuryAuthority);
+        // Pause authority enables tokens
+        vm.startPrank(pauseAuthority);
+        swapper.updateTokenStatus(address(usdc), true);
+        swapper.updateTokenStatus(address(appStable), true);
+        vm.stopPrank();
+
+        // Withdrawal authority deposits liquidity
+        vm.startPrank(withdrawalAuthority);
         usdc.transfer(address(swapper), 500 * 10 ** 6);
         appStable.transfer(address(swapper), 500 * 10 ** 6);
         vm.stopPrank();

@@ -18,7 +18,7 @@ import {StableSwapper} from "../src/StableSwapper.sol";
  * Usage:
  *   Set environment variables:
  *     - DEFAULT_ADMIN: Address with DEFAULT_ADMIN_ROLE (can upgrade contract and manage roles)
- *     - TREASURY_AUTHORITY: Address with TREASURY_ROLE (can manage liquidity)
+ *     - WITHDRAWAL_AUTHORITY: Address with WITHDRAWAL_ROLE (can manage liquidity)
  *     - CONFIGURE_AUTHORITY: Address with CONFIGURE_ROLE (can add tokens, update fees)
  *     - PAUSE_AUTHORITY: Address with PAUSE_ROLE (can pause operations)
  *     - FEE_RECIPIENT: Address that receives swap fees
@@ -41,11 +41,11 @@ contract DeployStableSwapper is Script {
         address indexed implementation,
         address indexed proxy,
         address defaultAdmin,
-        address treasuryAuthority,
+        address withdrawalAuthority,
         address configureAuthority,
         address pauseAuthority,
         address feeRecipient,
-        uint16 feeRate,
+        uint16 feeBasisPoints,
         uint48 adminTransferDelay
     );
 
@@ -55,30 +55,29 @@ contract DeployStableSwapper is Script {
     function run() external {
         // Read configuration from environment variables
         address defaultAdmin = vm.envAddress("DEFAULT_ADMIN");
-        address treasuryAuthority = vm.envAddress("TREASURY_AUTHORITY");
+        address withdrawalAuthority = vm.envAddress("WITHDRAWAL_AUTHORITY");
         address configureAuthority = vm.envAddress("CONFIGURE_AUTHORITY");
         address pauseAuthority = vm.envAddress("PAUSE_AUTHORITY");
         address feeRecipient = vm.envAddress("FEE_RECIPIENT");
-        uint16 feeRate = uint16(vm.envUint("FEE_RATE"));
+        uint16 feeBasisPoints = uint16(vm.envUint("FEE_BASIS_POINTS"));
         uint48 adminTransferDelay = uint48(vm.envUint("ADMIN_TRANSFER_DELAY"));
 
         // Validate configuration
         require(defaultAdmin != address(0), "DEFAULT_ADMIN cannot be zero address");
-        require(treasuryAuthority != address(0), "TREASURY_AUTHORITY cannot be zero address");
+        require(withdrawalAuthority != address(0), "WITHDRAWAL_AUTHORITY cannot be zero address");
         require(configureAuthority != address(0), "CONFIGURE_AUTHORITY cannot be zero address");
         require(pauseAuthority != address(0), "PAUSE_AUTHORITY cannot be zero address");
         require(feeRecipient != address(0), "FEE_RECIPIENT cannot be zero address");
-        require(feeRate <= 1000, "FEE_RATE must be <= 1000 (10%)");
 
         // Log deployment configuration
         console.log("\n=== StableSwapper Deployment Configuration ===");
         console.log("Default Admin:", defaultAdmin);
-        console.log("Treasury Role Holder:", treasuryAuthority);
+        console.log("Withdrawal Role Holder:", withdrawalAuthority);
         console.log("Configure Role Holder:", configureAuthority);
         console.log("Pause Role Holder:", pauseAuthority);
         console.log("Fee Recipient:", feeRecipient);
-        console.log("Fee Rate (basis points):", feeRate);
-        console.log("Fee Rate (percentage):", (uint256(feeRate) * 100) / 10000, "%");
+        console.log("Fee (basis points):", feeBasisPoints);
+        console.log("Fee (percentage):", (uint256(feeBasisPoints) * 100) / 10000, "%");
         console.log("Admin Transfer Delay (seconds):", adminTransferDelay);
         console.log("===========================================\n");
 
@@ -88,11 +87,11 @@ contract DeployStableSwapper is Script {
         // Deploy contracts
         (address implementation, address proxy) = deploy(
             defaultAdmin,
-            treasuryAuthority,
+            withdrawalAuthority,
             configureAuthority,
             pauseAuthority,
             feeRecipient,
-            feeRate,
+            feeBasisPoints,
             adminTransferDelay
         );
 
@@ -109,11 +108,11 @@ contract DeployStableSwapper is Script {
             implementation,
             proxy,
             defaultAdmin,
-            treasuryAuthority,
+            withdrawalAuthority,
             configureAuthority,
             pauseAuthority,
             feeRecipient,
-            feeRate,
+            feeBasisPoints,
             adminTransferDelay
         );
     }
@@ -121,22 +120,22 @@ contract DeployStableSwapper is Script {
     /// @notice Deploys StableSwapper implementation and proxy
     ///
     /// @param defaultAdmin Address with DEFAULT_ADMIN_ROLE
-    /// @param treasuryAuthority Address with TREASURY_ROLE
+    /// @param withdrawalAuthority Address with WITHDRAWAL_ROLE
     /// @param configureAuthority Address with CONFIGURE_ROLE
     /// @param pauseAuthority Address with PAUSE_ROLE
     /// @param feeRecipient Address that receives swap fees
-    /// @param feeRate Fee rate in basis points (e.g., 100 = 1%)
+    /// @param feeBasisPoints Fee in basis points (e.g., 100 = 1%)
     /// @param adminTransferDelay Delay in seconds for 2-step admin transfers
     ///
     /// @return implementation Address of the implementation contract
     /// @return proxy Address of the proxy contract (main entry point)
     function deploy(
         address defaultAdmin,
-        address treasuryAuthority,
+        address withdrawalAuthority,
         address configureAuthority,
         address pauseAuthority,
         address feeRecipient,
-        uint16 feeRate,
+        uint16 feeBasisPoints,
         uint48 adminTransferDelay
     ) public returns (address implementation, address proxy) {
         // Step 1: Deploy implementation contract
@@ -149,11 +148,11 @@ contract DeployStableSwapper is Script {
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             defaultAdmin,
-            treasuryAuthority,
+            withdrawalAuthority,
             configureAuthority,
             pauseAuthority,
             feeRecipient,
-            feeRate,
+            feeBasisPoints,
             adminTransferDelay
         );
 
@@ -174,7 +173,8 @@ contract DeployStableSwapper is Script {
             stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Default admin not set correctly"
         );
         require(
-            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), treasuryAuthority), "Treasury role not set correctly"
+            stableSwapper.hasRole(stableSwapper.WITHDRAWAL_ROLE(), withdrawalAuthority),
+            "Withdrawal role not set correctly"
         );
         require(
             stableSwapper.hasRole(stableSwapper.CONFIGURE_ROLE(), configureAuthority),
@@ -184,13 +184,13 @@ contract DeployStableSwapper is Script {
 
         // Verify fee configuration
         require(stableSwapper.feeRecipient() == feeRecipient, "Fee recipient not set correctly");
-        require(stableSwapper.feeRate() == feeRate, "Fee rate not set correctly");
+        require(stableSwapper.feeBasisPoints() == feeBasisPoints, "Fee rate not set correctly");
 
         // Verify initial state
-        require(stableSwapper.swapsEnabled(), "Swaps should be enabled");
-        require(stableSwapper.liquidityEnabled(), "Liquidity should be enabled");
-        require(!stableSwapper.whitelistEnabled(), "Whitelist should not be enabled");
-        require(stableSwapper.getSupportedTokensCount() == 0, "No tokens should be supported initially");
+        require(stableSwapper.isFeatureEnabled(StableSwapper.FeatureFlag.SWAP), "Swaps should be enabled");
+        require(stableSwapper.isFeatureEnabled(StableSwapper.FeatureFlag.WITHDRAW), "Liquidity should be enabled");
+        require(!stableSwapper.isFeatureEnabled(StableSwapper.FeatureFlag.ALLOWLIST), "Allowlist should not be enabled");
+        require(stableSwapper.getListedTokensCount() == 0, "No tokens should be supported initially");
 
         console.log("Deployment verification successful!");
 

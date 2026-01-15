@@ -15,7 +15,7 @@ contract UpdateTokenStatusTest is StableSwapperBase {
 
     function test_updateTokenStatus_reverts_whenUnauthorizedUser() public {
         vm.prank(configureAuthority);
-        swapper.addToken(address(usdc));
+        swapper.listToken(address(usdc));
 
         address unauthorized = makeAddr("unauthorized");
 
@@ -30,9 +30,9 @@ contract UpdateTokenStatusTest is StableSwapperBase {
         swapper.updateTokenStatus(address(0), false);
     }
 
-    function test_updateTokenStatus_reverts_whenTokenNotSupported() public {
+    function test_updateTokenStatus_reverts_whenTokenNotListed() public {
         vm.prank(pauseAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenNotSupported.selector, address(usdc)));
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenNotListed.selector, address(usdc)));
         swapper.updateTokenStatus(address(usdc), false);
     }
 
@@ -49,8 +49,7 @@ contract UpdateTokenStatusTest is StableSwapperBase {
         vm.prank(pauseAuthority);
         swapper.updateTokenStatus(address(usdc), disabledStatus);
 
-        StableSwapper.TokenVault memory vault = swapper.getVault(address(usdc));
-        assertFalse(vault.isEnabled);
+        assertFalse(swapper.isTokenEnabled(address(usdc)));
     }
 
     function test_updateTokenStatus_reEnablesToken() public {
@@ -65,8 +64,7 @@ contract UpdateTokenStatusTest is StableSwapperBase {
         swapper.updateTokenStatus(address(usdc), enabledStatus);
         vm.stopPrank();
 
-        StableSwapper.TokenVault memory vault = swapper.getVault(address(usdc));
-        assertTrue(vault.isEnabled);
+        assertTrue(swapper.isTokenEnabled(address(usdc)));
 
         // Swap should succeed
         uint64 swapAmount = 10 * 10 ** 6;

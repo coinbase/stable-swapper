@@ -17,7 +17,7 @@ contract SwapTest is StableSwapperBase {
         setupBasicSwapEnvironment();
 
         vm.prank(pauseAuthority);
-        swapper.updateSwapStatus(false);
+        swapper.setFeatureFlag(StableSwapper.FeatureFlag.SWAP, false);
 
         uint256 swapAmount = 10 * 10 ** 6;
 
@@ -28,7 +28,7 @@ contract SwapTest is StableSwapperBase {
         vm.stopPrank();
 
         vm.prank(pauseAuthority);
-        swapper.updateSwapStatus(true);
+        swapper.setFeatureFlag(StableSwapper.FeatureFlag.SWAP, true);
     }
 
     function test_swap_reverts_whenTokenInIsZeroAddress() public {
@@ -56,9 +56,9 @@ contract SwapTest is StableSwapperBase {
         uint256 swapAmount = 10 * 10 ** 6;
 
         vm.prank(configureAuthority);
-        swapper.addToken(address(usdc));
+        swapper.listToken(address(usdc));
 
-        vm.prank(treasuryAuthority);
+        vm.prank(withdrawalAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
 
         vm.startPrank(wallet0);
@@ -81,7 +81,7 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.VaultMustBeEnabled.selector, address(usdc)));
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenMustBeEnabled.selector, address(usdc)));
         swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
     }
@@ -98,7 +98,7 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         appStable.approve(address(swapper), swapAmount);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.VaultMustBeEnabled.selector, address(usdc)));
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenMustBeEnabled.selector, address(usdc)));
         swapper.swap(address(appStable), address(usdc), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
     }
@@ -140,7 +140,7 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.VaultMustBeEnabled.selector, address(usdc)));
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenMustBeEnabled.selector, address(usdc)));
         swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
     }
@@ -157,7 +157,7 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         appStable.approve(address(swapper), swapAmount);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.VaultMustBeEnabled.selector, address(usdc)));
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenMustBeEnabled.selector, address(usdc)));
         swapper.swap(address(appStable), address(usdc), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
     }
@@ -170,7 +170,7 @@ contract SwapTest is StableSwapperBase {
         uint16 feeRate = uint16(bound(feeRateSeed, 2, 1000));
 
         vm.prank(configureAuthority);
-        swapper.updateFeeRate(feeRate);
+        swapper.updateFeeBasisPoints(feeRate);
 
         // To cause overflow in feeNumerator calculation (line 348):
         // feeNumerator = amountIn * feeRate
@@ -213,11 +213,16 @@ contract SwapTest is StableSwapperBase {
         uint256 swapAmount = bound(swapAmountSeed, 1, 100 * 10 ** 6);
 
         vm.startPrank(configureAuthority);
-        swapper.addToken(address(usdc));
-        swapper.addToken(address(appStable));
+        swapper.listToken(address(usdc));
+        swapper.listToken(address(appStable));
         vm.stopPrank();
 
-        vm.startPrank(treasuryAuthority);
+        vm.startPrank(pauseAuthority);
+        swapper.updateTokenStatus(address(usdc), true);
+        swapper.updateTokenStatus(address(appStable), true);
+        vm.stopPrank();
+
+        vm.startPrank(withdrawalAuthority);
         usdc.transfer(address(swapper), initialLiquidity);
         appStable.transfer(address(swapper), initialLiquidity);
 
@@ -226,7 +231,7 @@ contract SwapTest is StableSwapperBase {
 
         // Withdraw liquidity below the reserved amount
         // This leaves balance < reservedAmount, triggering the check at line 364
-        swapper.withdrawLiquidity(address(appStable), treasuryAuthority, withdrawAmount);
+        swapper.withdrawLiquidity(address(appStable), withdrawalAuthority, withdrawAmount);
         vm.stopPrank();
 
         // Verify the balance is now below reserved amount
@@ -269,12 +274,17 @@ contract SwapTest is StableSwapperBase {
         uint256 tinyAmount = bound(tinyAmountSeed, 1, maxTinyAmount);
 
         vm.startPrank(configureAuthority);
-        swapper.addToken(address(usdc));
-        swapper.addToken(address(appStable));
-        swapper.updateFeeRate(feeRateBps);
+        swapper.listToken(address(usdc));
+        swapper.listToken(address(appStable));
+        swapper.updateFeeBasisPoints(feeRateBps);
         vm.stopPrank();
 
-        vm.startPrank(treasuryAuthority);
+        vm.startPrank(pauseAuthority);
+        swapper.updateTokenStatus(address(usdc), true);
+        swapper.updateTokenStatus(address(appStable), true);
+        vm.stopPrank();
+
+        vm.startPrank(withdrawalAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
         appStable.transfer(address(swapper), liquidityAmount);
         vm.stopPrank();
@@ -287,7 +297,7 @@ contract SwapTest is StableSwapperBase {
 
         // Reset fee
         vm.prank(configureAuthority);
-        swapper.updateFeeRate(0);
+        swapper.updateFeeBasisPoints(0);
     }
 
     function testFuzz_swap_reverts_whenSlippageProtectionTriggered(
@@ -310,7 +320,7 @@ contract SwapTest is StableSwapperBase {
         uint256 minAmountOut = bound(minAmountOutSeed, expectedAmountOut + 1, swapAmount);
 
         vm.prank(configureAuthority);
-        swapper.updateFeeRate(feeRateBps);
+        swapper.updateFeeBasisPoints(feeRateBps);
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
@@ -320,7 +330,7 @@ contract SwapTest is StableSwapperBase {
 
         // Reset fee
         vm.prank(configureAuthority);
-        swapper.updateFeeRate(0);
+        swapper.updateFeeBasisPoints(0);
     }
 
     function testFuzz_swap_reverts_whenInsufficientLiquidity(
@@ -332,12 +342,17 @@ contract SwapTest is StableSwapperBase {
 
         // Add tokens
         vm.startPrank(configureAuthority);
-        swapper.addToken(address(usdc));
-        swapper.addToken(address(appStable));
+        swapper.listToken(address(usdc));
+        swapper.listToken(address(appStable));
+        vm.stopPrank();
+
+        vm.startPrank(pauseAuthority);
+        swapper.updateTokenStatus(address(usdc), true);
+        swapper.updateTokenStatus(address(appStable), true);
         vm.stopPrank();
 
         // Deposit limited liquidity
-        vm.startPrank(treasuryAuthority);
+        vm.startPrank(withdrawalAuthority);
         usdc.transfer(address(swapper), limitedLiquidity);
         appStable.transfer(address(swapper), limitedLiquidity);
         vm.stopPrank();
@@ -366,11 +381,16 @@ contract SwapTest is StableSwapperBase {
 
         // Add tokens
         vm.startPrank(configureAuthority);
-        swapper.addToken(address(usdc));
-        swapper.addToken(address(appStable));
+        swapper.listToken(address(usdc));
+        swapper.listToken(address(appStable));
         vm.stopPrank();
 
-        vm.startPrank(treasuryAuthority);
+        vm.startPrank(pauseAuthority);
+        swapper.updateTokenStatus(address(usdc), true);
+        swapper.updateTokenStatus(address(appStable), true);
+        vm.stopPrank();
+
+        vm.startPrank(withdrawalAuthority);
         usdc.transfer(address(swapper), depositedLiquidity);
         appStable.transfer(address(swapper), depositedLiquidity);
 
@@ -457,18 +477,23 @@ contract SwapTest is StableSwapperBase {
 
         MockERC20 tokenIn = new MockERC20("In Token", "IN", decimalsIn);
         // Mint enough for liquidity + swap amount to both treasury and wallet0
-        tokenIn.mint(treasuryAuthority, liquidityAmountIn);
+        tokenIn.mint(withdrawalAuthority, liquidityAmountIn);
         tokenIn.mint(wallet0, swapAmount);
 
         MockERC20 tokenOut = new MockERC20("Out Token", "OUT", decimalsOut);
-        tokenOut.mint(treasuryAuthority, liquidityAmountOut);
+        tokenOut.mint(withdrawalAuthority, liquidityAmountOut);
 
         vm.startPrank(configureAuthority);
-        swapper.addToken(address(tokenIn));
-        swapper.addToken(address(tokenOut));
+        swapper.listToken(address(tokenIn));
+        swapper.listToken(address(tokenOut));
         vm.stopPrank();
 
-        vm.startPrank(treasuryAuthority);
+        vm.startPrank(pauseAuthority);
+        swapper.updateTokenStatus(address(tokenIn), true);
+        swapper.updateTokenStatus(address(tokenOut), true);
+        vm.stopPrank();
+
+        vm.startPrank(withdrawalAuthority);
         tokenIn.transfer(address(swapper), liquidityAmountIn);
         tokenOut.transfer(address(swapper), liquidityAmountOut);
         vm.stopPrank();
@@ -518,18 +543,23 @@ contract SwapTest is StableSwapperBase {
 
         MockERC20 tokenIn = new MockERC20("In Token", "IN", decimalsIn);
         // Mint enough for liquidity + swap amount to both treasury and wallet0
-        tokenIn.mint(treasuryAuthority, liquidityAmountIn);
+        tokenIn.mint(withdrawalAuthority, liquidityAmountIn);
         tokenIn.mint(wallet0, swapAmount);
 
         MockERC20 tokenOut = new MockERC20("Out Token", "OUT", decimalsOut);
-        tokenOut.mint(treasuryAuthority, liquidityAmountOut);
+        tokenOut.mint(withdrawalAuthority, liquidityAmountOut);
 
         vm.startPrank(configureAuthority);
-        swapper.addToken(address(tokenIn));
-        swapper.addToken(address(tokenOut));
+        swapper.listToken(address(tokenIn));
+        swapper.listToken(address(tokenOut));
         vm.stopPrank();
 
-        vm.startPrank(treasuryAuthority);
+        vm.startPrank(pauseAuthority);
+        swapper.updateTokenStatus(address(tokenIn), true);
+        swapper.updateTokenStatus(address(tokenOut), true);
+        vm.stopPrank();
+
+        vm.startPrank(withdrawalAuthority);
         tokenIn.transfer(address(swapper), liquidityAmountIn);
         tokenOut.transfer(address(swapper), liquidityAmountOut);
         vm.stopPrank();
@@ -555,7 +585,7 @@ contract SwapTest is StableSwapperBase {
         uint256 minAmountOut = 99 * 10 ** 6;
 
         vm.prank(configureAuthority);
-        swapper.updateFeeRate(feeRateBps);
+        swapper.updateFeeBasisPoints(feeRateBps);
 
         uint256 initialFeeRecipientBalance = usdc.balanceOf(feeRecipient);
         uint256 initialUserAppStable = appStable.balanceOf(wallet0);
@@ -570,7 +600,7 @@ contract SwapTest is StableSwapperBase {
 
         // Reset fee
         vm.prank(configureAuthority);
-        swapper.updateFeeRate(0);
+        swapper.updateFeeBasisPoints(0);
     }
 
     function test_swap_skipsFees_whenFeeRateIsZero() public {
@@ -605,7 +635,7 @@ contract SwapTest is StableSwapperBase {
         uint256 expectedFee = 1000;
 
         vm.prank(configureAuthority);
-        swapper.updateFeeRate(feeRateBps);
+        swapper.updateFeeBasisPoints(feeRateBps);
 
         uint256 initialFeeRecipientBalance = usdc.balanceOf(feeRecipient);
 
@@ -620,7 +650,7 @@ contract SwapTest is StableSwapperBase {
 
         // Reset fee
         vm.prank(configureAuthority);
-        swapper.updateFeeRate(0);
+        swapper.updateFeeBasisPoints(0);
     }
 
     function test_swap_doesNotOverChargeFees_whenPerfectFeeAmount() public {
@@ -633,7 +663,7 @@ contract SwapTest is StableSwapperBase {
         uint256 expectedFee = 1 * 10 ** 6;
 
         vm.prank(configureAuthority);
-        swapper.updateFeeRate(feeRateBps);
+        swapper.updateFeeBasisPoints(feeRateBps);
 
         uint256 initialFeeRecipientBalance = usdc.balanceOf(feeRecipient);
 
@@ -647,6 +677,6 @@ contract SwapTest is StableSwapperBase {
 
         // Reset
         vm.prank(configureAuthority);
-        swapper.updateFeeRate(0);
+        swapper.updateFeeBasisPoints(0);
     }
 }

@@ -18,23 +18,7 @@ contract UpdateFeeRateTest is StableSwapperBase {
 
         vm.prank(unauthorized);
         vm.expectRevert();
-        swapper.updateFeeRate(50);
-    }
-
-    /**
-     * @notice Fuzz test: Any fee rate above maximum should revert
-     * @dev Tests that fee rates > 1000 (10%) are always rejected
-     */
-    function testFuzz_updateFeeRate_revertsOnExcessiveFeeRate(uint256 feeRateSeed) public {
-        // Bound to invalid range: anything above MAX_FEE_RATE (1000)
-        uint16 excessiveFeeRate = uint16(bound(feeRateSeed, 1001, type(uint16).max));
-
-        vm.prank(configureAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.FeeRateExceedsMaximum.selector, excessiveFeeRate));
-        swapper.updateFeeRate(excessiveFeeRate);
-
-        // Verify fee rate wasn't changed
-        assertEq(swapper.feeRate(), 0, "Fee rate should remain unchanged");
+        swapper.updateFeeBasisPoints(50);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -42,21 +26,20 @@ contract UpdateFeeRateTest is StableSwapperBase {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Fuzz test: Any valid fee rate (0-1000) should be accepted
-     * @dev Tests that all fee rates within valid range can be set
+     * @notice Fuzz test: Any fee rate should be accepted
+     * @dev Tests that fee rates can be set to any uint16 value
      */
     function testFuzz_updateFeeRate_acceptsValidFeeRates(uint256 feeRateSeed) public {
-        // Bound to valid range: 0-1000 basis points (0-10%)
-        uint16 feeRate = uint16(bound(feeRateSeed, 0, 1000));
+        uint16 feeRate = uint16(bound(feeRateSeed, 0, type(uint16).max));
 
         vm.prank(configureAuthority);
-        swapper.updateFeeRate(feeRate);
+        swapper.updateFeeBasisPoints(feeRate);
 
         // Verify fee rate was set correctly
-        assertEq(swapper.feeRate(), feeRate, "Fee rate not set correctly");
+        assertEq(swapper.feeBasisPoints(), feeRate, "Fee rate not set correctly");
 
         // Reset
         vm.prank(configureAuthority);
-        swapper.updateFeeRate(0);
+        swapper.updateFeeBasisPoints(0);
     }
 }

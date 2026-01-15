@@ -12,6 +12,20 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 
+/// @title StableSwapper
+/// @notice A 1:1 stablecoin swap contract with decimal normalization and role-based access control
+///
+/// @dev This contract enables swapping between stablecoins with different decimal places (6-18 decimals).
+/// @dev It implements UUPS upgradeability pattern and uses role-based access control for administration.
+/// @dev The contract supports three main feature flags: SWAP, WITHDRAW, and ALLOWLIST.
+///
+/// @dev Roles:
+/// @dev - DEFAULT_ADMIN_ROLE: Can authorize upgrades and manage all other roles (single holder, 2-step transfer)
+/// @dev - WITHDRAWAL_ROLE: Can withdraw liquidity (treasury) and update reserved amounts
+/// @dev - CONFIGURE_ROLE: Can add/remove tokens, update fees, and manage allowlist
+/// @dev - PAUSE_ROLE: Can pause/unpause swap and withdraw operations, and enable/disable individual tokens
+///
+/// @author Coinbase
 contract StableSwapper is
     Initializable,
     AccessControlDefaultAdminRulesUpgradeable,
@@ -20,106 +34,84 @@ contract StableSwapper is
 {
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    /// @notice Vault information for a supported token
-    ///
-    /// @dev Stores per-token state including reserves, enabled status, and decimal places
-    ///
-    /// @param reservedAmount Amount of tokens reserved and not available for withdrawal
-    /// @param isEnabled Whether the token is currently enabled for swapping
-    /// @param decimals Number of decimal places the token uses (must be between MIN_DECIMALS and MAX_DECIMALS)
-    struct TokenVault {
-        uint256 reservedAmount;
-        bool isEnabled;
-        uint8 decimals;
+    /// @notice Feature flags for contract functionality
+    enum FeatureFlag {
+        SWAP,
+        WITHDRAW,
+        ALLOWLIST
     }
-
-    /// @notice Maximum fee rate in basis points (10% = 1000 basis points)
-    uint16 public constant MAX_FEE_RATE = 1000;
 
     /// @notice Fee denominator for basis points calculation (100% = 10000 basis points)
     uint16 public constant FEE_DENOMINATOR = 10000;
 
-    /// @notice Maximum number of addresses that can be whitelisted
-    uint64 public constant MAX_WHITELISTED_ADDRESSES = 100;
-
-    /// @notice Maximum number of tokens that can be supported simultaneously
-    uint64 public constant MAX_SUPPORTED_TOKENS = 50;
-
-    /// @notice Minimum number of decimals a token must have to be supported
-    uint8 public constant MIN_DECIMALS = 6;
-
-    /// @notice Maximum number of decimals a token can have to be supported
-    uint8 public constant MAX_DECIMALS = 18;
-
-    /// @notice Role identifier for treasury role
-    /// @dev Can withdraw liquidity and update reserved amounts
+    /// @notice Role identifier for withdrawal role
+    ///
+    /// @dev Can withdraw liquidity (treasury operations) and update reserved amounts
     /// @dev Multiple addresses can hold this role simultaneously
-    bytes32 public constant TREASURY_ROLE = keccak256("TREASURY_ROLE");
+    bytes32 public constant WITHDRAWAL_ROLE = keccak256("WITHDRAWAL_ROLE");
 
     /// @notice Role identifier for pause role
+    ///
     /// @dev Can pause/unpause swaps and liquidity operations, and enable/disable individual tokens
     /// @dev Multiple addresses can hold this role simultaneously
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
 
     /// @notice Role identifier for configure role
-    /// @dev Can add/remove tokens, update fee configuration, and manage whitelist
+    ///
+    /// @dev Can add/remove tokens, update fee configuration, and manage allowlist
     /// @dev Multiple addresses can hold this role simultaneously
     bytes32 public constant CONFIGURE_ROLE = keccak256("CONFIGURE_ROLE");
 
-    /// @notice Version number of the contract implementation
-    uint8 public contractVersion;
+    /// @custom:storage-location erc7201:coinbase.storage.StableSwapper
+    struct StableSwapperStorage {
+        /// @dev Version number of the contract implementation
+        uint8 contractVersion;
+        /// @dev Set of addresses for tokens listed in this contract
+        EnumerableSet.AddressSet listedTokens;
+        /// @dev Mapping from token address to reserved amount (not available for withdrawal by swaps)
+        mapping(address => uint256) reservedAmounts;
+        /// @dev Mapping from token address to enabled status
+        mapping(address => bool) tokenEnabled;
+        /// @dev Address that receives fees collected from swaps
+        address feeRecipient;
+        /// @dev Current fee in basis points (e.g., 100 = 1%)
+        uint16 feeBasisPoints;
+        /// @dev Mapping of addresses allowed to initiate swaps when allowlist feature is enabled
+        mapping(address account => bool allowed) allowlist;
+        /// @dev Mapping of feature flags to their enabled status
+        mapping(FeatureFlag => bool) featureFlags;
+    }
 
-    /// @dev Set of addresses for tokens supported by this contract
-    EnumerableSet.AddressSet private _supportedTokens;
-
-    /// @dev Mapping from token address to its vault information
-    mapping(address => TokenVault) private _vaults;
-
-    /// @notice Address that receives fees collected from swaps
-    address public feeRecipient;
-
-    /// @notice Current fee rate in basis points (e.g., 100 = 1%)
-    uint16 public feeRate;
-
-    /// @dev Set of addresses that are whitelisted to initiate swaps (when whitelist is enabled)
-    EnumerableSet.AddressSet private _whitelistedAddresses;
-
-    /// @notice Whether whitelist enforcement is currently enabled
-    bool public whitelistEnabled;
-
-    /// @notice Whether swap operations are currently enabled
-    bool public swapsEnabled;
-
-    /// @notice Whether liquidity operations (withdrawals) are currently enabled
-    bool public liquidityEnabled;
+    // keccak256(abi.encode(uint256(keccak256("coinbase.storage.StableSwapper")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant STABLE_SWAPPER_STORAGE_LOCATION =
+        0xf2e0b1cd22eafe6a81cc5537d51093af5e5b8419839ce4a86b767790e5c10000;
 
     /// @notice Emitted when the contract is initialized with initial roles and fee configuration
+    ///
     /// @dev DEFAULT_ADMIN_ROLE can grant/revoke other roles after initialization
     ///
     /// @param defaultAdmin Address granted the DEFAULT_ADMIN_ROLE (only role that can manage other roles)
-    /// @param treasuryAuthority Initial address granted the TREASURY_ROLE
+    /// @param withdrawalAuthority Initial address granted the WITHDRAWAL_ROLE
     /// @param configureAuthority Initial address granted the CONFIGURE_ROLE
     /// @param pauseAuthority Initial address granted the PAUSE_ROLE
     /// @param initialFeeRecipient Address that will receive swap fees
-    /// @param initialFeeRate Initial fee rate in basis points (e.g., 100 = 1%)
+    /// @param initialFeeBasisPoints Initial fee in basis points (e.g., 100 = 1%)
     event Initialized(
         address defaultAdmin,
-        address treasuryAuthority,
+        address withdrawalAuthority,
         address configureAuthority,
         address pauseAuthority,
         address initialFeeRecipient,
-        uint16 initialFeeRate
+        uint16 initialFeeBasisPoints
     );
 
-    /// @notice Emitted when a new token is added to the supported tokens list
-    ///
-    /// @param token Address of the token that was added
-    /// @param decimals Number of decimals the token uses
-    event TokenAdded(address indexed token, uint8 decimals);
+    /// @notice Emitted when a new token is listed in the contract
+    /// @param token Address of the token that was listed
+    event TokenListed(address indexed token);
 
-    /// @notice Emitted when a token is removed from the supported tokens list
-    /// @param token Address of the token that was removed
-    event TokenRemoved(address indexed token);
+    /// @notice Emitted when a token is unlisted from the contract
+    /// @param token Address of the token that was unlisted
+    event TokenUnlisted(address indexed token);
 
     /// @notice Emitted when a swap is executed
     ///
@@ -141,17 +133,15 @@ contract StableSwapper is
     /// @param newFeeRecipient New address that will receive swap fees
     event FeeRecipientUpdated(address newFeeRecipient);
 
-    /// @notice Emitted when the fee rate is updated
-    /// @param newFeeRate New fee rate in basis points (e.g., 100 = 1%)
-    event FeeRateUpdated(uint16 newFeeRate);
+    /// @notice Emitted when the fee is updated
+    /// @param newFeeBasisPoints New fee in basis points (e.g., 100 = 1%)
+    event FeeUpdated(uint16 newFeeBasisPoints);
 
-    /// @notice Emitted when swap status is updated
-    /// @param isEnabled True if swaps are enabled, false if disabled
-    event SwapStatusUpdated(bool isEnabled);
-
-    /// @notice Emitted when liquidity status is updated
-    /// @param isEnabled True if liquidity operations are enabled, false if disabled
-    event LiquidityStatusUpdated(bool isEnabled);
+    /// @notice Emitted when a feature flag is updated
+    ///
+    /// @param feature The feature that was updated
+    /// @param isEnabled True if the feature is enabled, false if disabled
+    event FeatureFlagUpdated(FeatureFlag indexed feature, bool isEnabled);
 
     /// @notice Emitted when a token's reserved amount is updated
     ///
@@ -165,47 +155,61 @@ contract StableSwapper is
     /// @param isEnabled True if token is enabled for swaps, false if disabled
     event TokenStatusUpdated(address indexed token, bool isEnabled);
 
-    /// @notice Emitted when an address is added to the whitelist
-    /// @param addr Address that was added to the whitelist
-    event WhitelistAddressAdded(address addr);
+    /// @notice Emitted when an address is added to the allowlist
+    /// @param addr Address that was added to the allowlist
+    event AllowlistAddressAdded(address addr);
 
-    /// @notice Emitted when an address is removed from the whitelist
-    /// @param addr Address that was removed from the whitelist
-    event WhitelistAddressRemoved(address addr);
+    /// @notice Emitted when an address is removed from the allowlist
+    /// @param addr Address that was removed from the allowlist
+    event AllowlistAddressRemoved(address addr);
 
-    /// @notice Emitted when whitelist enforcement is enabled
-    /// @dev When enabled, only whitelisted addresses can initiate swaps
-    event WhitelistEnabled();
-
-    /// @notice Emitted when whitelist enforcement is disabled
-    /// @dev When disabled, any address can initiate swaps
-    event WhitelistDisabled();
-
+    /// @notice Thrown when an address parameter is the zero address
     error CannotBeZeroAddress();
-    error TokenAlreadySupported(address token);
-    error TokenNotSupported(address token);
+
+    /// @notice Thrown when attempting to list a token that is already listed
+    error TokenAlreadyListed(address token);
+
+    /// @notice Thrown when attempting an operation on a token that is not listed
+    error TokenNotListed(address token);
+
+    /// @notice Thrown when attempting to swap a token for itself
     error CannotSwapSameToken(address token);
-    error SupportedTokensExceedsMaximum(uint64 maxTokens);
-    error TokenDoesNotImplementDecimals(address token);
+
+    /// @notice Thrown when attempting to unlist a token that is still enabled
     error TokenMustBeDisabled(address token);
-    error TokenHasBalance(address token);
+
+    /// @notice Thrown when an amount parameter is zero
     error CannotBeZeroAmount();
+
+    /// @notice Thrown when the output amount is less than the minimum acceptable amount (slippage protection)
     error SlippageExceeded();
+
+    /// @notice Thrown when a swap would result in zero output tokens
     error AmountOutCannotBeZero();
+
+    /// @notice Thrown when the token out balance is less than the reserved amount
     error TokenOutBalanceLessThanReservedAmount(address token);
+
+    /// @notice Thrown when the swap output amount exceeds available liquidity
     error AmountOutExceedsAvailableLiquidity(uint256 amountOut, uint256 availableLiquidity);
-    error LiquidityCannotBePaused();
-    error LiquidityWithdrawExceedsBalance(address token, uint256 amount, uint256 balance);
+
+    /// @notice Thrown when attempting to withdraw liquidity while the withdraw feature is disabled
+    error WithdrawalCannotBePaused();
+
+    /// @notice Thrown when attempting to swap while the swap feature is disabled
     error SwapsCannotBePaused();
-    error VaultMustBeEnabled(address token);
-    error FeeCalculationOverflow();
-    error DecimalsOutOfRange(address token, uint8 decimals);
-    error FeeRateExceedsMaximum(uint16 feeRate);
+
+    /// @notice Thrown when attempting to swap with a token that is disabled
+    error TokenMustBeEnabled(address token);
+
+    /// @notice Thrown when attempting to set a reserved amount greater than the token balance
     error ReservedAmountExceedsBalance(address token, uint256 reservedAmount, uint256 balance);
-    error WhitelistExceedsMaximum(uint64 maxAddresses);
-    error AddressAlreadyInWhitelist(address addr);
-    error AddressNotInWhitelist(address addr);
-    error DecimalNormalizationOverflow();
+
+    /// @notice Thrown when attempting to add an address that is already in the allowlist
+    error AddressAlreadyInAllowlist(address addr);
+
+    /// @notice Thrown when attempting an operation on an address that is not in the allowlist
+    error AddressNotInAllowlist(address addr);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -213,95 +217,49 @@ contract StableSwapper is
     }
 
     /// @notice Initializes the StableSwapper contract with roles and fee configuration
+    ///
     /// @dev DEFAULT_ADMIN_ROLE uses a 2-step transfer process and can only be held by one address at a time
     /// @dev DEFAULT_ADMIN_ROLE is the only role that can grant/revoke other roles
-    /// @dev Other roles (TREASURY_ROLE, CONFIGURE_ROLE, PAUSE_ROLE) can have multiple holders
+    /// @dev Other roles (WITHDRAWAL_ROLE, CONFIGURE_ROLE, PAUSE_ROLE) can have multiple holders
     ///
     /// @param defaultAdmin Address granted DEFAULT_ADMIN_ROLE (can authorize UUPS upgrades and grant/revoke all other roles)
-    /// @param treasuryAuthority Initial address granted TREASURY_ROLE (can withdraw liquidity and update reserved amounts)
-    /// @param configureAuthority Initial address granted CONFIGURE_ROLE (can add/remove tokens, update fees, manage whitelist)
+    /// @param withdrawalAuthority Initial address granted WITHDRAWAL_ROLE (can withdraw liquidity for treasury and update reserved amounts)
+    /// @param configureAuthority Initial address granted CONFIGURE_ROLE (can add/remove tokens, update fees, manage allowlist)
     /// @param pauseAuthority Initial address granted PAUSE_ROLE (can pause/unpause operations and enable/disable tokens)
     /// @param initialFeeRecipient Address that will receive swap fees
-    /// @param initialFeeRate Fee rate in basis points (e.g., 100 = 1%)
+    /// @param initialFeeBasisPoints Initial fee in basis points (e.g., 100 = 1%)
     /// @param initialAdminTransferDelay Delay in seconds for 2-step DEFAULT_ADMIN_ROLE transfers (security feature)
     function initialize(
         address defaultAdmin,
-        address treasuryAuthority,
+        address withdrawalAuthority,
         address configureAuthority,
         address pauseAuthority,
         address initialFeeRecipient,
-        uint16 initialFeeRate,
+        uint16 initialFeeBasisPoints,
         uint48 initialAdminTransferDelay
     ) public initializer {
         __AccessControlDefaultAdminRules_init(initialAdminTransferDelay, defaultAdmin);
 
-        require(initialFeeRate <= MAX_FEE_RATE, FeeRateExceedsMaximum(initialFeeRate));
-
-        _grantRole(TREASURY_ROLE, treasuryAuthority);
+        _grantRole(WITHDRAWAL_ROLE, withdrawalAuthority);
         _grantRole(CONFIGURE_ROLE, configureAuthority);
         _grantRole(PAUSE_ROLE, pauseAuthority);
 
-        feeRecipient = initialFeeRecipient;
-        feeRate = initialFeeRate;
-        swapsEnabled = true;
-        liquidityEnabled = true;
-        whitelistEnabled = false;
-        contractVersion = 1;
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        $.feeRecipient = initialFeeRecipient;
+        $.feeBasisPoints = initialFeeBasisPoints;
+        $.featureFlags[FeatureFlag.SWAP] = true;
+        $.featureFlags[FeatureFlag.WITHDRAW] = true;
+        $.featureFlags[FeatureFlag.ALLOWLIST] = false;
+        $.contractVersion = 1;
 
         emit Initialized(
-            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, initialFeeRecipient, initialFeeRate
+            defaultAdmin,
+            withdrawalAuthority,
+            configureAuthority,
+            pauseAuthority,
+            initialFeeRecipient,
+            initialFeeBasisPoints
         );
-    }
-
-    /// @dev Function that authorizes an upgrade to a new implementation
-    /// @dev Only the single address holding DEFAULT_ADMIN_ROLE can authorize upgrades
-    ///
-    /// @param newImplementation Address of the new implementation contract
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
-
-    /// @notice Adds a new token to the list of supported tokens for swapping
-    ///
-    /// @param token Address of the ERC20 token to add (must have 6-9 decimals)
-    function addToken(address token) external onlyRole(CONFIGURE_ROLE) {
-        require(token != address(0), CannotBeZeroAddress());
-        require(!_supportedTokens.contains(token), TokenAlreadySupported(token));
-        require(_supportedTokens.length() < MAX_SUPPORTED_TOKENS, SupportedTokensExceedsMaximum(MAX_SUPPORTED_TOKENS));
-
-        uint8 decimals;
-        try IERC20Metadata(token).decimals() returns (uint8 _decimals) {
-            decimals = _decimals;
-        } catch {
-            // If token doesn't implement decimals(), revert
-            revert TokenDoesNotImplementDecimals(token);
-        }
-
-        // Validate decimal range (6-9 decimals only)
-        require(decimals >= MIN_DECIMALS && decimals <= MAX_DECIMALS, DecimalsOutOfRange(token, decimals));
-
-        _supportedTokens.add(token);
-        _vaults[token] = TokenVault({reservedAmount: 0, isEnabled: true, decimals: decimals});
-        emit TokenAdded(token, decimals);
-    }
-
-    /// @notice Removes a token from the list of supported tokens (token must be disabled and have zero balance)
-    ///
-    /// @param token Address of the token to remove
-    function removeToken(address token) external onlyRole(CONFIGURE_ROLE) {
-        require(token != address(0), CannotBeZeroAddress());
-        require(_supportedTokens.contains(token), TokenNotSupported(token));
-
-        // Safety check: token must be disabled first
-        // This prevents accidental removal of active trading pairs
-        require(!_vaults[token].isEnabled, TokenMustBeDisabled(token));
-
-        // Safety check: token must have no balance in the contract
-        // This prevents accidental removal of tokens with remaining balance
-        uint256 balance = IERC20(token).balanceOf(address(this));
-        require(balance == 0, TokenHasBalance(token));
-
-        _supportedTokens.remove(token);
-        delete _vaults[token];
-        emit TokenRemoved(token);
     }
 
     /// @notice Swaps one stablecoin for another with automatic decimal normalization and fee deduction
@@ -315,27 +273,26 @@ contract StableSwapper is
         external
         nonReentrant
     {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+
         // CHECKS: All validation and calculations
-        require(swapsEnabled, SwapsCannotBePaused());
+        require($.featureFlags[FeatureFlag.SWAP], SwapsCannotBePaused());
         require(tokenIn != address(0), CannotBeZeroAddress());
         require(tokenOut != address(0), CannotBeZeroAddress());
         require(tokenIn != tokenOut, CannotSwapSameToken(tokenIn));
-        require(_supportedTokens.contains(tokenIn), TokenNotSupported(tokenIn));
-        require(_supportedTokens.contains(tokenOut), TokenNotSupported(tokenOut));
+        require($.listedTokens.contains(tokenIn), TokenNotListed(tokenIn));
+        require($.listedTokens.contains(tokenOut), TokenNotListed(tokenOut));
         require(amountIn > 0, CannotBeZeroAmount());
         require(minAmountOut > 0, CannotBeZeroAmount());
 
-        // We only check that the initiator is in the whitelist if whitelist is enabled
-        // The recipient does not need to be in the whitelist
-        if (whitelistEnabled) {
-            require(_whitelistedAddresses.contains(msg.sender), AddressNotInWhitelist(msg.sender));
+        // We only check that the initiator is in the allowlist if allowlist is enabled
+        // The recipient does not need to be in the allowlist
+        if ($.featureFlags[FeatureFlag.ALLOWLIST]) {
+            require($.allowlist[msg.sender], AddressNotInAllowlist(msg.sender));
         }
 
-        TokenVault storage vaultIn = _vaults[tokenIn];
-        TokenVault storage vaultOut = _vaults[tokenOut];
-
-        require(vaultIn.isEnabled, VaultMustBeEnabled(tokenIn));
-        require(vaultOut.isEnabled, VaultMustBeEnabled(tokenOut));
+        require($.tokenEnabled[tokenIn], TokenMustBeEnabled(tokenIn));
+        require($.tokenEnabled[tokenOut], TokenMustBeEnabled(tokenOut));
 
         // Fee Model: Fee is charged on INPUT token
         // Example: User swaps 100 USDC → USDT with 1% fee
@@ -344,16 +301,18 @@ contract StableSwapper is
         //   - fee_recipient receives: 1 USDC (protocol fee)
         //   - User receives: 99 USDT (1:1 swap of net amount, normalized for decimals)
 
-        // Calculate fee (in basis points, e.g., 100 = 1%)
-        // Round up to ensure protocol always collects full fee amount
-        uint256 feeNumerator = amountIn * feeRate;
-        uint256 fee = (feeNumerator + FEE_DENOMINATOR - 1) / FEE_DENOMINATOR;
+        // Force rounding up to collect full fee amount by adding `FEE_DENOMINATOR - 1` to numerator
+        uint256 amountInAfterFee = amountIn;
+        uint256 fee = 0;
+        if ($.feeBasisPoints > 0) {
+            fee = (amountIn * $.feeBasisPoints + FEE_DENOMINATOR - 1) / FEE_DENOMINATOR;
+            amountInAfterFee -= fee;
+        }
 
-        // Checked subtraction to prevent underflow (though fee <= amountIn by construction)
-        require(fee <= amountIn, FeeCalculationOverflow());
-        uint256 amountInAfterFee = amountIn - fee;
-
-        uint256 amountOut = normalizeDecimals(amountInAfterFee, vaultIn.decimals, vaultOut.decimals);
+        // Get decimals directly from tokens to avoid desync risk
+        uint8 decimalsIn = IERC20Metadata(tokenIn).decimals();
+        uint8 decimalsOut = IERC20Metadata(tokenOut).decimals();
+        uint256 amountOut = _normalizeDecimals(amountInAfterFee, decimalsIn, decimalsOut);
 
         require(amountOut > 0, AmountOutCannotBeZero());
 
@@ -361,27 +320,21 @@ contract StableSwapper is
         require(amountOut >= minAmountOut, SlippageExceeded());
 
         uint256 tokenOutBalance = IERC20(tokenOut).balanceOf(address(this));
+
         // Prevent underflow, there is no available liquidity if the token out balance is less than the reserved amount
-        require(vaultOut.reservedAmount <= tokenOutBalance, TokenOutBalanceLessThanReservedAmount(tokenOut));
+        require($.reservedAmounts[tokenOut] <= tokenOutBalance, TokenOutBalanceLessThanReservedAmount(tokenOut));
 
-        uint256 availableLiquidity = tokenOutBalance - vaultOut.reservedAmount;
+        uint256 availableLiquidity = tokenOutBalance - $.reservedAmounts[tokenOut];
         require(amountOut <= availableLiquidity, AmountOutExceedsAvailableLiquidity(amountOut, availableLiquidity));
-
-        // EFFECTS: Cache state variables before external calls
-        // This prevents TOCTOU (Time-of-Check-Time-of-Use) issues where feeRecipient
-        // could be changed by another transaction between check and use
-        address cachedFeeRecipient = feeRecipient;
-
-        // INTERACTIONS: All external calls happen last to prevent reentrancy exploits
-        // Following the Checks-Effects-Interactions pattern for maximum security
 
         // Step 1: Transfer the full amount in to the vaultIn from sender
         // This gets added to the pool's liquidity for the input token
         SafeERC20.safeTransferFrom(IERC20(tokenIn), msg.sender, address(this), amountIn);
 
-        // Step 2: Transfer the fee to the cached fee recipient
-        // Using cached value prevents malicious fee recipient changes during execution
-        SafeERC20.safeTransfer(IERC20(tokenIn), cachedFeeRecipient, fee);
+        // Step 2: Transfer the fee to the fee recipient
+        if (fee > 0) {
+            SafeERC20.safeTransfer(IERC20(tokenIn), $.feeRecipient, fee);
+        }
 
         // Step 3: Transfer the amount out to the recipient
         SafeERC20.safeTransfer(IERC20(tokenOut), recipient, amountOut);
@@ -389,27 +342,78 @@ contract StableSwapper is
         emit Swap(tokenIn, tokenOut, amountIn, amountOut, fee);
     }
 
+    // External functions
+    /// @notice Lists a token in the contract for swapping.  Listed tokens can be paused via the `updateTokenStatus` function.
+    ///
+    /// @param token Address of the ERC20 token to list (must have 6-18 decimals)
+    function listToken(address token) external onlyRole(CONFIGURE_ROLE) nonReentrant {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+
+        require(token != address(0), CannotBeZeroAddress());
+        require(!$.listedTokens.contains(token), TokenAlreadyListed(token));
+
+        $.listedTokens.add(token);
+        $.tokenEnabled[token] = false;
+        $.reservedAmounts[token] = 0;
+        emit TokenListed(token);
+    }
+
+    /// @notice Unlists a token from the list of supported tokens. Tokens must be paused and have zero balance.
+    ///
+    /// @param token Address of the token to unlist
+    function unlistToken(address token) external onlyRole(CONFIGURE_ROLE) nonReentrant {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+
+        require(token != address(0), CannotBeZeroAddress());
+        require($.listedTokens.contains(token), TokenNotListed(token));
+
+        // Safety check: token must be disabled first
+        // This prevents accidental unlisting of active trading pairs
+        require(!$.tokenEnabled[token], TokenMustBeDisabled(token));
+
+        $.listedTokens.remove(token);
+        delete $.tokenEnabled[token];
+        delete $.reservedAmounts[token];
+        emit TokenUnlisted(token);
+    }
+
+    /// @notice Updates the enabled status of a token for swapping
+    ///
+    /// @param token Address of the token
+    /// @param isEnabled True to enable, false to disable
+    function updateTokenStatus(address token, bool isEnabled) external onlyRole(PAUSE_ROLE) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+
+        require(token != address(0), CannotBeZeroAddress());
+        require($.listedTokens.contains(token), TokenNotListed(token));
+        $.tokenEnabled[token] = isEnabled;
+        emit TokenStatusUpdated(token, isEnabled);
+    }
+
     /// @notice Withdraws liquidity from the contract for a specific token
-    /// @dev Only callable by address with TREASURY_ROLE role
-    /// @dev Treasury role can withdraw regardless of reserved amount (reserved amount only restricts swaps)
+    ///
+    /// @dev Only callable by address with WITHDRAWAL_ROLE
+    /// @dev Withdrawal role (treasury) can withdraw regardless of reserved amount (reserved amount only restricts swaps)
     ///
     /// @param token Address of the token to withdraw
     /// @param recipient Address to receive the withdrawn tokens
     /// @param amount Amount of tokens to withdraw
-    function withdrawLiquidity(address token, address recipient, uint256 amount) external onlyRole(TREASURY_ROLE) {
+    function withdrawLiquidity(address token, address recipient, uint256 amount)
+        external
+        onlyRole(WITHDRAWAL_ROLE)
+        nonReentrant
+    {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+
         require(token != address(0), CannotBeZeroAddress());
         require(recipient != address(0), CannotBeZeroAddress());
-        require(liquidityEnabled, LiquidityCannotBePaused());
-        require(_supportedTokens.contains(token), TokenNotSupported(token));
+        require($.featureFlags[FeatureFlag.WITHDRAW], WithdrawalCannotBePaused());
+        require($.listedTokens.contains(token), TokenNotListed(token));
         require(amount > 0, CannotBeZeroAmount());
 
-        uint256 balance = IERC20(token).balanceOf(address(this));
-        require(amount <= balance, LiquidityWithdrawExceedsBalance(token, amount, balance));
-
-        // Note: TREASURY_ROLE can withdraw regardless of reserved amount
-        // Reserved amount is meant to protect swap users, not restrict treasury role
-        // This allows treasury role to manage liquidity in emergency situations
-
+        // Note: WITHDRAWAL_ROLE can withdraw regardless of reserved amount
+        // Reserved amount is meant to protect swap users, not restrict withdrawal role
+        // This allows treasury (withdrawal role) to manage liquidity in emergency situations
         SafeERC20.safeTransfer(IERC20(token), recipient, amount);
 
         emit LiquidityWithdrawn(token, recipient, amount);
@@ -419,163 +423,200 @@ contract StableSwapper is
     ///
     /// @param newFeeRecipient New address to receive fees
     function updateFeeRecipient(address newFeeRecipient) external onlyRole(CONFIGURE_ROLE) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+
         require(newFeeRecipient != address(0), CannotBeZeroAddress());
-        feeRecipient = newFeeRecipient;
+        $.feeRecipient = newFeeRecipient;
         emit FeeRecipientUpdated(newFeeRecipient);
     }
 
-    /// @notice Updates the fee rate charged on swaps
+    /// @notice Updates the fee charged on swaps
     ///
-    /// @param newFeeRate New fee rate in basis points (e.g., 100 = 1%, max 1000 = 10%)
-    function updateFeeRate(uint16 newFeeRate) external onlyRole(CONFIGURE_ROLE) {
-        require(newFeeRate <= MAX_FEE_RATE, FeeRateExceedsMaximum(newFeeRate));
-        feeRate = newFeeRate;
-        emit FeeRateUpdated(newFeeRate);
-    }
+    /// @param newFeeBasisPoints New fee in basis points (e.g., 100 = 1%, max 1000 = 10%)
+    function updateFeeBasisPoints(uint16 newFeeBasisPoints) external onlyRole(CONFIGURE_ROLE) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
 
-    /// @notice Updates the swap operations status
-    /// @param isEnabled True to enable swaps, false to disable
-    function updateSwapStatus(bool isEnabled) external onlyRole(PAUSE_ROLE) {
-        swapsEnabled = isEnabled;
-        emit SwapStatusUpdated(isEnabled);
-    }
-
-    /// @notice Updates the liquidity operations status
-    /// @param isEnabled True to enable liquidity operations, false to disable
-    function updateLiquidityStatus(bool isEnabled) external onlyRole(PAUSE_ROLE) {
-        liquidityEnabled = isEnabled;
-        emit LiquidityStatusUpdated(isEnabled);
+        $.feeBasisPoints = newFeeBasisPoints;
+        emit FeeUpdated(newFeeBasisPoints);
     }
 
     /// @notice Updates the reserved amount for a token (amount that cannot be withdrawn by swaps)
-    /// @dev Reserved amount does not restrict TREASURY_ROLE withdrawals
+    ///
+    /// @dev Reserved amount does not restrict WITHDRAWAL_ROLE withdrawals
     ///
     /// @param token Address of the token
     /// @param newReservedAmount New reserved amount (must not exceed current balance)
-    function updateReservedAmount(address token, uint256 newReservedAmount) external onlyRole(TREASURY_ROLE) {
+    function updateReservedAmount(address token, uint256 newReservedAmount)
+        external
+        onlyRole(WITHDRAWAL_ROLE)
+        nonReentrant
+    {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+
         require(token != address(0), CannotBeZeroAddress());
-        require(_supportedTokens.contains(token), TokenNotSupported(token));
+        require($.listedTokens.contains(token), TokenNotListed(token));
 
         // Safety check: reserved amount must not exceed balance
         uint256 balance = IERC20(token).balanceOf(address(this));
         require(newReservedAmount <= balance, ReservedAmountExceedsBalance(token, newReservedAmount, balance));
 
-        _vaults[token].reservedAmount = newReservedAmount;
+        $.reservedAmounts[token] = newReservedAmount;
         emit ReservedAmountUpdated(token, newReservedAmount);
     }
 
-    /// @notice Enables or disables a token for swapping
+    /// @notice Adds an address to the allowlist (allowing it to initiate swaps when allowlist feature is enabled)
     ///
-    /// @param token Address of the token
-    /// @param isEnabled True to enable, false to disable
-    function updateTokenStatus(address token, bool isEnabled) external onlyRole(PAUSE_ROLE) {
-        require(token != address(0), CannotBeZeroAddress());
-        require(_supportedTokens.contains(token), TokenNotSupported(token));
-        _vaults[token].isEnabled = isEnabled;
-        emit TokenStatusUpdated(token, isEnabled);
-    }
+    /// @param addr Address to add to allowlist
+    function addToAllowlist(address addr) external onlyRole(CONFIGURE_ROLE) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
 
-    /// @notice Adds an address to the whitelist (allowing it to initiate swaps when whitelist is enabled)
-    ///
-    /// @param addr Address to add to whitelist
-    function addToWhitelist(address addr) external onlyRole(CONFIGURE_ROLE) {
         require(addr != address(0), CannotBeZeroAddress());
-        require(!_whitelistedAddresses.contains(addr), AddressAlreadyInWhitelist(addr));
-        require(
-            _whitelistedAddresses.length() < MAX_WHITELISTED_ADDRESSES,
-            WhitelistExceedsMaximum(MAX_WHITELISTED_ADDRESSES)
-        );
-        _whitelistedAddresses.add(addr);
-        emit WhitelistAddressAdded(addr);
+        require(!$.allowlist[addr], AddressAlreadyInAllowlist(addr));
+        $.allowlist[addr] = true;
+        emit AllowlistAddressAdded(addr);
     }
 
-    /// @notice Removes an address from the whitelist
+    /// @notice Removes an address from the allowlist
     ///
-    /// @param addr Address to remove from whitelist
-    function removeFromWhitelist(address addr) external onlyRole(CONFIGURE_ROLE) {
+    /// @param addr Address to remove from allowlist
+    function removeFromAllowlist(address addr) external onlyRole(CONFIGURE_ROLE) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+
         require(addr != address(0), CannotBeZeroAddress());
-        require(_whitelistedAddresses.contains(addr), AddressNotInWhitelist(addr));
-        _whitelistedAddresses.remove(addr);
-        emit WhitelistAddressRemoved(addr);
+        require($.allowlist[addr], AddressNotInAllowlist(addr));
+        delete $.allowlist[addr];
+        emit AllowlistAddressRemoved(addr);
     }
 
-    /// @notice Enables whitelist enforcement (only whitelisted addresses can initiate swaps)
-    function enableWhitelist() external onlyRole(CONFIGURE_ROLE) {
-        whitelistEnabled = true;
-        emit WhitelistEnabled();
-    }
+    /// @notice Updates a feature flag's enabled status
+    ///
+    /// @dev SWAP and WITHDRAW require PAUSE_ROLE, ALLOWLIST requires CONFIGURE_ROLE
+    ///
+    /// @param feature The feature flag to update
+    /// @param isEnabled True to enable the feature, false to disable
+    function setFeatureFlag(FeatureFlag feature, bool isEnabled) external {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
 
-    /// @notice Disables whitelist enforcement (any address can initiate swaps)
-    function disableWhitelist() external onlyRole(CONFIGURE_ROLE) {
-        whitelistEnabled = false;
-        emit WhitelistDisabled();
+        if (feature == FeatureFlag.ALLOWLIST) {
+            _checkRole(CONFIGURE_ROLE);
+        } else {
+            _checkRole(PAUSE_ROLE);
+        }
+        $.featureFlags[feature] = isEnabled;
+        emit FeatureFlagUpdated(feature, isEnabled);
     }
 
     // View functions
-    /// @notice Returns an array of all supported token addresses
+    /// @notice Returns the current contract version
+    ///
+    /// @return Version number of the contract implementation
+    function contractVersion() external view returns (uint8) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.contractVersion;
+    }
+
+    /// @notice Returns the current fee recipient address
+    ///
+    /// @return Address that receives fees collected from swaps
+    function feeRecipient() external view returns (address) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.feeRecipient;
+    }
+
+    /// @notice Returns the current fee in basis points
+    ///
+    /// @return Current fee in basis points (e.g., 100 = 1%)
+    function feeBasisPoints() external view returns (uint16) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.feeBasisPoints;
+    }
+
+    /// @notice Returns whether a feature flag is enabled
+    ///
+    /// @param feature The feature flag to check
+    ///
+    /// @return True if the feature is enabled, false otherwise
+    function isFeatureEnabled(FeatureFlag feature) external view returns (bool) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.featureFlags[feature];
+    }
+
+    /// @notice Returns an array of all listed token addresses
     ///
     /// @return Array of token addresses
-    function getSupportedTokens() external view returns (address[] memory) {
-        return _supportedTokens.values();
+    function getListedTokens() external view returns (address[] memory) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.listedTokens.values();
     }
 
-    /// @notice Returns the number of supported tokens
+    /// @notice Returns the number of listed tokens
     ///
-    /// @return Count of supported tokens
-    function getSupportedTokensCount() external view returns (uint256) {
-        return _supportedTokens.length();
+    /// @return Count of listed tokens
+    function getListedTokensCount() external view returns (uint256) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.listedTokens.length();
     }
 
-    /// @notice Returns vault information for a specific token
+    /// @notice Returns the reserved amount for a token
     ///
     /// @param token Address of the token
     ///
-    /// @return TokenVault struct containing reserved amount, enabled status, and decimals
-    function getVault(address token) external view returns (TokenVault memory) {
-        return _vaults[token];
+    /// @return Reserved amount (not available for withdrawal by swaps)
+    function getReservedAmount(address token) external view returns (uint256) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.reservedAmounts[token];
     }
 
-    /// @notice Returns an array of all whitelisted addresses
+    /// @notice Returns whether a token is enabled for swapping
     ///
-    /// @return Array of whitelisted addresses
-    function getWhitelistedAddresses() external view returns (address[] memory) {
-        return _whitelistedAddresses.values();
-    }
-
-    /// @notice Returns the number of whitelisted addresses
+    /// @param token Address of the token
     ///
-    /// @return Count of whitelisted addresses
-    function getWhitelistedAddressesCount() external view returns (uint256) {
-        return _whitelistedAddresses.length();
+    /// @return True if the token is enabled, false otherwise
+    function isTokenEnabled(address token) external view returns (bool) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.tokenEnabled[token];
     }
 
-    // Internal helper functions
-    function normalizeDecimals(uint256 amount, uint8 decimalsFrom, uint8 decimalsTo) private pure returns (uint256) {
-        if (decimalsFrom == decimalsTo) {
-            return amount;
+    /// @notice Returns whether an address is in the allowlist
+    ///
+    /// @param addr Address to check
+    ///
+    /// @return True if the address is allowed, false otherwise
+    function isAllowlisted(address addr) external view returns (bool) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.allowlist[addr];
+    }
+
+    // Internal functions
+    /// @dev Function that authorizes an upgrade to a new implementation
+    /// @dev Only the single address holding DEFAULT_ADMIN_ROLE can authorize upgrades
+    ///
+    /// @param newImplementation Address of the new implementation contract
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    // Private functions
+    /// @dev Returns the storage pointer for the StableSwapper storage struct using ERC-7201 namespacing
+    ///
+    /// @return $ Storage pointer to the StableSwapperStorage struct
+    function _stableSwapperStorage() private pure returns (StableSwapperStorage storage $) {
+        assembly {
+            $.slot := STABLE_SWAPPER_STORAGE_LOCATION
         }
+    }
+
+    /// @dev Normalizes token amounts between different decimal places
+    ///
+    /// @param amount Amount to normalize
+    /// @param decimalsFrom Decimals of the source token
+    /// @param decimalsTo Decimals of the destination token
+    ///
+    /// @return Normalized amount in destination token decimals
+    function _normalizeDecimals(uint256 amount, uint8 decimalsFrom, uint8 decimalsTo) private pure returns (uint256) {
+        if (decimalsFrom == decimalsTo) return amount;
 
         if (decimalsFrom < decimalsTo) {
-            // Scaling up: multiply by 10^decimalsDelta
-            uint8 decimalsDelta = decimalsTo - decimalsFrom;
-
-            uint256 multiplier = 10 ** uint256(decimalsDelta);
-            uint256 result = amount * multiplier;
-
-            return result;
-        } else {
-            // Scaling down: divide by 10^decimalsDelta (no overflow possible)
-            // Division automatically rounds down (floor)
-            uint8 decimalsDelta = decimalsFrom - decimalsTo;
-            uint256 divisor = 10 ** uint256(decimalsDelta);
-            uint256 result = amount / divisor;
-
-            return result;
+            return amount * 10 ** (decimalsTo - decimalsFrom);
         }
+        return amount / 10 ** (decimalsFrom - decimalsTo);
     }
-
-    /// @dev This empty reserved space is put in place to allow future versions to add new
-    /// variables without shifting down storage in the inheritance chain.
-    /// See https://docs.openzeppelin.com/contracts/5.x/upgradeable#storage_gaps
-    uint256[50] private __gap;
 }

@@ -15,11 +15,11 @@ contract DeployStableSwapperTest is Test {
     DeployStableSwapper deployer;
 
     address defaultAdmin = makeAddr("defaultAdmin");
-    address treasuryAuthority = makeAddr("treasuryAuthority");
+    address withdrawalAuthority = makeAddr("withdrawalAuthority");
     address configureAuthority = makeAddr("configureAuthority");
     address pauseAuthority = makeAddr("pauseAuthority");
     address feeRecipient = makeAddr("feeRecipient");
-    uint16 feeRate = 100; // 1%
+    uint16 feeBasisPoints = 100; // 1%
 
     function setUp() public {
         deployer = new DeployStableSwapper();
@@ -30,7 +30,7 @@ contract DeployStableSwapperTest is Test {
         vm.recordLogs();
 
         (address implementation, address proxy) = deployer.deploy(
-            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeRate, 0
+            defaultAdmin, withdrawalAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
         );
 
         // Get recorded logs
@@ -49,18 +49,20 @@ contract DeployStableSwapperTest is Test {
 
         assertEq(stableSwapper.contractVersion(), 1, "Contract version should be 1");
         assertEq(stableSwapper.feeRecipient(), feeRecipient, "Fee recipient should match");
-        assertEq(stableSwapper.feeRate(), feeRate, "Fee rate should match");
-        assertTrue(stableSwapper.swapsEnabled(), "Swaps should be enabled");
-        assertTrue(stableSwapper.liquidityEnabled(), "Liquidity should be enabled");
-        assertFalse(stableSwapper.whitelistEnabled(), "Whitelist should not be enabled");
-        assertEq(stableSwapper.getSupportedTokensCount(), 0, "Should have no supported tokens");
+        assertEq(stableSwapper.feeBasisPoints(), feeBasisPoints, "Fee rate should match");
+        assertTrue(stableSwapper.isFeatureEnabled(StableSwapper.FeatureFlag.SWAP), "Swaps should be enabled");
+        assertTrue(stableSwapper.isFeatureEnabled(StableSwapper.FeatureFlag.WITHDRAW), "Liquidity should be enabled");
+        assertFalse(
+            stableSwapper.isFeatureEnabled(StableSwapper.FeatureFlag.ALLOWLIST), "Allowlist should not be enabled"
+        );
+        assertEq(stableSwapper.getListedTokensCount(), 0, "Should have no supported tokens");
 
         // Verify authorities
         assertTrue(
             stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Default admin role should be set"
         );
         assertTrue(
-            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), treasuryAuthority), "Treasury role should be set"
+            stableSwapper.hasRole(stableSwapper.WITHDRAWAL_ROLE(), withdrawalAuthority), "Treasury role should be set"
         );
         assertTrue(
             stableSwapper.hasRole(stableSwapper.CONFIGURE_ROLE(), configureAuthority), "Configure role should be set"
@@ -69,35 +71,41 @@ contract DeployStableSwapperTest is Test {
 
         // Test configure role can update fee rate
         vm.prank(configureAuthority);
-        stableSwapper.updateFeeRate(200);
-        assertEq(stableSwapper.feeRate(), 200, "Configure role should be able to update fee rate");
+        stableSwapper.updateFeeBasisPoints(200);
+        assertEq(stableSwapper.feeBasisPoints(), 200, "Configure role should be able to update fee rate");
 
         // Test pause role can disable swaps
         vm.prank(pauseAuthority);
-        stableSwapper.updateSwapStatus(false);
-        assertFalse(stableSwapper.swapsEnabled(), "Pause role should be able to disable swaps");
+        stableSwapper.setFeatureFlag(StableSwapper.FeatureFlag.SWAP, false);
+        assertFalse(
+            stableSwapper.isFeatureEnabled(StableSwapper.FeatureFlag.SWAP), "Pause role should be able to disable swaps"
+        );
 
         // Test pause role can enable swaps
         vm.prank(pauseAuthority);
-        stableSwapper.updateSwapStatus(true);
-        assertTrue(stableSwapper.swapsEnabled(), "Pause role should be able to enable swaps");
+        stableSwapper.setFeatureFlag(StableSwapper.FeatureFlag.SWAP, true);
+        assertTrue(
+            stableSwapper.isFeatureEnabled(StableSwapper.FeatureFlag.SWAP), "Pause role should be able to enable swaps"
+        );
     }
 
     function test_deploy_implementation_cannot_be_initialized() public {
         (address implementation,) = deployer.deploy(
-            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeRate, 0
+            defaultAdmin, withdrawalAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
         );
 
         // Try to initialize the implementation directly (should fail)
         StableSwapper impl = StableSwapper(implementation);
 
         vm.expectRevert();
-        impl.initialize(defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeRate, 0);
+        impl.initialize(
+            defaultAdmin, withdrawalAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
+        );
     }
 
     function test_deploy_proxy_cannot_be_initialized_twice() public {
         (, address proxy) = deployer.deploy(
-            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeRate, 0
+            defaultAdmin, withdrawalAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
         );
 
         StableSwapper stableSwapper = StableSwapper(proxy);
@@ -105,7 +113,7 @@ contract DeployStableSwapperTest is Test {
         // Try to initialize again (should fail)
         vm.expectRevert();
         stableSwapper.initialize(
-            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeRate, 0
+            defaultAdmin, withdrawalAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
         );
     }
 }
