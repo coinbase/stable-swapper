@@ -59,7 +59,7 @@ contract ListTokenTest is StableSwapperBase {
         assertEq(listedTokens[0], address(token), "Token should be in listed tokens array");
 
         // Verify token information is stored correctly
-        assertFalse(swapper.isTokenEnabled(address(token)), "Token should be disabled by default");
+        assertFalse(swapper.isTokenSwappable(address(token)), "Token should be disabled by default");
         assertEq(token.decimals(), decimals, "Decimals should match");
         assertEq(swapper.getReservedAmount(address(token)), 0, "Reserved amount should be 0");
     }

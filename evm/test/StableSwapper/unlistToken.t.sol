@@ -53,7 +53,7 @@ contract UnlistTokenTest is StableSwapperBase {
 
         // Try to unlist while enabled
         vm.prank(configureAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenMustBeDisabled.selector, address(testToken)));
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenMustNotBeSwappable.selector, address(testToken)));
         swapper.unlistToken(address(testToken));
     }
 

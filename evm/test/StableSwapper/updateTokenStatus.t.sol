@@ -49,7 +49,7 @@ contract UpdateTokenStatusTest is StableSwapperBase {
         vm.prank(pauseAuthority);
         swapper.updateTokenStatus(address(usdc), disabledStatus);
 
-        assertFalse(swapper.isTokenEnabled(address(usdc)));
+        assertFalse(swapper.isTokenSwappable(address(usdc)));
     }
 
     function test_updateTokenStatus_reEnablesToken() public {
@@ -64,7 +64,7 @@ contract UpdateTokenStatusTest is StableSwapperBase {
         swapper.updateTokenStatus(address(usdc), enabledStatus);
         vm.stopPrank();
 
-        assertTrue(swapper.isTokenEnabled(address(usdc)));
+        assertTrue(swapper.isTokenSwappable(address(usdc)));
 
         // Swap should succeed
         uint64 swapAmount = 10 * 10 ** 6;

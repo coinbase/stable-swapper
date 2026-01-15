@@ -62,7 +62,7 @@ contract DeployStableSwapperTest is Test {
             stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Default admin role should be set"
         );
         assertTrue(
-            stableSwapper.hasRole(stableSwapper.WITHDRAWAL_ROLE(), withdrawalAuthority), "Treasury role should be set"
+            stableSwapper.hasRole(stableSwapper.WITHDRAW_ROLE(), withdrawalAuthority), "Treasury role should be set"
         );
         assertTrue(
             stableSwapper.hasRole(stableSwapper.CONFIGURE_ROLE(), configureAuthority), "Configure role should be set"

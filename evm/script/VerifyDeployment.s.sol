@@ -69,7 +69,7 @@ contract VerifyDeployment is Script {
         // Authorities
         console.log("\n--- Authorities ---");
         bytes32 defaultAdminRole = stableSwapper.DEFAULT_ADMIN_ROLE();
-        bytes32 withdrawalAuthRole = stableSwapper.WITHDRAWAL_ROLE();
+        bytes32 withdrawalAuthRole = stableSwapper.WITHDRAW_ROLE();
         bytes32 configureAuthRole = stableSwapper.CONFIGURE_ROLE();
         bytes32 pauseAuthRole = stableSwapper.PAUSE_ROLE();
 
@@ -104,7 +104,7 @@ contract VerifyDeployment is Script {
                 address token = tokens[i];
 
                 console.log("\n  Token [", i, "]:", token);
-                console.log("    Enabled:", stableSwapper.isTokenEnabled(token) ? "YES" : "NO");
+                console.log("    Swappable:", stableSwapper.isTokenSwappable(token) ? "YES" : "NO");
 
                 // Get decimals directly from token
                 (bool decSuccess, bytes memory decData) = token.staticcall(abi.encodeWithSignature("decimals()"));

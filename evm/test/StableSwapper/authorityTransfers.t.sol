@@ -20,7 +20,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
         // Cache role identifiers
         defaultAdminRole = swapper.DEFAULT_ADMIN_ROLE();
-        withdrawalAuthorityRole = swapper.WITHDRAWAL_ROLE();
+        withdrawalAuthorityRole = swapper.WITHDRAW_ROLE();
         configureAuthorityRole = swapper.CONFIGURE_ROLE();
         pauseAuthorityRole = swapper.PAUSE_ROLE();
     }
