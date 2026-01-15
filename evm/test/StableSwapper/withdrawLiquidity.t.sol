@@ -22,14 +22,14 @@ contract WithdrawLiquidityTest is StableSwapperBase {
 
         vm.prank(unauthorized);
         vm.expectRevert();
-        swapper.withdrawLiquidity(address(usdc), unauthorized, liquidityAmount);
+        swapper.withdrawLiquidity(address(usdc), liquidityAmount, unauthorized);
     }
 
     function test_withdrawLiquidity_reverts_whenTokenIsZeroAddress() public {
         uint256 liquidityAmount = 100 * 10 ** 6;
         vm.prank(withdrawalAuthority);
         vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
-        swapper.withdrawLiquidity(address(0), withdrawalAuthority, liquidityAmount);
+        swapper.withdrawLiquidity(address(0), liquidityAmount, withdrawalAuthority);
     }
 
     function test_withdrawLiquidity_reverts_whenRecipientIsZeroAddress() public {
@@ -39,7 +39,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
 
         vm.prank(withdrawalAuthority);
         vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
-        swapper.withdrawLiquidity(address(usdc), address(0), liquidityAmount);
+        swapper.withdrawLiquidity(address(usdc), liquidityAmount, address(0));
     }
 
     function test_withdrawLiquidity_reverts_whenLiquidityPaused() public {
@@ -58,7 +58,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
 
         vm.prank(withdrawalAuthority);
         vm.expectRevert(StableSwapper.WithdrawalCannotBePaused.selector);
-        swapper.withdrawLiquidity(address(usdc), withdrawalAuthority, withdrawAmount);
+        swapper.withdrawLiquidity(address(usdc), withdrawAmount, withdrawalAuthority);
 
         // Enable liquidity
         vm.prank(pauseAuthority);
@@ -69,7 +69,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
         uint256 liquidityAmount = 100 * 10 ** 6;
         vm.prank(withdrawalAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenNotListed.selector, address(usdc)));
-        swapper.withdrawLiquidity(address(usdc), withdrawalAuthority, liquidityAmount);
+        swapper.withdrawLiquidity(address(usdc), liquidityAmount, withdrawalAuthority);
     }
 
     function test_withdrawLiquidity_reverts_whenWithdrawingZeroAmount() public {
@@ -78,7 +78,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
 
         vm.prank(withdrawalAuthority);
         vm.expectRevert(StableSwapper.CannotBeZeroAmount.selector);
-        swapper.withdrawLiquidity(address(usdc), withdrawalAuthority, 0);
+        swapper.withdrawLiquidity(address(usdc), 0, withdrawalAuthority);
     }
 
     function testFuzz_withdrawLiquidity_reverts_whenWithdrawingMoreThanBalance(uint256 withdrawAmountSeed) public {
@@ -93,7 +93,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
 
         vm.prank(withdrawalAuthority);
         vm.expectRevert(); // ERC20 will revert with insufficient balance
-        swapper.withdrawLiquidity(address(usdc), withdrawalAuthority, withdrawAmount);
+        swapper.withdrawLiquidity(address(usdc), withdrawAmount, withdrawalAuthority);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -113,7 +113,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
         uint256 initialBalance = usdc.balanceOf(withdrawalAuthority);
 
         vm.prank(withdrawalAuthority);
-        swapper.withdrawLiquidity(address(usdc), withdrawalAuthority, withdrawAmount);
+        swapper.withdrawLiquidity(address(usdc), withdrawAmount, withdrawalAuthority);
 
         assertEq(usdc.balanceOf(address(swapper)), liquidityAmount - withdrawAmount);
         assertEq(usdc.balanceOf(withdrawalAuthority), initialBalance + withdrawAmount);
@@ -136,7 +136,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
         swapper.updateReservedAmount(address(usdc), reservedAmount);
 
         vm.prank(withdrawalAuthority);
-        swapper.withdrawLiquidity(address(usdc), withdrawalAuthority, withdrawAmount);
+        swapper.withdrawLiquidity(address(usdc), withdrawAmount, withdrawalAuthority);
 
         assertEq(usdc.balanceOf(address(swapper)), liquidityAmount - withdrawAmount);
         assertEq(usdc.balanceOf(withdrawalAuthority), initialBalance + withdrawAmount);
@@ -157,7 +157,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
         uint256 initialWithdrawalAuthorityBalance = usdc.balanceOf(withdrawalAuthority);
 
         vm.prank(withdrawalAuthority);
-        swapper.withdrawLiquidity(address(usdc), recipient, withdrawAmount);
+        swapper.withdrawLiquidity(address(usdc), withdrawAmount, recipient);
 
         assertEq(usdc.balanceOf(address(swapper)), liquidityAmount - withdrawAmount);
         assertEq(usdc.balanceOf(recipient), initialRecipientBalance + withdrawAmount);

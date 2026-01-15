@@ -231,7 +231,7 @@ contract SwapTest is StableSwapperBase {
 
         // Withdraw liquidity below the reserved amount
         // This leaves balance < reservedAmount, triggering the check at line 364
-        swapper.withdrawLiquidity(address(appStable), withdrawalAuthority, withdrawAmount);
+        swapper.withdrawLiquidity(address(appStable), withdrawAmount, withdrawalAuthority);
         vm.stopPrank();
 
         // Verify the balance is now below reserved amount

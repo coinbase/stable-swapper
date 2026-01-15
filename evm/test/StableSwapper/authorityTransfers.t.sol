@@ -243,7 +243,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
         // New withdrawal role holder should be able to withdraw
         vm.prank(newWithdrawal);
-        swapper.withdrawLiquidity(address(usdc), newWithdrawal, 100 * 10 ** 6);
+        swapper.withdrawLiquidity(address(usdc), 100 * 10 ** 6, newWithdrawal);
 
         assertEq(usdc.balanceOf(newWithdrawal), 100 * 10 ** 6);
     }
@@ -291,7 +291,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         // Original withdrawal role holder should not be able to withdraw
         vm.prank(withdrawalAuthority);
         vm.expectRevert();
-        swapper.withdrawLiquidity(address(usdc), withdrawalAuthority, 100 * 10 ** 6);
+        swapper.withdrawLiquidity(address(usdc), 100 * 10 ** 6, withdrawalAuthority);
     }
 
     function test_revokedConfigureAuthority_cannotAddTokens() public {

@@ -15,7 +15,7 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeab
 /// @title StableSwapper
 /// @notice A 1:1 stablecoin swap contract with decimal normalization and role-based access control
 ///
-/// @dev This contract enables swapping between stablecoins with different decimal places (6-18 decimals).
+/// @dev This contract enables swapping between stablecoins with different decimal places.
 /// @dev It implements UUPS upgradeability pattern and uses role-based access control for administration.
 /// @dev The contract supports three main feature flags: SWAP, WITHDRAW, and ALLOWLIST.
 ///
@@ -77,7 +77,7 @@ contract StableSwapper is
         /// @dev Current fee in basis points (e.g., 100 = 1%)
         uint16 feeBasisPoints;
         /// @dev Mapping of addresses allowed to initiate swaps when allowlist feature is enabled
-        mapping(address account => bool allowed) allowlist;
+        mapping(address addr => bool allowed) allowlist;
         /// @dev Mapping of feature flags to their enabled status
         mapping(FeatureFlag => bool) featureFlags;
     }
@@ -91,14 +91,14 @@ contract StableSwapper is
     /// @dev DEFAULT_ADMIN_ROLE can grant/revoke other roles after initialization
     ///
     /// @param defaultAdmin Address granted the DEFAULT_ADMIN_ROLE (only role that can manage other roles)
-    /// @param withdrawalAuthority Initial address granted the WITHDRAW_ROLE
+    /// @param withdrawAuthority Initial address granted the WITHDRAW_ROLE
     /// @param configureAuthority Initial address granted the CONFIGURE_ROLE
     /// @param pauseAuthority Initial address granted the PAUSE_ROLE
     /// @param initialFeeRecipient Address that will receive swap fees
     /// @param initialFeeBasisPoints Initial fee in basis points (e.g., 100 = 1%)
     event Initialized(
         address defaultAdmin,
-        address withdrawalAuthority,
+        address withdrawAuthority,
         address configureAuthority,
         address pauseAuthority,
         address initialFeeRecipient,
@@ -122,7 +122,7 @@ contract StableSwapper is
     /// @param fee Fee amount collected in input token
     event Swap(address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut, uint256 fee);
 
-    /// @notice Emitted when liquidity is withdrawn from a token vault
+    /// @notice Emitted when liquidity is withdrawn from the contract
     ///
     /// @param token Address of the token that was withdrawn
     /// @param recipient Address that received the withdrawn tokens
@@ -223,7 +223,7 @@ contract StableSwapper is
     /// @dev Other roles (WITHDRAW_ROLE, CONFIGURE_ROLE, PAUSE_ROLE) can have multiple holders
     ///
     /// @param defaultAdmin Address granted DEFAULT_ADMIN_ROLE (can authorize UUPS upgrades and grant/revoke all other roles)
-    /// @param withdrawalAuthority Initial address granted WITHDRAW_ROLE (can withdraw liquidity for treasury and update reserved amounts)
+    /// @param withdrawAuthority Initial address granted WITHDRAW_ROLE (can withdraw liquidity for treasury and update reserved amounts)
     /// @param configureAuthority Initial address granted CONFIGURE_ROLE (can add/remove tokens, update fees, manage allowlist)
     /// @param pauseAuthority Initial address granted PAUSE_ROLE (can pause/unpause operations and enable/disable tokens)
     /// @param initialFeeRecipient Address that will receive swap fees
@@ -231,7 +231,7 @@ contract StableSwapper is
     /// @param initialAdminTransferDelay Delay in seconds for 2-step DEFAULT_ADMIN_ROLE transfers (security feature)
     function initialize(
         address defaultAdmin,
-        address withdrawalAuthority,
+        address withdrawAuthority,
         address configureAuthority,
         address pauseAuthority,
         address initialFeeRecipient,
@@ -240,7 +240,7 @@ contract StableSwapper is
     ) public initializer {
         __AccessControlDefaultAdminRules_init(initialAdminTransferDelay, defaultAdmin);
 
-        _grantRole(WITHDRAW_ROLE, withdrawalAuthority);
+        _grantRole(WITHDRAW_ROLE, withdrawAuthority);
         _grantRole(CONFIGURE_ROLE, configureAuthority);
         _grantRole(PAUSE_ROLE, pauseAuthority);
 
@@ -254,7 +254,7 @@ contract StableSwapper is
 
         emit Initialized(
             defaultAdmin,
-            withdrawalAuthority,
+            withdrawAuthority,
             configureAuthority,
             pauseAuthority,
             initialFeeRecipient,
@@ -327,7 +327,7 @@ contract StableSwapper is
         uint256 availableLiquidity = tokenOutBalance - $.reservedAmounts[tokenOut];
         require(amountOut <= availableLiquidity, AmountOutExceedsAvailableLiquidity(amountOut, availableLiquidity));
 
-        // Step 1: Transfer the full amount in to the vaultIn from sender
+        // Step 1: Transfer the full amount in to the contract from sender
         // This gets added to the pool's liquidity for the input token
         SafeERC20.safeTransferFrom(IERC20(tokenIn), msg.sender, address(this), amountIn);
 
@@ -342,10 +342,9 @@ contract StableSwapper is
         emit Swap(tokenIn, tokenOut, amountIn, amountOut, fee);
     }
 
-    // External functions
     /// @notice Lists a token in the contract for swapping.  Listed tokens can be paused via the `updateTokenStatus` function.
     ///
-    /// @param token Address of the ERC20 token to list (must have 6-18 decimals)
+    /// @param token Address of the ERC20 token to list.
     function listToken(address token) external onlyRole(CONFIGURE_ROLE) nonReentrant {
         StableSwapperStorage storage $ = _stableSwapperStorage();
 
@@ -358,7 +357,7 @@ contract StableSwapper is
         emit TokenListed(token);
     }
 
-    /// @notice Unlists a token from the list of supported tokens. Tokens must be paused and have zero balance.
+    /// @notice Unlists a token from the list of supported tokens. Tokens must not be swappable.
     ///
     /// @param token Address of the token to unlist
     function unlistToken(address token) external onlyRole(CONFIGURE_ROLE) nonReentrant {
@@ -396,9 +395,9 @@ contract StableSwapper is
     /// @dev Withdrawal role (treasury) can withdraw regardless of reserved amount (reserved amount only restricts swaps)
     ///
     /// @param token Address of the token to withdraw
-    /// @param recipient Address to receive the withdrawn tokens
     /// @param amount Amount of tokens to withdraw
-    function withdrawLiquidity(address token, address recipient, uint256 amount)
+    /// @param recipient Address to receive the withdrawn tokens
+    function withdrawLiquidity(address token, uint256 amount, address recipient)
         external
         onlyRole(WITHDRAW_ROLE)
         nonReentrant
@@ -587,14 +586,12 @@ contract StableSwapper is
         return $.allowlist[addr];
     }
 
-    // Internal functions
     /// @dev Function that authorizes an upgrade to a new implementation
     /// @dev Only the single address holding DEFAULT_ADMIN_ROLE can authorize upgrades
     ///
     /// @param newImplementation Address of the new implementation contract
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 
-    // Private functions
     /// @dev Returns the storage pointer for the StableSwapper storage struct using ERC-7201 namespacing
     ///
     /// @return $ Storage pointer to the StableSwapperStorage struct
