@@ -22,8 +22,8 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeab
 /// @dev Roles:
 /// @dev - DEFAULT_ADMIN_ROLE: Can authorize upgrades and manage all other roles (single holder, 2-step transfer)
 /// @dev - TREASURY_ROLE: Can withdraw liquidity (treasury) and update reserved amounts
-/// @dev - CONFIGURE_ROLE: Can add/remove tokens, update fees, and manage allowlist
-/// @dev - PAUSE_ROLE: Can pause/unpause swap and withdraw operations, and enable/disable individual tokens
+/// @dev - CONFIGURE_ROLE: Can list/unlist tokens, update fees, and manage allowlist
+/// @dev - PAUSE_ROLE: Can pause/unpause swap and withdraw operations, and pause/unpause individual tokens
 ///
 /// @author Coinbase
 contract StableSwapper is
