@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {StableSwapper} from "../../src/StableSwapper.sol";
-import {StableSwapperBase} from "./StableSwapperBase.sol";
+import {StableSwapper} from "../../../src/StableSwapper.sol";
+
+import {StableSwapperBase} from "../../lib/StableSwapperBase.sol";
 
 /**
  * @title AllowlistTest
@@ -18,21 +19,21 @@ contract AllowlistTest is StableSwapperBase {
 
         vm.prank(unauthorized);
         vm.expectRevert();
-        swapper.addToAllowlist(unauthorized);
+        swapper.updateAllowlist(unauthorized, true);
     }
 
     function test_addToAllowlist_reverts_whenAddressIsZeroAddress() public {
         vm.prank(configureAuthority);
         vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
-        swapper.addToAllowlist(address(0));
+        swapper.updateAllowlist(address(0), true);
     }
 
     function test_addToAllowlist_reverts_whenAddingDuplicateAddress() public {
         vm.startPrank(configureAuthority);
-        swapper.addToAllowlist(wallet1);
+        swapper.updateAllowlist(wallet1, true);
 
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.AddressAlreadyInAllowlist.selector, wallet1));
-        swapper.addToAllowlist(wallet1);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.InvalidAllowlistState.selector, wallet1, true));
+        swapper.updateAllowlist(wallet1, true);
         vm.stopPrank();
     }
 
@@ -41,13 +42,13 @@ contract AllowlistTest is StableSwapperBase {
 
         vm.prank(unauthorized);
         vm.expectRevert();
-        swapper.removeFromAllowlist(unauthorized);
+        swapper.updateAllowlist(unauthorized, false);
     }
 
     function test_removeFromAllowlist_reverts_whenAddressIsZeroAddress() public {
         vm.prank(configureAuthority);
         vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
-        swapper.removeFromAllowlist(address(0));
+        swapper.updateAllowlist(address(0), false);
     }
 
     function test_enableAllowlist_reverts_whenUnauthorizedUser() public {
@@ -70,8 +71,8 @@ contract AllowlistTest is StableSwapperBase {
         address missingAddress = makeAddr("missingAddress");
 
         vm.prank(configureAuthority);
-        vm.expectRevert(abi.encodeWithSelector(StableSwapper.AddressNotInAllowlist.selector, missingAddress));
-        swapper.removeFromAllowlist(missingAddress);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.InvalidAllowlistState.selector, missingAddress, false));
+        swapper.updateAllowlist(missingAddress, false);
     }
 
     function test_swap_reverts_whenNonAllowlistedUser() public {
@@ -79,7 +80,7 @@ contract AllowlistTest is StableSwapperBase {
 
         // Add wallet1 to allowlist and enable allowlist
         vm.startPrank(configureAuthority);
-        swapper.addToAllowlist(wallet1);
+        swapper.updateAllowlist(wallet1, true);
         swapper.setFeatureFlag(StableSwapper.FeatureFlag.ALLOWLIST, true);
         vm.stopPrank();
         vm.stopPrank();
@@ -101,9 +102,9 @@ contract AllowlistTest is StableSwapperBase {
 
         // Add wallet1 to allowlist, enable allowlist, then remove wallet1
         vm.startPrank(configureAuthority);
-        swapper.addToAllowlist(wallet1);
+        swapper.updateAllowlist(wallet1, true);
         swapper.setFeatureFlag(StableSwapper.FeatureFlag.ALLOWLIST, true);
-        swapper.removeFromAllowlist(wallet1);
+        swapper.updateAllowlist(wallet1, false);
         vm.stopPrank();
 
         // Mint tokens to wallet1
@@ -124,15 +125,15 @@ contract AllowlistTest is StableSwapperBase {
 
     function test_addToAllowlist_addsUserToAllowlist() public {
         vm.prank(configureAuthority);
-        swapper.addToAllowlist(wallet1);
+        swapper.updateAllowlist(wallet1, true);
 
         assertTrue(swapper.isAllowlisted(wallet1));
     }
 
     function test_removeFromAllowlist_removesUserFromAllowlist() public {
         vm.startPrank(configureAuthority);
-        swapper.addToAllowlist(wallet1);
-        swapper.removeFromAllowlist(wallet1);
+        swapper.updateAllowlist(wallet1, true);
+        swapper.updateAllowlist(wallet1, false);
         vm.stopPrank();
 
         assertFalse(swapper.isAllowlisted(wallet1));
@@ -175,7 +176,7 @@ contract AllowlistTest is StableSwapperBase {
 
         // Add wallet1 to allowlist and enable allowlist
         vm.startPrank(configureAuthority);
-        swapper.addToAllowlist(wallet1);
+        swapper.updateAllowlist(wallet1, true);
         swapper.setFeatureFlag(StableSwapper.FeatureFlag.ALLOWLIST, true);
         vm.stopPrank();
         vm.stopPrank();

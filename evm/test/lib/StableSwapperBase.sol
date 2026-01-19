@@ -93,8 +93,8 @@ contract StableSwapperBase is Test {
     function setupBasicSwapEnvironment() internal {
         // Configure authority lists tokens
         vm.startPrank(configureAuthority);
-        swapper.listToken(address(usdc));
-        swapper.listToken(address(appStable));
+        swapper.updateTokenListing(address(usdc), true);
+        swapper.updateTokenListing(address(appStable), true);
         vm.stopPrank();
 
         // Pause authority enables tokens

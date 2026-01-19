@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
+import {
+    AccessControlDefaultAdminRulesUpgradeable
+} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import {
-    AccessControlDefaultAdminRulesUpgradeable
-} from "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
@@ -21,7 +21,7 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeab
 ///
 /// @dev Roles:
 /// @dev - DEFAULT_ADMIN_ROLE: Can authorize upgrades and manage all other roles (single holder, 2-step transfer)
-/// @dev - WITHDRAW_ROLE: Can withdraw liquidity (treasury) and update reserved amounts
+/// @dev - TREASURY_ROLE: Can withdraw liquidity (treasury) and update reserved amounts
 /// @dev - CONFIGURE_ROLE: Can add/remove tokens, update fees, and manage allowlist
 /// @dev - PAUSE_ROLE: Can pause/unpause swap and withdraw operations, and enable/disable individual tokens
 ///
@@ -44,11 +44,11 @@ contract StableSwapper is
     /// @notice Fee denominator for basis points calculation (100% = 10000 basis points)
     uint16 public constant FEE_DENOMINATOR = 10000;
 
-    /// @notice Role identifier for withdrawal role
+    /// @notice Role identifier for treasury role
     ///
     /// @dev Can withdraw liquidity (treasury operations) and update reserved amounts
     /// @dev Multiple addresses can hold this role simultaneously
-    bytes32 public constant WITHDRAW_ROLE = keccak256("WITHDRAW_ROLE");
+    bytes32 public constant TREASURY_ROLE = keccak256("TREASURY_ROLE");
 
     /// @notice Role identifier for pause role
     ///
@@ -62,10 +62,10 @@ contract StableSwapper is
     /// @dev Multiple addresses can hold this role simultaneously
     bytes32 public constant CONFIGURE_ROLE = keccak256("CONFIGURE_ROLE");
 
+    /// @notice Storage struct for StableSwapper using ERC-7201 namespaced storage pattern
+    ///
     /// @custom:storage-location erc7201:coinbase.storage.StableSwapper
     struct StableSwapperStorage {
-        /// @dev Version number of the contract implementation
-        uint8 contractVersion;
         /// @dev Set of addresses for tokens listed in this contract
         EnumerableSet.AddressSet listedTokens;
         /// @dev Mapping from token address to reserved amount (not available for withdrawal by swaps)
@@ -91,7 +91,7 @@ contract StableSwapper is
     /// @dev DEFAULT_ADMIN_ROLE can grant/revoke other roles after initialization
     ///
     /// @param defaultAdmin Address granted the DEFAULT_ADMIN_ROLE (only role that can manage other roles)
-    /// @param withdrawAuthority Initial address granted the WITHDRAW_ROLE
+    /// @param withdrawAuthority Initial address granted the TREASURY_ROLE
     /// @param configureAuthority Initial address granted the CONFIGURE_ROLE
     /// @param pauseAuthority Initial address granted the PAUSE_ROLE
     /// @param initialFeeRecipient Address that will receive swap fees
@@ -105,13 +105,11 @@ contract StableSwapper is
         uint16 initialFeeBasisPoints
     );
 
-    /// @notice Emitted when a new token is listed in the contract
-    /// @param token Address of the token that was listed
-    event TokenListed(address indexed token);
-
-    /// @notice Emitted when a token is unlisted from the contract
-    /// @param token Address of the token that was unlisted
-    event TokenUnlisted(address indexed token);
+    /// @notice Emitted when a token's listing status is updated
+    ///
+    /// @param token Address of the token
+    /// @param isListed True if the token was listed, false if unlisted
+    event TokenListingUpdated(address indexed token, bool isListed);
 
     /// @notice Emitted when a swap is executed
     ///
@@ -130,10 +128,12 @@ contract StableSwapper is
     event LiquidityWithdrawn(address indexed token, address indexed recipient, uint256 amount);
 
     /// @notice Emitted when the fee recipient address is updated
+    ///
     /// @param newFeeRecipient New address that will receive swap fees
     event FeeRecipientUpdated(address newFeeRecipient);
 
     /// @notice Emitted when the fee is updated
+    ///
     /// @param newFeeBasisPoints New fee in basis points (e.g., 100 = 1%)
     event FeeUpdated(uint16 newFeeBasisPoints);
 
@@ -155,27 +155,34 @@ contract StableSwapper is
     /// @param isSwappable True if token is swappable, false if disabled
     event TokenStatusUpdated(address indexed token, bool isSwappable);
 
-    /// @notice Emitted when an address is added to the allowlist
-    /// @param addr Address that was added to the allowlist
-    event AllowlistAddressAdded(address addr);
-
-    /// @notice Emitted when an address is removed from the allowlist
-    /// @param addr Address that was removed from the allowlist
-    event AllowlistAddressRemoved(address addr);
+    /// @notice Emitted when an address's allowlist status is updated
+    ///
+    /// @param addr Address whose allowlist status was updated
+    /// @param isAllowlisted True if the address was added to the allowlist, false if removed
+    event AllowlistUpdated(address indexed addr, bool isAllowlisted);
 
     /// @notice Thrown when an address parameter is the zero address
     error CannotBeZeroAddress();
 
-    /// @notice Thrown when attempting to list a token that is already listed
-    error TokenAlreadyListed(address token);
+    /// @notice Thrown when a token's listing status doesn't match the expected state
+    ///
+    /// @param token Address of the token
+    /// @param state The current listing state
+    error InvalidTokenListingState(address token, bool state);
 
     /// @notice Thrown when attempting an operation on a token that is not listed
+    ///
+    /// @param token Address of the token
     error TokenNotListed(address token);
 
     /// @notice Thrown when attempting to swap a token for itself
+    ///
+    /// @param token Address of the token
     error CannotSwapSameToken(address token);
 
     /// @notice Thrown when attempting to unlist a token that is still swappable
+    ///
+    /// @param token Address of the token
     error TokenMustNotBeSwappable(address token);
 
     /// @notice Thrown when an amount parameter is zero
@@ -188,9 +195,14 @@ contract StableSwapper is
     error AmountOutCannotBeZero();
 
     /// @notice Thrown when the token out balance is less than the reserved amount
+    ///
+    /// @param token Address of the token
     error TokenOutBalanceLessThanReservedAmount(address token);
 
     /// @notice Thrown when the swap output amount exceeds available liquidity
+    ///
+    /// @param amountOut The amount of output tokens requested
+    /// @param availableLiquidity The available liquidity for the output token
     error AmountOutExceedsAvailableLiquidity(uint256 amountOut, uint256 availableLiquidity);
 
     /// @notice Thrown when attempting to withdraw liquidity while the withdraw feature is disabled
@@ -200,16 +212,32 @@ contract StableSwapper is
     error SwapsCannotBePaused();
 
     /// @notice Thrown when attempting to swap with a token that is not swappable
+    ///
+    /// @param token Address of the token
     error TokenMustBeSwappable(address token);
 
     /// @notice Thrown when attempting to set a reserved amount greater than the token balance
+    ///
+    /// @param token Address of the token
+    /// @param reservedAmount The reserved amount being set
+    /// @param balance The current balance of the token
     error ReservedAmountExceedsBalance(address token, uint256 reservedAmount, uint256 balance);
 
-    /// @notice Thrown when attempting to add an address that is already in the allowlist
-    error AddressAlreadyInAllowlist(address addr);
+    /// @notice Thrown when an address's allowlist status doesn't match the expected state
+    ///
+    /// @param addr Address that was checked
+    /// @param state The current allowlist state
+    error InvalidAllowlistState(address addr, bool state);
 
     /// @notice Thrown when attempting an operation on an address that is not in the allowlist
+    ///
+    /// @param addr Address that is not in the allowlist
     error AddressNotInAllowlist(address addr);
+
+    /// @notice Thrown when attempting to set a fee greater than the denominator
+    ///
+    /// @param feeBasisPoints The fee in basis points that was attempted
+    error FeeExceedsDenominator(uint16 feeBasisPoints);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -220,10 +248,10 @@ contract StableSwapper is
     ///
     /// @dev DEFAULT_ADMIN_ROLE uses a 2-step transfer process and can only be held by one address at a time
     /// @dev DEFAULT_ADMIN_ROLE is the only role that can grant/revoke other roles
-    /// @dev Other roles (WITHDRAW_ROLE, CONFIGURE_ROLE, PAUSE_ROLE) can have multiple holders
+    /// @dev Other roles (TREASURY_ROLE, CONFIGURE_ROLE, PAUSE_ROLE) can have multiple holders
     ///
     /// @param defaultAdmin Address granted DEFAULT_ADMIN_ROLE (can authorize UUPS upgrades and grant/revoke all other roles)
-    /// @param withdrawAuthority Initial address granted WITHDRAW_ROLE (can withdraw liquidity for treasury and update reserved amounts)
+    /// @param withdrawAuthority Initial address granted TREASURY_ROLE (can withdraw liquidity for treasury and update reserved amounts)
     /// @param configureAuthority Initial address granted CONFIGURE_ROLE (can add/remove tokens, update fees, manage allowlist)
     /// @param pauseAuthority Initial address granted PAUSE_ROLE (can pause/unpause operations and enable/disable tokens)
     /// @param initialFeeRecipient Address that will receive swap fees
@@ -240,7 +268,7 @@ contract StableSwapper is
     ) public initializer {
         __AccessControlDefaultAdminRules_init(initialAdminTransferDelay, defaultAdmin);
 
-        _grantRole(WITHDRAW_ROLE, withdrawAuthority);
+        _grantRole(TREASURY_ROLE, withdrawAuthority);
         _grantRole(CONFIGURE_ROLE, configureAuthority);
         _grantRole(PAUSE_ROLE, pauseAuthority);
 
@@ -250,7 +278,6 @@ contract StableSwapper is
         $.featureFlags[FeatureFlag.SWAP] = true;
         $.featureFlags[FeatureFlag.WITHDRAW] = true;
         $.featureFlags[FeatureFlag.ALLOWLIST] = false;
-        $.contractVersion = 1;
 
         emit Initialized(
             defaultAdmin,
@@ -273,26 +300,24 @@ contract StableSwapper is
         external
         nonReentrant
     {
-        StableSwapperStorage storage $ = _stableSwapperStorage();
-
         // CHECKS: All validation and calculations
-        require($.featureFlags[FeatureFlag.SWAP], SwapsCannotBePaused());
+        require(isFeatureEnabled(FeatureFlag.SWAP), SwapsCannotBePaused());
         require(tokenIn != address(0), CannotBeZeroAddress());
         require(tokenOut != address(0), CannotBeZeroAddress());
         require(tokenIn != tokenOut, CannotSwapSameToken(tokenIn));
-        require($.listedTokens.contains(tokenIn), TokenNotListed(tokenIn));
-        require($.listedTokens.contains(tokenOut), TokenNotListed(tokenOut));
+        require(isTokenListed(tokenIn), TokenNotListed(tokenIn));
+        require(isTokenListed(tokenOut), TokenNotListed(tokenOut));
         require(amountIn > 0, CannotBeZeroAmount());
         require(minAmountOut > 0, CannotBeZeroAmount());
 
         // We only check that the initiator is in the allowlist if allowlist is enabled
         // The recipient does not need to be in the allowlist
-        if ($.featureFlags[FeatureFlag.ALLOWLIST]) {
-            require($.allowlist[msg.sender], AddressNotInAllowlist(msg.sender));
+        if (isFeatureEnabled(FeatureFlag.ALLOWLIST)) {
+            require(isAllowlisted(msg.sender), AddressNotInAllowlist(msg.sender));
         }
 
-        require($.tokenSwappable[tokenIn], TokenMustBeSwappable(tokenIn));
-        require($.tokenSwappable[tokenOut], TokenMustBeSwappable(tokenOut));
+        require(isTokenSwappable(tokenIn), TokenMustBeSwappable(tokenIn));
+        require(isTokenSwappable(tokenOut), TokenMustBeSwappable(tokenOut));
 
         // Fee Model: Fee is charged on INPUT token
         // Example: User swaps 100 USDC → USDT with 1% fee
@@ -304,8 +329,9 @@ contract StableSwapper is
         // Force rounding up to collect full fee amount by adding `FEE_DENOMINATOR - 1` to numerator
         uint256 amountInAfterFee = amountIn;
         uint256 fee = 0;
-        if ($.feeBasisPoints > 0) {
-            fee = (amountIn * $.feeBasisPoints + FEE_DENOMINATOR - 1) / FEE_DENOMINATOR;
+        uint16 currentFeeBasisPoints = feeBasisPoints();
+        if (currentFeeBasisPoints > 0) {
+            fee = (amountIn * currentFeeBasisPoints + FEE_DENOMINATOR - 1) / FEE_DENOMINATOR;
             amountInAfterFee -= fee;
         }
 
@@ -322,9 +348,10 @@ contract StableSwapper is
         uint256 tokenOutBalance = IERC20(tokenOut).balanceOf(address(this));
 
         // Prevent underflow, there is no available liquidity if the token out balance is less than the reserved amount
-        require($.reservedAmounts[tokenOut] <= tokenOutBalance, TokenOutBalanceLessThanReservedAmount(tokenOut));
+        uint256 reservedAmount = getReservedAmount(tokenOut);
+        require(reservedAmount <= tokenOutBalance, TokenOutBalanceLessThanReservedAmount(tokenOut));
 
-        uint256 availableLiquidity = tokenOutBalance - $.reservedAmounts[tokenOut];
+        uint256 availableLiquidity = tokenOutBalance - reservedAmount;
         require(amountOut <= availableLiquidity, AmountOutExceedsAvailableLiquidity(amountOut, availableLiquidity));
 
         // Step 1: Transfer the full amount in to the contract from sender
@@ -333,7 +360,7 @@ contract StableSwapper is
 
         // Step 2: Transfer the fee to the fee recipient
         if (fee > 0) {
-            SafeERC20.safeTransfer(IERC20(tokenIn), $.feeRecipient, fee);
+            SafeERC20.safeTransfer(IERC20(tokenIn), feeRecipient(), fee);
         }
 
         // Step 3: Transfer the amount out to the recipient
@@ -342,38 +369,29 @@ contract StableSwapper is
         emit Swap(tokenIn, tokenOut, amountIn, amountOut, fee);
     }
 
-    /// @notice Lists a token in the contract for swapping.  Listed tokens can be paused via the `updateTokenStatus` function.
+    /// @notice Updates the listing status of a token
     ///
-    /// @param token Address of the ERC20 token to list.
-    function listToken(address token) external onlyRole(CONFIGURE_ROLE) nonReentrant {
+    /// @dev When listing a token (isListed=true), the token is added with swappable=false and reservedAmount=0
+    /// @dev When unlisting a token (isListed=false), the token must not be swappable
+    ///
+    /// @param token Address of the ERC20 token
+    /// @param isListed True to list the token, false to unlist it
+    function updateTokenListing(address token, bool isListed) external onlyRole(CONFIGURE_ROLE) {
         StableSwapperStorage storage $ = _stableSwapperStorage();
 
         require(token != address(0), CannotBeZeroAddress());
-        require(!$.listedTokens.contains(token), TokenAlreadyListed(token));
+        require(isTokenListed(token) != isListed, InvalidTokenListingState(token, isTokenListed(token)));
+        require(!isTokenSwappable(token), TokenMustNotBeSwappable(token));
 
-        $.listedTokens.add(token);
-        $.tokenSwappable[token] = false;
         $.reservedAmounts[token] = 0;
-        emit TokenListed(token);
-    }
 
-    /// @notice Unlists a token from the list of supported tokens. Tokens must not be swappable.
-    ///
-    /// @param token Address of the token to unlist
-    function unlistToken(address token) external onlyRole(CONFIGURE_ROLE) nonReentrant {
-        StableSwapperStorage storage $ = _stableSwapperStorage();
+        if (isListed) {
+            $.listedTokens.add(token);
+        } else {
+            $.listedTokens.remove(token);
+        }
 
-        require(token != address(0), CannotBeZeroAddress());
-        require($.listedTokens.contains(token), TokenNotListed(token));
-
-        // Safety check: token must not be swappable
-        // This prevents accidental unlisting of active trading pairs
-        require(!$.tokenSwappable[token], TokenMustNotBeSwappable(token));
-
-        $.listedTokens.remove(token);
-        delete $.tokenSwappable[token];
-        delete $.reservedAmounts[token];
-        emit TokenUnlisted(token);
+        emit TokenListingUpdated(token, isListed);
     }
 
     /// @notice Updates the swappable status of a token
@@ -384,35 +402,33 @@ contract StableSwapper is
         StableSwapperStorage storage $ = _stableSwapperStorage();
 
         require(token != address(0), CannotBeZeroAddress());
-        require($.listedTokens.contains(token), TokenNotListed(token));
+        require(isTokenListed(token), TokenNotListed(token));
         $.tokenSwappable[token] = isSwappable;
         emit TokenStatusUpdated(token, isSwappable);
     }
 
     /// @notice Withdraws liquidity from the contract for a specific token
     ///
-    /// @dev Only callable by address with WITHDRAW_ROLE
-    /// @dev Withdrawal role (treasury) can withdraw regardless of reserved amount (reserved amount only restricts swaps)
+    /// @dev Only callable by address with TREASURY_ROLE
+    /// @dev Treasury role can withdraw regardless of reserved amount (reserved amount only restricts swaps)
     ///
     /// @param token Address of the token to withdraw
     /// @param amount Amount of tokens to withdraw
     /// @param recipient Address to receive the withdrawn tokens
     function withdrawLiquidity(address token, uint256 amount, address recipient)
         external
-        onlyRole(WITHDRAW_ROLE)
+        onlyRole(TREASURY_ROLE)
         nonReentrant
     {
-        StableSwapperStorage storage $ = _stableSwapperStorage();
-
         require(token != address(0), CannotBeZeroAddress());
         require(recipient != address(0), CannotBeZeroAddress());
-        require($.featureFlags[FeatureFlag.WITHDRAW], WithdrawalCannotBePaused());
-        require($.listedTokens.contains(token), TokenNotListed(token));
+        require(isFeatureEnabled(FeatureFlag.WITHDRAW), WithdrawalCannotBePaused());
+        require(isTokenListed(token), TokenNotListed(token));
         require(amount > 0, CannotBeZeroAmount());
 
-        // Note: WITHDRAW_ROLE can withdraw regardless of reserved amount
-        // Reserved amount is meant to protect swap users, not restrict withdrawal role
-        // This allows treasury (withdrawal role) to manage liquidity in emergency situations
+        // Note: TREASURY_ROLE can withdraw regardless of reserved amount
+        // Reserved amount is meant to protect swap users, not restrict treasury role
+        // This allows treasury role to manage liquidity in emergency situations
         SafeERC20.safeTransfer(IERC20(token), recipient, amount);
 
         emit LiquidityWithdrawn(token, recipient, amount);
@@ -431,29 +447,30 @@ contract StableSwapper is
 
     /// @notice Updates the fee charged on swaps
     ///
-    /// @param newFeeBasisPoints New fee in basis points (e.g., 100 = 1%, max 1000 = 10%)
+    /// @param newFeeBasisPoints New fee in basis points (e.g., 100 = 1%, max 10000 = 100%)
     function updateFeeBasisPoints(uint16 newFeeBasisPoints) external onlyRole(CONFIGURE_ROLE) {
         StableSwapperStorage storage $ = _stableSwapperStorage();
 
+        require(newFeeBasisPoints <= FEE_DENOMINATOR, FeeExceedsDenominator(newFeeBasisPoints));
         $.feeBasisPoints = newFeeBasisPoints;
         emit FeeUpdated(newFeeBasisPoints);
     }
 
     /// @notice Updates the reserved amount for a token (amount that cannot be withdrawn by swaps)
     ///
-    /// @dev Reserved amount does not restrict WITHDRAW_ROLE withdrawals
+    /// @dev Reserved amount does not restrict TREASURY_ROLE withdrawals
     ///
     /// @param token Address of the token
     /// @param newReservedAmount New reserved amount (must not exceed current balance)
     function updateReservedAmount(address token, uint256 newReservedAmount)
         external
-        onlyRole(WITHDRAW_ROLE)
+        onlyRole(TREASURY_ROLE)
         nonReentrant
     {
         StableSwapperStorage storage $ = _stableSwapperStorage();
 
         require(token != address(0), CannotBeZeroAddress());
-        require($.listedTokens.contains(token), TokenNotListed(token));
+        require(isTokenListed(token), TokenNotListed(token));
 
         // Safety check: reserved amount must not exceed balance
         uint256 balance = IERC20(token).balanceOf(address(this));
@@ -463,28 +480,18 @@ contract StableSwapper is
         emit ReservedAmountUpdated(token, newReservedAmount);
     }
 
-    /// @notice Adds an address to the allowlist (allowing it to initiate swaps when allowlist feature is enabled)
+    /// @notice Updates an address's allowlist status
     ///
-    /// @param addr Address to add to allowlist
-    function addToAllowlist(address addr) external onlyRole(CONFIGURE_ROLE) {
+    /// @param addr Address to update
+    /// @param allowed True to add to allowlist, false to remove
+    function updateAllowlist(address addr, bool allowed) external onlyRole(CONFIGURE_ROLE) {
         StableSwapperStorage storage $ = _stableSwapperStorage();
 
         require(addr != address(0), CannotBeZeroAddress());
-        require(!$.allowlist[addr], AddressAlreadyInAllowlist(addr));
-        $.allowlist[addr] = true;
-        emit AllowlistAddressAdded(addr);
-    }
+        require(isAllowlisted(addr) != allowed, InvalidAllowlistState(addr, isAllowlisted(addr)));
 
-    /// @notice Removes an address from the allowlist
-    ///
-    /// @param addr Address to remove from allowlist
-    function removeFromAllowlist(address addr) external onlyRole(CONFIGURE_ROLE) {
-        StableSwapperStorage storage $ = _stableSwapperStorage();
-
-        require(addr != address(0), CannotBeZeroAddress());
-        require($.allowlist[addr], AddressNotInAllowlist(addr));
-        delete $.allowlist[addr];
-        emit AllowlistAddressRemoved(addr);
+        $.allowlist[addr] = allowed;
+        emit AllowlistUpdated(addr, allowed);
     }
 
     /// @notice Updates a feature flag's enabled status
@@ -505,41 +512,6 @@ contract StableSwapper is
         emit FeatureFlagUpdated(feature, isEnabled);
     }
 
-    // View functions
-    /// @notice Returns the current contract version
-    ///
-    /// @return Version number of the contract implementation
-    function contractVersion() external view returns (uint8) {
-        StableSwapperStorage storage $ = _stableSwapperStorage();
-        return $.contractVersion;
-    }
-
-    /// @notice Returns the current fee recipient address
-    ///
-    /// @return Address that receives fees collected from swaps
-    function feeRecipient() external view returns (address) {
-        StableSwapperStorage storage $ = _stableSwapperStorage();
-        return $.feeRecipient;
-    }
-
-    /// @notice Returns the current fee in basis points
-    ///
-    /// @return Current fee in basis points (e.g., 100 = 1%)
-    function feeBasisPoints() external view returns (uint16) {
-        StableSwapperStorage storage $ = _stableSwapperStorage();
-        return $.feeBasisPoints;
-    }
-
-    /// @notice Returns whether a feature flag is enabled
-    ///
-    /// @param feature The feature flag to check
-    ///
-    /// @return True if the feature is enabled, false otherwise
-    function isFeatureEnabled(FeatureFlag feature) external view returns (bool) {
-        StableSwapperStorage storage $ = _stableSwapperStorage();
-        return $.featureFlags[feature];
-    }
-
     /// @notice Returns an array of all listed token addresses
     ///
     /// @return Array of token addresses
@@ -556,12 +528,48 @@ contract StableSwapper is
         return $.listedTokens.length();
     }
 
+    /// @notice Returns the current fee recipient address
+    ///
+    /// @return Address that receives fees collected from swaps
+    function feeRecipient() public view returns (address) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.feeRecipient;
+    }
+
+    /// @notice Returns the current fee in basis points
+    ///
+    /// @return Current fee in basis points (e.g., 100 = 1%)
+    function feeBasisPoints() public view returns (uint16) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.feeBasisPoints;
+    }
+
+    /// @notice Returns whether a feature flag is enabled
+    ///
+    /// @param feature The feature flag to check
+    ///
+    /// @return True if the feature is enabled, false otherwise
+    function isFeatureEnabled(FeatureFlag feature) public view returns (bool) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.featureFlags[feature];
+    }
+
+    /// @notice Returns whether a token is listed
+    ///
+    /// @param token Address of the token
+    ///
+    /// @return True if the token is listed, false otherwise
+    function isTokenListed(address token) public view returns (bool) {
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.listedTokens.contains(token);
+    }
+
     /// @notice Returns the reserved amount for a token
     ///
     /// @param token Address of the token
     ///
     /// @return Reserved amount (not available for withdrawal by swaps)
-    function getReservedAmount(address token) external view returns (uint256) {
+    function getReservedAmount(address token) public view returns (uint256) {
         StableSwapperStorage storage $ = _stableSwapperStorage();
         return $.reservedAmounts[token];
     }
@@ -571,7 +579,7 @@ contract StableSwapper is
     /// @param token Address of the token
     ///
     /// @return True if the token is swappable, false otherwise
-    function isTokenSwappable(address token) external view returns (bool) {
+    function isTokenSwappable(address token) public view returns (bool) {
         StableSwapperStorage storage $ = _stableSwapperStorage();
         return $.tokenSwappable[token];
     }
@@ -581,7 +589,7 @@ contract StableSwapper is
     /// @param addr Address to check
     ///
     /// @return True if the address is allowed, false otherwise
-    function isAllowlisted(address addr) external view returns (bool) {
+    function isAllowlisted(address addr) public view returns (bool) {
         StableSwapperStorage storage $ = _stableSwapperStorage();
         return $.allowlist[addr];
     }

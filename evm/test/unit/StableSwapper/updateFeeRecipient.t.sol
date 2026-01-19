@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {StableSwapper} from "../../src/StableSwapper.sol";
-import {StableSwapperBase} from "./StableSwapperBase.sol";
+import {StableSwapper} from "../../../src/StableSwapper.sol";
+
+import {StableSwapperBase} from "../../lib/StableSwapperBase.sol";
 
 /**
  * @title UpdateFeeRecipientTest
@@ -36,8 +37,8 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
         uint16 feeRate = 100; // 1%
 
         vm.startPrank(configureAuthority);
-        swapper.listToken(address(usdc));
-        swapper.listToken(address(appStable));
+        swapper.updateTokenListing(address(usdc), true);
+        swapper.updateTokenListing(address(appStable), true);
 
         // Update fee recipient and set 1% fee
         swapper.updateFeeRecipient(newFeeRecipient);

@@ -3,8 +3,9 @@ pragma solidity ^0.8.20;
 
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
-import {StableSwapper} from "../../src/StableSwapper.sol";
-import {StableSwapperBase} from "./StableSwapperBase.sol";
+import {StableSwapper} from "../../../src/StableSwapper.sol";
+
+import {StableSwapperBase} from "../../lib/StableSwapperBase.sol";
 
 /**
  * @title InitializeTest
@@ -48,7 +49,7 @@ contract InitializeTest is StableSwapperBase {
 
     function test_initialize_setsAllInitialValues() public view {
         assertTrue(swapper.hasRole(swapper.DEFAULT_ADMIN_ROLE(), defaultAdmin));
-        assertTrue(swapper.hasRole(swapper.WITHDRAW_ROLE(), withdrawalAuthority));
+        assertTrue(swapper.hasRole(swapper.TREASURY_ROLE(), withdrawalAuthority));
         assertTrue(swapper.hasRole(swapper.CONFIGURE_ROLE(), configureAuthority));
         assertTrue(swapper.hasRole(swapper.PAUSE_ROLE(), pauseAuthority));
         assertEq(swapper.feeRecipient(), feeRecipient);
@@ -80,9 +81,5 @@ contract InitializeTest is StableSwapperBase {
         StableSwapper newSwapper = StableSwapper(address(newProxy));
 
         assertEq(newSwapper.feeRecipient(), address(0));
-    }
-
-    function test_initialize_setsContractVersion() public view {
-        assertEq(swapper.contractVersion(), 1);
     }
 }

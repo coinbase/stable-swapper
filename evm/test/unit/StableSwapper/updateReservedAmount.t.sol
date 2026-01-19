@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {StableSwapper} from "../../src/StableSwapper.sol";
-import {StableSwapperBase} from "./StableSwapperBase.sol";
+import {StableSwapper} from "../../../src/StableSwapper.sol";
+
+import {StableSwapperBase} from "../../lib/StableSwapperBase.sol";
 
 /**
  * @title UpdateReservedAmountTest
@@ -16,7 +17,7 @@ contract UpdateReservedAmountTest is StableSwapperBase {
     function test_updateReservedAmount_reverts_whenUnauthorizedUser() public {
         uint64 reservedAmount = 100 * 10 ** 6;
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         address unauthorized = makeAddr("unauthorized");
 
@@ -48,7 +49,7 @@ contract UpdateReservedAmountTest is StableSwapperBase {
         uint64 reservedAmount = uint64(bound(reservedAmountSeed, liquidityAmount + 1, type(uint64).max));
 
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         vm.prank(withdrawalAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
@@ -75,7 +76,7 @@ contract UpdateReservedAmountTest is StableSwapperBase {
         uint64 reservedAmount = uint64(bound(reservedAmountSeed, 0, liquidityAmount));
 
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         vm.prank(withdrawalAuthority);
         usdc.transfer(address(swapper), liquidityAmount);

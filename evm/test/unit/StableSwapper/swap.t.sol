@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {StableSwapper} from "../../src/StableSwapper.sol";
-import {MockERC20, StableSwapperBase} from "./StableSwapperBase.sol";
+import {StableSwapper} from "../../../src/StableSwapper.sol";
+
+import {MockERC20, StableSwapperBase} from "../../lib/StableSwapperBase.sol";
 
 /**
  * @title SwapTest
@@ -56,7 +57,7 @@ contract SwapTest is StableSwapperBase {
         uint256 swapAmount = 10 * 10 ** 6;
 
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         vm.prank(withdrawalAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
@@ -213,8 +214,8 @@ contract SwapTest is StableSwapperBase {
         uint256 swapAmount = bound(swapAmountSeed, 1, 100 * 10 ** 6);
 
         vm.startPrank(configureAuthority);
-        swapper.listToken(address(usdc));
-        swapper.listToken(address(appStable));
+        swapper.updateTokenListing(address(usdc), true);
+        swapper.updateTokenListing(address(appStable), true);
         vm.stopPrank();
 
         vm.startPrank(pauseAuthority);
@@ -274,8 +275,8 @@ contract SwapTest is StableSwapperBase {
         uint256 tinyAmount = bound(tinyAmountSeed, 1, maxTinyAmount);
 
         vm.startPrank(configureAuthority);
-        swapper.listToken(address(usdc));
-        swapper.listToken(address(appStable));
+        swapper.updateTokenListing(address(usdc), true);
+        swapper.updateTokenListing(address(appStable), true);
         swapper.updateFeeBasisPoints(feeRateBps);
         vm.stopPrank();
 
@@ -342,8 +343,8 @@ contract SwapTest is StableSwapperBase {
 
         // Add tokens
         vm.startPrank(configureAuthority);
-        swapper.listToken(address(usdc));
-        swapper.listToken(address(appStable));
+        swapper.updateTokenListing(address(usdc), true);
+        swapper.updateTokenListing(address(appStable), true);
         vm.stopPrank();
 
         vm.startPrank(pauseAuthority);
@@ -381,8 +382,8 @@ contract SwapTest is StableSwapperBase {
 
         // Add tokens
         vm.startPrank(configureAuthority);
-        swapper.listToken(address(usdc));
-        swapper.listToken(address(appStable));
+        swapper.updateTokenListing(address(usdc), true);
+        swapper.updateTokenListing(address(appStable), true);
         vm.stopPrank();
 
         vm.startPrank(pauseAuthority);
@@ -484,8 +485,8 @@ contract SwapTest is StableSwapperBase {
         tokenOut.mint(withdrawalAuthority, liquidityAmountOut);
 
         vm.startPrank(configureAuthority);
-        swapper.listToken(address(tokenIn));
-        swapper.listToken(address(tokenOut));
+        swapper.updateTokenListing(address(tokenIn), true);
+        swapper.updateTokenListing(address(tokenOut), true);
         vm.stopPrank();
 
         vm.startPrank(pauseAuthority);
@@ -550,8 +551,8 @@ contract SwapTest is StableSwapperBase {
         tokenOut.mint(withdrawalAuthority, liquidityAmountOut);
 
         vm.startPrank(configureAuthority);
-        swapper.listToken(address(tokenIn));
-        swapper.listToken(address(tokenOut));
+        swapper.updateTokenListing(address(tokenIn), true);
+        swapper.updateTokenListing(address(tokenOut), true);
         vm.stopPrank();
 
         vm.startPrank(pauseAuthority);

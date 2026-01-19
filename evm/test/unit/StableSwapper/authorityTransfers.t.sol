@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {StableSwapperBase} from "./StableSwapperBase.sol";
-import {StableSwapper} from "../../src/StableSwapper.sol";
+import {StableSwapper} from "../../../src/StableSwapper.sol";
+
+import {StableSwapperBase} from "../../lib/StableSwapperBase.sol";
 
 /**
  * @title AuthorityTransfersTest
@@ -18,9 +19,8 @@ contract AuthorityTransfersTest is StableSwapperBase {
     function setUp() public override {
         super.setUp();
 
-        // Cache role identifiers
         defaultAdminRole = swapper.DEFAULT_ADMIN_ROLE();
-        withdrawalAuthorityRole = swapper.WITHDRAW_ROLE();
+        withdrawalAuthorityRole = swapper.TREASURY_ROLE();
         configureAuthorityRole = swapper.CONFIGURE_ROLE();
         pauseAuthorityRole = swapper.PAUSE_ROLE();
     }
@@ -52,7 +52,6 @@ contract AuthorityTransfersTest is StableSwapperBase {
         vm.prank(defaultAdmin);
         swapper.beginDefaultAdminTransfer(newAdmin);
 
-        // Fast forward past delay (0 seconds in tests)
         vm.warp(block.timestamp + 1);
 
         vm.prank(wrongCaller);
@@ -133,7 +132,6 @@ contract AuthorityTransfersTest is StableSwapperBase {
         vm.prank(defaultAdmin);
         swapper.beginDefaultAdminTransfer(newAdmin);
 
-        // Fast forward past delay (0 seconds in tests, but need at least 1 block)
         vm.warp(block.timestamp + 1);
 
         vm.prank(newAdmin);
@@ -172,7 +170,6 @@ contract AuthorityTransfersTest is StableSwapperBase {
         swapper.grantRole(withdrawalAuthorityRole, newWithdrawal);
 
         assertTrue(swapper.hasRole(withdrawalAuthorityRole, newWithdrawal));
-        // Original withdrawal still has role (multiple holders allowed)
         assertTrue(swapper.hasRole(withdrawalAuthorityRole, withdrawalAuthority));
     }
 
@@ -185,7 +182,6 @@ contract AuthorityTransfersTest is StableSwapperBase {
         swapper.grantRole(configureAuthorityRole, newConfigure);
 
         assertTrue(swapper.hasRole(configureAuthorityRole, newConfigure));
-        // Original configure still has role (multiple holders allowed)
         assertTrue(swapper.hasRole(configureAuthorityRole, configureAuthority));
     }
 
@@ -198,7 +194,6 @@ contract AuthorityTransfersTest is StableSwapperBase {
         swapper.grantRole(pauseAuthorityRole, newPause);
 
         assertTrue(swapper.hasRole(pauseAuthorityRole, newPause));
-        // Original pause still has role (multiple holders allowed)
         assertTrue(swapper.hasRole(pauseAuthorityRole, pauseAuthority));
     }
 
@@ -232,7 +227,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
         // Setup tokens and liquidity
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         vm.prank(withdrawalAuthority);
         usdc.transfer(address(swapper), 500 * 10 ** 6);
@@ -241,7 +236,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         vm.prank(defaultAdmin);
         swapper.grantRole(withdrawalAuthorityRole, newWithdrawal);
 
-        // New withdrawal role holder should be able to withdraw
+        // New treasury role holder should be able to withdraw
         vm.prank(newWithdrawal);
         swapper.withdrawLiquidity(address(usdc), 100 * 10 ** 6, newWithdrawal);
 
@@ -257,7 +252,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
 
         // New configure role holder should be able to add tokens
         vm.prank(newConfigure);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         assertTrue(swapper.getListedTokensCount() == 1);
     }
@@ -279,16 +274,16 @@ contract AuthorityTransfersTest is StableSwapperBase {
     function test_revokedWithdrawalAuthority_cannotWithdrawLiquidity() public {
         // Setup tokens and liquidity
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         vm.prank(withdrawalAuthority);
         usdc.transfer(address(swapper), 500 * 10 ** 6);
 
-        // Revoke withdrawal role
+        // Revoke treasury role
         vm.prank(defaultAdmin);
         swapper.revokeRole(withdrawalAuthorityRole, withdrawalAuthority);
 
-        // Original withdrawal role holder should not be able to withdraw
+        // Original treasury role holder should not be able to withdraw
         vm.prank(withdrawalAuthority);
         vm.expectRevert();
         swapper.withdrawLiquidity(address(usdc), 100 * 10 ** 6, withdrawalAuthority);
@@ -302,7 +297,7 @@ contract AuthorityTransfersTest is StableSwapperBase {
         // Original configure role holder should not be able to add tokens
         vm.prank(configureAuthority);
         vm.expectRevert();
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
     }
 
     function test_revokedPauseAuthority_cannotPauseSwaps() public {

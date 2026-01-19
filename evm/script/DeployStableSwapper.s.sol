@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {console} from "forge-std/console.sol";
 import {Script} from "forge-std/Script.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {StableSwapper} from "../src/StableSwapper.sol";
 
@@ -18,7 +18,7 @@ import {StableSwapper} from "../src/StableSwapper.sol";
  * Usage:
  *   Set environment variables:
  *     - DEFAULT_ADMIN: Address with DEFAULT_ADMIN_ROLE (can upgrade contract and manage roles)
- *     - WITHDRAW_AUTHORITY: Address with WITHDRAW_ROLE (can manage liquidity)
+ *     - WITHDRAW_AUTHORITY: Address with TREASURY_ROLE (can manage liquidity)
  *     - CONFIGURE_AUTHORITY: Address with CONFIGURE_ROLE (can add tokens, update fees)
  *     - PAUSE_AUTHORITY: Address with PAUSE_ROLE (can pause operations)
  *     - FEE_RECIPIENT: Address that receives swap fees
@@ -72,7 +72,7 @@ contract DeployStableSwapper is Script {
         // Log deployment configuration
         console.log("\n=== StableSwapper Deployment Configuration ===");
         console.log("Default Admin:", defaultAdmin);
-        console.log("Withdrawal Role Holder:", withdrawalAuthority);
+        console.log("Treasury Role Holder:", withdrawalAuthority);
         console.log("Configure Role Holder:", configureAuthority);
         console.log("Pause Role Holder:", pauseAuthority);
         console.log("Fee Recipient:", feeRecipient);
@@ -120,7 +120,7 @@ contract DeployStableSwapper is Script {
     /// @notice Deploys StableSwapper implementation and proxy
     ///
     /// @param defaultAdmin Address with DEFAULT_ADMIN_ROLE
-    /// @param withdrawalAuthority Address with WITHDRAW_ROLE
+    /// @param withdrawalAuthority Address with TREASURY_ROLE
     /// @param configureAuthority Address with CONFIGURE_ROLE
     /// @param pauseAuthority Address with PAUSE_ROLE
     /// @param feeRecipient Address that receives swap fees
@@ -165,16 +165,12 @@ contract DeployStableSwapper is Script {
         // Step 4: Verify initialization
         StableSwapper stableSwapper = StableSwapper(proxy);
 
-        // Verify contract version
-        require(stableSwapper.contractVersion() == 1, "Contract version mismatch");
-
         // Verify authorities
         require(
             stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Default admin not set correctly"
         );
         require(
-            stableSwapper.hasRole(stableSwapper.WITHDRAW_ROLE(), withdrawalAuthority),
-            "Withdrawal role not set correctly"
+            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), withdrawalAuthority), "Treasury role not set correctly"
         );
         require(
             stableSwapper.hasRole(stableSwapper.CONFIGURE_ROLE(), configureAuthority),

@@ -4,8 +4,9 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 
-import {DeployStableSwapper} from "../script/DeployStableSwapper.s.sol";
-import {StableSwapper} from "../src/StableSwapper.sol";
+import {StableSwapper} from "../../src/StableSwapper.sol";
+
+import {DeployStableSwapper} from "../../script/DeployStableSwapper.s.sol";
 
 /**
  * @title DeployStableSwapperTest
@@ -47,7 +48,6 @@ contract DeployStableSwapperTest is Test {
         // Verify proxy is initialized correctly
         StableSwapper stableSwapper = StableSwapper(proxy);
 
-        assertEq(stableSwapper.contractVersion(), 1, "Contract version should be 1");
         assertEq(stableSwapper.feeRecipient(), feeRecipient, "Fee recipient should match");
         assertEq(stableSwapper.feeBasisPoints(), feeBasisPoints, "Fee rate should match");
         assertTrue(stableSwapper.isFeatureEnabled(StableSwapper.FeatureFlag.SWAP), "Swaps should be enabled");
@@ -62,7 +62,7 @@ contract DeployStableSwapperTest is Test {
             stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Default admin role should be set"
         );
         assertTrue(
-            stableSwapper.hasRole(stableSwapper.WITHDRAW_ROLE(), withdrawalAuthority), "Treasury role should be set"
+            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), withdrawalAuthority), "Treasury role should be set"
         );
         assertTrue(
             stableSwapper.hasRole(stableSwapper.CONFIGURE_ROLE(), configureAuthority), "Configure role should be set"

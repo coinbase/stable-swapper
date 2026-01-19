@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {StableSwapper} from "../../src/StableSwapper.sol";
-import {StableSwapperBase} from "./StableSwapperBase.sol";
+import {StableSwapper} from "../../../src/StableSwapper.sol";
+
+import {StableSwapperBase} from "../../lib/StableSwapperBase.sol";
 
 /**
  * @title WithdrawLiquidityTest
@@ -16,7 +17,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
     function test_withdrawLiquidity_reverts_whenUnauthorizedUser() public {
         uint256 liquidityAmount = 100 * 10 ** 6;
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         address unauthorized = makeAddr("unauthorized");
 
@@ -35,7 +36,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
     function test_withdrawLiquidity_reverts_whenRecipientIsZeroAddress() public {
         uint256 liquidityAmount = 100 * 10 ** 6;
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         vm.prank(withdrawalAuthority);
         vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
@@ -44,7 +45,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
 
     function test_withdrawLiquidity_reverts_whenLiquidityPaused() public {
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         uint256 depositAmount = 500 * 10 ** 6;
         vm.prank(withdrawalAuthority);
@@ -74,7 +75,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
 
     function test_withdrawLiquidity_reverts_whenWithdrawingZeroAmount() public {
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         vm.prank(withdrawalAuthority);
         vm.expectRevert(StableSwapper.CannotBeZeroAmount.selector);
@@ -86,7 +87,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
         uint256 withdrawAmount = bound(withdrawAmountSeed, liquidityAmount + 1, type(uint256).max);
 
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         vm.prank(withdrawalAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
@@ -105,7 +106,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
         uint256 withdrawAmount = bound(withdrawAmountSeed, 1, liquidityAmount);
 
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         vm.prank(withdrawalAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
@@ -125,7 +126,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
         uint256 withdrawAmount = bound(withdrawAmountSeed, 1, liquidityAmount);
 
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         vm.prank(withdrawalAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
@@ -147,7 +148,7 @@ contract WithdrawLiquidityTest is StableSwapperBase {
         uint256 withdrawAmount = bound(withdrawAmountSeed, 1, liquidityAmount);
 
         vm.prank(configureAuthority);
-        swapper.listToken(address(usdc));
+        swapper.updateTokenListing(address(usdc), true);
 
         vm.prank(withdrawalAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
