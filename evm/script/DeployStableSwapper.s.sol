@@ -1,0 +1,195 @@
+// SPDX-License-Identifier: Apache-2.0
+pragma solidity ^0.8.20;
+
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {console} from "forge-std/console.sol";
+import {Script} from "forge-std/Script.sol";
+
+import {StableSwapper} from "../src/StableSwapper.sol";
+
+/**
+ * @title DeployStableSwapper
+ * @notice Deployment script for StableSwapper using UUPS proxy pattern
+ * @dev This script deploys:
+ *      1. StableSwapper implementation contract
+ *      2. ERC1967Proxy pointing to the implementation
+ *      3. Initializes the proxy with authorities and fee configuration
+ *
+ * Usage:
+ *   Set environment variables:
+ *     - DEFAULT_ADMIN: Address with DEFAULT_ADMIN_ROLE (can upgrade contract and manage roles)
+ *     - WITHDRAW_AUTHORITY: Address with TREASURY_ROLE (can manage liquidity)
+ *     - CONFIGURE_AUTHORITY: Address with CONFIGURE_ROLE (can add tokens, update fees)
+ *     - PAUSE_AUTHORITY: Address with PAUSE_ROLE (can pause operations)
+ *     - FEE_RECIPIENT: Address that receives swap fees
+ *     - FEE_RATE: Fee rate in basis points (e.g., 100 = 1%)
+ *     - ADMIN_TRANSFER_DELAY: Delay in seconds for 2-step admin transfers (e.g., 259200 = 3 days)
+ *
+ *   Deploy to network:
+ *     forge script script/DeployStableSwapper.s.sol:DeployStableSwapper \
+ *       --rpc-url $RPC_URL \
+ *       --broadcast \
+ *       --verify
+ *
+ *   Dry run (no broadcast):
+ *     forge script script/DeployStableSwapper.s.sol:DeployStableSwapper \
+ *       --rpc-url $RPC_URL
+ */
+contract DeployStableSwapper is Script {
+    /// @notice Emitted when deployment is successful
+    event Deployed(
+        address indexed implementation,
+        address indexed proxy,
+        address defaultAdmin,
+        address withdrawalAuthority,
+        address configureAuthority,
+        address pauseAuthority,
+        address feeRecipient,
+        uint16 feeBasisPoints,
+        uint48 adminTransferDelay
+    );
+
+    /// @notice Main deployment function
+    ///
+    /// @dev Reads configuration from environment variables and deploys contracts
+    function run() external {
+        // Read configuration from environment variables
+        address defaultAdmin = vm.envAddress("DEFAULT_ADMIN");
+        address withdrawalAuthority = vm.envAddress("WITHDRAW_AUTHORITY");
+        address configureAuthority = vm.envAddress("CONFIGURE_AUTHORITY");
+        address pauseAuthority = vm.envAddress("PAUSE_AUTHORITY");
+        address feeRecipient = vm.envAddress("FEE_RECIPIENT");
+        uint16 feeBasisPoints = uint16(vm.envUint("FEE_BASIS_POINTS"));
+        uint48 adminTransferDelay = uint48(vm.envUint("ADMIN_TRANSFER_DELAY"));
+
+        // Validate configuration
+        require(defaultAdmin != address(0), "DEFAULT_ADMIN cannot be zero address");
+        require(withdrawalAuthority != address(0), "WITHDRAW_AUTHORITY cannot be zero address");
+        require(configureAuthority != address(0), "CONFIGURE_AUTHORITY cannot be zero address");
+        require(pauseAuthority != address(0), "PAUSE_AUTHORITY cannot be zero address");
+        require(feeRecipient != address(0), "FEE_RECIPIENT cannot be zero address");
+
+        // Log deployment configuration
+        console.log("\n=== StableSwapper Deployment Configuration ===");
+        console.log("Default Admin:", defaultAdmin);
+        console.log("Treasury Role Holder:", withdrawalAuthority);
+        console.log("Configure Role Holder:", configureAuthority);
+        console.log("Pause Role Holder:", pauseAuthority);
+        console.log("Fee Recipient:", feeRecipient);
+        console.log("Fee (basis points):", feeBasisPoints);
+        console.log("Fee (percentage):", (uint256(feeBasisPoints) * 100) / 10000, "%");
+        console.log("Admin Transfer Delay (seconds):", adminTransferDelay);
+        console.log("===========================================\n");
+
+        // Start broadcasting transactions
+        vm.startBroadcast();
+
+        // Deploy contracts
+        (address implementation, address proxy) = deploy(
+            defaultAdmin,
+            withdrawalAuthority,
+            configureAuthority,
+            pauseAuthority,
+            feeRecipient,
+            feeBasisPoints,
+            adminTransferDelay
+        );
+
+        vm.stopBroadcast();
+
+        // Log deployment results
+        console.log("\n=== Deployment Results ===");
+        console.log("Implementation:", implementation);
+        console.log("Proxy (StableSwapper):", proxy);
+        console.log("==========================\n");
+
+        // Emit deployment event
+        emit Deployed(
+            implementation,
+            proxy,
+            defaultAdmin,
+            withdrawalAuthority,
+            configureAuthority,
+            pauseAuthority,
+            feeRecipient,
+            feeBasisPoints,
+            adminTransferDelay
+        );
+    }
+
+    /// @notice Deploys StableSwapper implementation and proxy
+    ///
+    /// @param defaultAdmin Address with DEFAULT_ADMIN_ROLE
+    /// @param withdrawalAuthority Address with TREASURY_ROLE
+    /// @param configureAuthority Address with CONFIGURE_ROLE
+    /// @param pauseAuthority Address with PAUSE_ROLE
+    /// @param feeRecipient Address that receives swap fees
+    /// @param feeBasisPoints Fee in basis points (e.g., 100 = 1%)
+    /// @param adminTransferDelay Delay in seconds for 2-step admin transfers
+    ///
+    /// @return implementation Address of the implementation contract
+    /// @return proxy Address of the proxy contract (main entry point)
+    function deploy(
+        address defaultAdmin,
+        address withdrawalAuthority,
+        address configureAuthority,
+        address pauseAuthority,
+        address feeRecipient,
+        uint16 feeBasisPoints,
+        uint48 adminTransferDelay
+    ) public returns (address implementation, address proxy) {
+        // Step 1: Deploy implementation contract
+        console.log("Deploying StableSwapper implementation...");
+        StableSwapper implementationContract = new StableSwapper();
+        implementation = address(implementationContract);
+        console.log("Implementation deployed at:", implementation);
+
+        // Step 2: Encode initialization data
+        bytes memory initData = abi.encodeWithSelector(
+            StableSwapper.initialize.selector,
+            defaultAdmin,
+            withdrawalAuthority,
+            configureAuthority,
+            pauseAuthority,
+            feeRecipient,
+            feeBasisPoints,
+            adminTransferDelay
+        );
+
+        // Step 3: Deploy ERC1967 proxy with initialization
+        console.log("Deploying ERC1967 proxy...");
+        ERC1967Proxy proxyContract = new ERC1967Proxy(implementation, initData);
+        proxy = address(proxyContract);
+        console.log("Proxy deployed at:", proxy);
+
+        // Step 4: Verify initialization
+        StableSwapper stableSwapper = StableSwapper(proxy);
+
+        // Verify authorities
+        require(
+            stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Default admin not set correctly"
+        );
+        require(
+            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), withdrawalAuthority), "Treasury role not set correctly"
+        );
+        require(
+            stableSwapper.hasRole(stableSwapper.CONFIGURE_ROLE(), configureAuthority),
+            "Configure role not set correctly"
+        );
+        require(stableSwapper.hasRole(stableSwapper.PAUSE_ROLE(), pauseAuthority), "Pause role not set correctly");
+
+        // Verify fee configuration
+        require(stableSwapper.feeRecipient() == feeRecipient, "Fee recipient not set correctly");
+        require(stableSwapper.feeBasisPoints() == feeBasisPoints, "Fee rate not set correctly");
+
+        // Verify initial state
+        require(stableSwapper.isFeatureEnabled(StableSwapper.FeatureFlag.SWAP), "Swaps should be enabled");
+        require(stableSwapper.isFeatureEnabled(StableSwapper.FeatureFlag.WITHDRAW), "Liquidity should be enabled");
+        require(!stableSwapper.isFeatureEnabled(StableSwapper.FeatureFlag.ALLOWLIST), "Allowlist should not be enabled");
+        require(stableSwapper.getListedTokensCount() == 0, "No tokens should be supported initially");
+
+        console.log("Deployment verification successful!");
+
+        return (implementation, proxy);
+    }
+}
