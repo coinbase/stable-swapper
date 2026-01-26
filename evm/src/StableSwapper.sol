@@ -191,9 +191,6 @@ contract StableSwapper is
     /// @notice Thrown when the output amount is less than the minimum acceptable amount (slippage protection)
     error SlippageExceeded();
 
-    /// @notice Thrown when a swap would result in zero output tokens
-    error AmountOutCannotBeZero();
-
     /// @notice Thrown when the token out balance is less than the reserved amount
     ///
     /// @param token Address of the token
@@ -216,13 +213,6 @@ contract StableSwapper is
     /// @param token Address of the token
     error TokenMustBeSwappable(address token);
 
-    /// @notice Thrown when attempting to set a reserved amount greater than the token balance
-    ///
-    /// @param token Address of the token
-    /// @param reservedAmount The reserved amount being set
-    /// @param balance The current balance of the token
-    error ReservedAmountExceedsBalance(address token, uint256 reservedAmount, uint256 balance);
-
     /// @notice Thrown when an address's allowlist status doesn't match the expected state
     ///
     /// @param addr Address that was checked
@@ -238,6 +228,18 @@ contract StableSwapper is
     ///
     /// @param feeBasisPoints The fee in basis points that was attempted
     error FeeExceedsDenominator(uint16 feeBasisPoints);
+
+    /// @notice Thrown when a token's swappable status doesn't match the expected state
+    ///
+    /// @param token Address of the token
+    /// @param state The current swappable state
+    error InvalidTokenSwappableState(address token, bool state);
+
+    /// @notice Thrown when a feature flag's enabled status doesn't match the expected state
+    ///
+    /// @param feature The feature flag
+    /// @param state The current enabled state
+    error InvalidFeatureFlagState(FeatureFlag feature, bool state);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -272,6 +274,9 @@ contract StableSwapper is
         _grantRole(CONFIGURE_ROLE, configureAuthority);
         _grantRole(PAUSE_ROLE, pauseAuthority);
 
+        require(initialFeeBasisPoints <= FEE_DENOMINATOR, FeeExceedsDenominator(initialFeeBasisPoints));
+        require(initialFeeRecipient != address(0), CannotBeZeroAddress());
+
         StableSwapperStorage storage $ = _stableSwapperStorage();
         $.feeRecipient = initialFeeRecipient;
         $.feeBasisPoints = initialFeeBasisPoints;
@@ -302,8 +307,7 @@ contract StableSwapper is
     {
         // CHECKS: All validation and calculations
         require(isFeatureEnabled(FeatureFlag.SWAP), SwapsCannotBePaused());
-        require(tokenIn != address(0), CannotBeZeroAddress());
-        require(tokenOut != address(0), CannotBeZeroAddress());
+        require(recipient != address(0), CannotBeZeroAddress());
         require(tokenIn != tokenOut, CannotSwapSameToken(tokenIn));
         require(isTokenListed(tokenIn), TokenNotListed(tokenIn));
         require(isTokenListed(tokenOut), TokenNotListed(tokenOut));
@@ -340,9 +344,8 @@ contract StableSwapper is
         uint8 decimalsOut = IERC20Metadata(tokenOut).decimals();
         uint256 amountOut = _normalizeDecimals(amountInAfterFee, decimalsIn, decimalsOut);
 
-        require(amountOut > 0, AmountOutCannotBeZero());
-
         // Slippage protection: ensure normalized output meets user's minimum acceptable amount
+        // Note: Since minAmountOut > 0 (checked above) and amountOut >= minAmountOut, amountOut is guaranteed to be > 0
         require(amountOut >= minAmountOut, SlippageExceeded());
 
         uint256 tokenOutBalance = IERC20(tokenOut).balanceOf(address(this));
@@ -401,8 +404,8 @@ contract StableSwapper is
     function updateTokenStatus(address token, bool isSwappable) external onlyRole(PAUSE_ROLE) {
         StableSwapperStorage storage $ = _stableSwapperStorage();
 
-        require(token != address(0), CannotBeZeroAddress());
         require(isTokenListed(token), TokenNotListed(token));
+        require(isTokenSwappable(token) != isSwappable, InvalidTokenSwappableState(token, isTokenSwappable(token)));
         $.tokenSwappable[token] = isSwappable;
         emit TokenStatusUpdated(token, isSwappable);
     }
@@ -461,20 +464,11 @@ contract StableSwapper is
     /// @dev Reserved amount does not restrict TREASURY_ROLE withdrawals
     ///
     /// @param token Address of the token
-    /// @param newReservedAmount New reserved amount (must not exceed current balance)
-    function updateReservedAmount(address token, uint256 newReservedAmount)
-        external
-        onlyRole(TREASURY_ROLE)
-        nonReentrant
-    {
+    /// @param newReservedAmount New reserved amount (can be any value)
+    function updateReservedAmount(address token, uint256 newReservedAmount) external onlyRole(TREASURY_ROLE) {
         StableSwapperStorage storage $ = _stableSwapperStorage();
 
-        require(token != address(0), CannotBeZeroAddress());
         require(isTokenListed(token), TokenNotListed(token));
-
-        // Safety check: reserved amount must not exceed balance
-        uint256 balance = IERC20(token).balanceOf(address(this));
-        require(newReservedAmount <= balance, ReservedAmountExceedsBalance(token, newReservedAmount, balance));
 
         $.reservedAmounts[token] = newReservedAmount;
         emit ReservedAmountUpdated(token, newReservedAmount);
@@ -508,6 +502,7 @@ contract StableSwapper is
         } else {
             _checkRole(PAUSE_ROLE);
         }
+        require(isFeatureEnabled(feature) != isEnabled, InvalidFeatureFlagState(feature, isFeatureEnabled(feature)));
         $.featureFlags[feature] = isEnabled;
         emit FeatureFlagUpdated(feature, isEnabled);
     }

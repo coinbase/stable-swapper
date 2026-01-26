@@ -32,23 +32,15 @@ contract SwapTest is StableSwapperBase {
         swapper.setFeatureFlag(StableSwapper.FeatureFlag.SWAP, true);
     }
 
-    function test_swap_reverts_whenTokenInIsZeroAddress() public {
+    function test_swap_reverts_whenRecipientIsZeroAddress() public {
+        setupBasicSwapEnvironment();
+
         uint256 swapAmount = 10 * 10 ** 6;
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
         vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
-        swapper.swap(address(0), address(appStable), swapAmount, swapAmount, wallet0);
-        vm.stopPrank();
-    }
-
-    function test_swap_reverts_whenTokenOutIsZeroAddress() public {
-        uint256 swapAmount = 10 * 10 ** 6;
-
-        vm.startPrank(wallet0);
-        usdc.approve(address(swapper), swapAmount);
-        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
-        swapper.swap(address(usdc), address(0), swapAmount, swapAmount, wallet0);
+        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, address(0));
         vm.stopPrank();
     }
 
@@ -292,7 +284,8 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), tinyAmount);
-        vm.expectRevert(StableSwapper.AmountOutCannotBeZero.selector);
+        // When amountOut is 0, it will fail slippage check since minAmountOut is 1
+        vm.expectRevert(StableSwapper.SlippageExceeded.selector);
         swapper.swap(address(usdc), address(appStable), tinyAmount, 1, wallet0);
         vm.stopPrank();
 

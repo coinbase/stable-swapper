@@ -85,9 +85,6 @@ contract UpdateTokenListingTest is StableSwapperBase {
         vm.prank(configureAuthority);
         swapper.updateTokenListing(address(testToken), true);
 
-        vm.prank(pauseAuthority);
-        swapper.updateTokenStatus(address(testToken), false);
-
         vm.prank(configureAuthority);
         swapper.updateTokenListing(address(testToken), false);
 
@@ -99,9 +96,6 @@ contract UpdateTokenListingTest is StableSwapperBase {
 
         vm.prank(configureAuthority);
         swapper.updateTokenListing(address(testToken), true);
-
-        vm.prank(pauseAuthority);
-        swapper.updateTokenStatus(address(testToken), false);
 
         vm.prank(configureAuthority);
         swapper.updateTokenListing(address(testToken), false);
