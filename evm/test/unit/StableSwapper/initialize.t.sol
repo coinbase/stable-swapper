@@ -43,6 +43,49 @@ contract InitializeTest is StableSwapperBase {
         new ERC1967Proxy(address(newImplementation), initData);
     }
 
+    function testFuzz_initialize_reverts_whenFeeBasisPointsExceedsDenominator(uint16 invalidFee) public {
+        // Bound the fee to be greater than FEE_DENOMINATOR (10000)
+        vm.assume(invalidFee > swapper.FEE_DENOMINATOR());
+
+        // Deploy new implementation
+        StableSwapper newImplementation = new StableSwapper();
+
+        bytes memory initData = abi.encodeWithSelector(
+            StableSwapper.initialize.selector,
+            defaultAdmin,
+            withdrawalAuthority,
+            configureAuthority,
+            pauseAuthority,
+            feeRecipient,
+            invalidFee, // Fee exceeds 100%
+            uint48(0)
+        );
+
+        // Should revert with FeeExceedsDenominator
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.FeeExceedsDenominator.selector, invalidFee));
+        new ERC1967Proxy(address(newImplementation), initData);
+    }
+
+    function test_initialize_reverts_whenFeeRecipientIsZeroAddress() public {
+        // Deploy new implementation
+        StableSwapper newImplementation = new StableSwapper();
+
+        bytes memory initData = abi.encodeWithSelector(
+            StableSwapper.initialize.selector,
+            defaultAdmin,
+            withdrawalAuthority,
+            configureAuthority,
+            pauseAuthority,
+            address(0), // feeRecipient - not allowed
+            uint16(0),
+            uint48(0)
+        );
+
+        // Should revert with CannotBeZeroAddress
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
+        new ERC1967Proxy(address(newImplementation), initData);
+    }
+
     /*//////////////////////////////////////////////////////////////
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
@@ -65,13 +108,14 @@ contract InitializeTest is StableSwapperBase {
         StableSwapper newImplementation = new StableSwapper();
 
         // Zero addresses for non-admin authorities should be allowed (they just won't have permissions)
+        // However, feeRecipient must be non-zero
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             defaultAdmin,
             address(0), // withdrawalAuthority - allowed
             address(0), // configureAuthority - allowed
             address(0), // pauseAuthority - allowed
-            address(0), // feeRecipient - allowed
+            feeRecipient, // feeRecipient - must be non-zero
             uint64(0),
             uint48(0)
         );
@@ -80,6 +124,31 @@ contract InitializeTest is StableSwapperBase {
         ERC1967Proxy newProxy = new ERC1967Proxy(address(newImplementation), initData);
         StableSwapper newSwapper = StableSwapper(address(newProxy));
 
-        assertEq(newSwapper.feeRecipient(), address(0));
+        assertEq(newSwapper.feeRecipient(), feeRecipient);
+    }
+
+    function testFuzz_initialize_allowsValidFeeBasisPoints(uint16 validFee) public {
+        // Bound the fee to be less than or equal to FEE_DENOMINATOR (10000)
+        vm.assume(validFee <= swapper.FEE_DENOMINATOR());
+
+        // Deploy new implementation
+        StableSwapper newImplementation = new StableSwapper();
+
+        bytes memory initData = abi.encodeWithSelector(
+            StableSwapper.initialize.selector,
+            defaultAdmin,
+            withdrawalAuthority,
+            configureAuthority,
+            pauseAuthority,
+            feeRecipient,
+            validFee, // Valid fee (0-100%)
+            uint48(0)
+        );
+
+        // Should not revert with valid fee
+        ERC1967Proxy newProxy = new ERC1967Proxy(address(newImplementation), initData);
+        StableSwapper newSwapper = StableSwapper(address(newProxy));
+
+        assertEq(newSwapper.feeBasisPoints(), validFee);
     }
 }

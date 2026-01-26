@@ -22,6 +22,15 @@ contract PauseSwapsTest is StableSwapperBase {
         swapper.setFeatureFlag(StableSwapper.FeatureFlag.SWAP, false);
     }
 
+    function test_setFeatureFlag_reverts_whenStateUnchanged() public {
+        // SWAP is already enabled (true), try to set it to true again
+        vm.prank(pauseAuthority);
+        vm.expectRevert(
+            abi.encodeWithSelector(StableSwapper.InvalidFeatureFlagState.selector, StableSwapper.FeatureFlag.SWAP, true)
+        );
+        swapper.setFeatureFlag(StableSwapper.FeatureFlag.SWAP, true);
+    }
+
     /*//////////////////////////////////////////////////////////////
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/

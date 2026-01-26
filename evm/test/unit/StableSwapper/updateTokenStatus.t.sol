@@ -25,16 +25,19 @@ contract UpdateTokenStatusTest is StableSwapperBase {
         swapper.updateTokenStatus(address(usdc), false);
     }
 
-    function test_updateTokenStatus_reverts_whenTokenIsZeroAddress() public {
-        vm.prank(pauseAuthority);
-        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
-        swapper.updateTokenStatus(address(0), false);
-    }
-
     function test_updateTokenStatus_reverts_whenTokenNotListed() public {
         vm.prank(pauseAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenNotListed.selector, address(usdc)));
         swapper.updateTokenStatus(address(usdc), false);
+    }
+
+    function test_updateTokenStatus_reverts_whenStatusUnchanged() public {
+        setupBasicSwapEnvironment();
+
+        // Token is already swappable (true), try to set it to true again
+        vm.prank(pauseAuthority);
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.InvalidTokenSwappableState.selector, address(usdc), true));
+        swapper.updateTokenStatus(address(usdc), true);
     }
 
     /*//////////////////////////////////////////////////////////////

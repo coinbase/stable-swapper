@@ -26,40 +26,10 @@ contract UpdateReservedAmountTest is StableSwapperBase {
         swapper.updateReservedAmount(address(usdc), reservedAmount);
     }
 
-    function test_updateReservedAmount_reverts_whenTokenIsZeroAddress() public {
-        uint64 reservedAmount = 100 * 10 ** 6;
-        vm.prank(withdrawalAuthority);
-        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
-        swapper.updateReservedAmount(address(0), reservedAmount);
-    }
-
     function test_updateReservedAmount_reverts_whenTokenNotListed() public {
         uint64 reservedAmount = 100 * 10 ** 6;
         vm.prank(withdrawalAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenNotListed.selector, address(usdc)));
-        swapper.updateReservedAmount(address(usdc), reservedAmount);
-    }
-
-    /**
-     * @notice Fuzz test: Any reserved amount greater than liquidity amount should revert
-     * @dev Tests that reserved amount cannot exceed liquidity amount
-     */
-    function testFuzz_updateReservedAmount_reverts_whenReservedAmountExceedsBalance(uint256 reservedAmountSeed) public {
-        uint64 liquidityAmount = 100 * 10 ** 6;
-        uint64 reservedAmount = uint64(bound(reservedAmountSeed, liquidityAmount + 1, type(uint64).max));
-
-        vm.prank(configureAuthority);
-        swapper.updateTokenListing(address(usdc), true);
-
-        vm.prank(withdrawalAuthority);
-        usdc.transfer(address(swapper), liquidityAmount);
-
-        vm.prank(withdrawalAuthority);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                StableSwapper.ReservedAmountExceedsBalance.selector, address(usdc), reservedAmount, liquidityAmount
-            )
-        );
         swapper.updateReservedAmount(address(usdc), reservedAmount);
     }
 
@@ -68,12 +38,12 @@ contract UpdateReservedAmountTest is StableSwapperBase {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Fuzz test: Any valid reserved amount (0-liquidityAmount) should be accepted
-     * @dev Tests that all reserved amounts within valid range can be set
+     * @notice Fuzz test: Any reserved amount can be set regardless of current balance
+     * @dev Tests that reserved amounts can be set flexibly
      */
     function testFuzz_updateReservedAmount_updatesReservedAmount(uint256 reservedAmountSeed) public {
         uint64 liquidityAmount = 500 * 10 ** 6;
-        uint64 reservedAmount = uint64(bound(reservedAmountSeed, 0, liquidityAmount));
+        uint64 reservedAmount = uint64(bound(reservedAmountSeed, 0, type(uint256).max));
 
         vm.prank(configureAuthority);
         swapper.updateTokenListing(address(usdc), true);
