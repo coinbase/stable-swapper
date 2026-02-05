@@ -22,7 +22,7 @@ import {StableSwapper} from "../src/StableSwapper.sol";
  *     - CONFIGURE_AUTHORITY: Address with CONFIGURE_ROLE (can add tokens, update fees)
  *     - PAUSE_AUTHORITY: Address with PAUSE_ROLE (can pause operations)
  *     - FEE_RECIPIENT: Address that receives swap fees
- *     - FEE_RATE: Fee rate in basis points (e.g., 100 = 1%)
+ *     - FEE_BASIS_POINTS: Fee rate in basis points (e.g., 100 = 1%)
  *     - ADMIN_TRANSFER_DELAY: Delay in seconds for 2-step admin transfers (e.g., 259200 = 3 days)
  *
  *   Deploy to network:
