@@ -19,6 +19,12 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeab
 /// @dev It implements UUPS upgradeability pattern and uses role-based access control for administration.
 /// @dev The contract supports three main feature flags: SWAP, WITHDRAW, and ALLOWLIST.
 ///
+/// @dev IMPORTANT LIMITATION: This contract does NOT support fee-on-transfer tokens. The swap logic
+/// @dev assumes 1:1 transfers where the received amount equals the specified transfer amount. Tokens
+/// @dev that deduct fees during transfers (like USDT's fee mechanism if enabled) would cause accounting
+/// @dev errors and must NOT be listed. If a listed token activates transfer fees, it must be immediately
+/// @dev disabled via updateTokenStatus() and removed via updateTokenListing() after draining liquidity.
+///
 /// @dev Roles:
 /// @dev - DEFAULT_ADMIN_ROLE: Can authorize upgrades and manage all other roles (single holder, 2-step transfer)
 /// @dev - TREASURY_ROLE: Can withdraw liquidity (treasury) and update reserved amounts
@@ -380,6 +386,10 @@ contract StableSwapper is
     ///
     /// @dev When listing a token (isListed=true), the token is added with swappable=false and reservedAmount=0
     /// @dev When unlisting a token (isListed=false), the token must not be swappable
+    ///
+    /// @dev IMPORTANT: Before listing any token, verify it does NOT implement fee-on-transfer mechanisms.
+    /// @dev The contract assumes 1:1 transfers. Tokens with transfer fees will cause accounting errors.
+    /// @dev Avoid listing tokens with configurable transfer fees, even if currently disabled (e.g., USDT).
     ///
     /// @param token Address of the ERC20 token
     /// @param isListed True to list the token, false to unlist it
