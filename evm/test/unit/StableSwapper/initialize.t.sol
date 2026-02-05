@@ -86,6 +86,66 @@ contract InitializeTest is StableSwapperBase {
         new ERC1967Proxy(address(newImplementation), initData);
     }
 
+    function test_initialize_reverts_whenWithdrawAuthorityIsZeroAddress() public {
+        // Deploy new implementation
+        StableSwapper newImplementation = new StableSwapper();
+
+        bytes memory initData = abi.encodeWithSelector(
+            StableSwapper.initialize.selector,
+            defaultAdmin,
+            address(0), // withdrawAuthority - not allowed
+            configureAuthority,
+            pauseAuthority,
+            feeRecipient,
+            uint16(0),
+            uint48(0)
+        );
+
+        // Should revert with CannotBeZeroAddress
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
+        new ERC1967Proxy(address(newImplementation), initData);
+    }
+
+    function test_initialize_reverts_whenConfigureAuthorityIsZeroAddress() public {
+        // Deploy new implementation
+        StableSwapper newImplementation = new StableSwapper();
+
+        bytes memory initData = abi.encodeWithSelector(
+            StableSwapper.initialize.selector,
+            defaultAdmin,
+            withdrawalAuthority,
+            address(0), // configureAuthority - not allowed
+            pauseAuthority,
+            feeRecipient,
+            uint16(0),
+            uint48(0)
+        );
+
+        // Should revert with CannotBeZeroAddress
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
+        new ERC1967Proxy(address(newImplementation), initData);
+    }
+
+    function test_initialize_reverts_whenPauseAuthorityIsZeroAddress() public {
+        // Deploy new implementation
+        StableSwapper newImplementation = new StableSwapper();
+
+        bytes memory initData = abi.encodeWithSelector(
+            StableSwapper.initialize.selector,
+            defaultAdmin,
+            withdrawalAuthority,
+            configureAuthority,
+            address(0), // pauseAuthority - not allowed
+            feeRecipient,
+            uint16(0),
+            uint48(0)
+        );
+
+        // Should revert with CannotBeZeroAddress
+        vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
+        new ERC1967Proxy(address(newImplementation), initData);
+    }
+
     /*//////////////////////////////////////////////////////////////
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
@@ -101,30 +161,6 @@ contract InitializeTest is StableSwapperBase {
         assertTrue(swapper.isFeatureEnabled(StableSwapper.FeatureFlag.WITHDRAW));
         assertEq(swapper.getListedTokensCount(), 0);
         assertFalse(swapper.isFeatureEnabled(StableSwapper.FeatureFlag.ALLOWLIST));
-    }
-
-    function test_initialize_allowsZeroAddressForOtherAuthorities() public {
-        // Deploy new implementation
-        StableSwapper newImplementation = new StableSwapper();
-
-        // Zero addresses for non-admin authorities should be allowed (they just won't have permissions)
-        // However, feeRecipient must be non-zero
-        bytes memory initData = abi.encodeWithSelector(
-            StableSwapper.initialize.selector,
-            defaultAdmin,
-            address(0), // withdrawalAuthority - allowed
-            address(0), // configureAuthority - allowed
-            address(0), // pauseAuthority - allowed
-            feeRecipient, // feeRecipient - must be non-zero
-            uint64(0),
-            uint48(0)
-        );
-
-        // Should not revert
-        ERC1967Proxy newProxy = new ERC1967Proxy(address(newImplementation), initData);
-        StableSwapper newSwapper = StableSwapper(address(newProxy));
-
-        assertEq(newSwapper.feeRecipient(), feeRecipient);
     }
 
     function testFuzz_initialize_allowsValidFeeBasisPoints(uint16 validFee) public {

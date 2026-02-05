@@ -270,6 +270,10 @@ contract StableSwapper is
     ) public initializer {
         __AccessControlDefaultAdminRules_init(initialAdminTransferDelay, defaultAdmin);
 
+        require(withdrawAuthority != address(0), CannotBeZeroAddress());
+        require(configureAuthority != address(0), CannotBeZeroAddress());
+        require(pauseAuthority != address(0), CannotBeZeroAddress());
+
         _grantRole(TREASURY_ROLE, withdrawAuthority);
         _grantRole(CONFIGURE_ROLE, configureAuthority);
         _grantRole(PAUSE_ROLE, pauseAuthority);
