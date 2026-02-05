@@ -19,7 +19,7 @@ contract InitializeTest is StableSwapperBase {
     function test_initialize_reverts_whenCalledTwice() public {
         // Try to initialize again on already initialized contract
         vm.expectRevert();
-        swapper.initialize(defaultAdmin, withdrawalAuthority, configureAuthority, pauseAuthority, feeRecipient, 0, 0);
+        swapper.initialize(defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, 0, 0);
     }
 
     function test_initialize_reverts_whenDefaultAdminIsZeroAddress() public {
@@ -30,7 +30,7 @@ contract InitializeTest is StableSwapperBase {
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             address(0), // defaultAdmin - not allowed
-            withdrawalAuthority,
+            treasuryAuthority,
             configureAuthority,
             pauseAuthority,
             feeRecipient,
@@ -53,7 +53,7 @@ contract InitializeTest is StableSwapperBase {
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             defaultAdmin,
-            withdrawalAuthority,
+            treasuryAuthority,
             configureAuthority,
             pauseAuthority,
             feeRecipient,
@@ -73,7 +73,7 @@ contract InitializeTest is StableSwapperBase {
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             defaultAdmin,
-            withdrawalAuthority,
+            treasuryAuthority,
             configureAuthority,
             pauseAuthority,
             address(0), // feeRecipient - not allowed
@@ -86,14 +86,14 @@ contract InitializeTest is StableSwapperBase {
         new ERC1967Proxy(address(newImplementation), initData);
     }
 
-    function test_initialize_reverts_whenWithdrawAuthorityIsZeroAddress() public {
+    function test_initialize_reverts_whenTreasuryAuthorityIsZeroAddress() public {
         // Deploy new implementation
         StableSwapper newImplementation = new StableSwapper();
 
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             defaultAdmin,
-            address(0), // withdrawAuthority - not allowed
+            address(0), // treasuryAuthority - not allowed
             configureAuthority,
             pauseAuthority,
             feeRecipient,
@@ -113,7 +113,7 @@ contract InitializeTest is StableSwapperBase {
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             defaultAdmin,
-            withdrawalAuthority,
+            treasuryAuthority,
             address(0), // configureAuthority - not allowed
             pauseAuthority,
             feeRecipient,
@@ -133,7 +133,7 @@ contract InitializeTest is StableSwapperBase {
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             defaultAdmin,
-            withdrawalAuthority,
+            treasuryAuthority,
             configureAuthority,
             address(0), // pauseAuthority - not allowed
             feeRecipient,
@@ -152,7 +152,7 @@ contract InitializeTest is StableSwapperBase {
 
     function test_initialize_setsAllInitialValues() public view {
         assertTrue(swapper.hasRole(swapper.DEFAULT_ADMIN_ROLE(), defaultAdmin));
-        assertTrue(swapper.hasRole(swapper.TREASURY_ROLE(), withdrawalAuthority));
+        assertTrue(swapper.hasRole(swapper.TREASURY_ROLE(), treasuryAuthority));
         assertTrue(swapper.hasRole(swapper.CONFIGURE_ROLE(), configureAuthority));
         assertTrue(swapper.hasRole(swapper.PAUSE_ROLE(), pauseAuthority));
         assertEq(swapper.feeRecipient(), feeRecipient);
@@ -173,7 +173,7 @@ contract InitializeTest is StableSwapperBase {
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             defaultAdmin,
-            withdrawalAuthority,
+            treasuryAuthority,
             configureAuthority,
             pauseAuthority,
             feeRecipient,
