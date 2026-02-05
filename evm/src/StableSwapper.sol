@@ -102,13 +102,15 @@ contract StableSwapper is
     /// @param pauseAuthority Initial address granted the PAUSE_ROLE
     /// @param initialFeeRecipient Address that will receive swap fees
     /// @param initialFeeBasisPoints Initial fee in basis points (e.g., 100 = 1%)
+    /// @param initialAdminTransferDelay Delay in seconds for 2-step DEFAULT_ADMIN_ROLE transfers
     event Initialized(
         address defaultAdmin,
         address treasuryAuthority,
         address configureAuthority,
         address pauseAuthority,
         address initialFeeRecipient,
-        uint16 initialFeeBasisPoints
+        uint16 initialFeeBasisPoints,
+        uint48 initialAdminTransferDelay
     );
 
     /// @notice Emitted when a token's listing status is updated
@@ -119,29 +121,42 @@ contract StableSwapper is
 
     /// @notice Emitted when a swap is executed
     ///
+    /// @param caller Address that initiated the swap (msg.sender)
     /// @param tokenIn Address of the input token
     /// @param tokenOut Address of the output token
     /// @param amountIn Amount of input tokens provided (before fees)
     /// @param amountOut Amount of output tokens sent to recipient (after decimal normalization)
     /// @param fee Fee amount collected in input token
-    event Swap(address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut, uint256 fee);
+    /// @param recipient Address that received the output tokens
+    event Swap(
+        address indexed caller,
+        address indexed tokenIn,
+        address indexed tokenOut,
+        uint256 amountIn,
+        uint256 amountOut,
+        uint256 fee,
+        address recipient
+    );
 
     /// @notice Emitted when liquidity is withdrawn from the contract
     ///
+    /// @param caller Address that initiated the withdrawal (TREASURY_ROLE holder)
     /// @param token Address of the token that was withdrawn
     /// @param recipient Address that received the withdrawn tokens
     /// @param amount Amount of tokens withdrawn
-    event LiquidityWithdrawn(address indexed token, address indexed recipient, uint256 amount);
+    event LiquidityWithdrawn(address indexed caller, address indexed token, address indexed recipient, uint256 amount);
 
     /// @notice Emitted when the fee recipient address is updated
     ///
+    /// @param oldFeeRecipient Previous address that received swap fees
     /// @param newFeeRecipient New address that will receive swap fees
-    event FeeRecipientUpdated(address newFeeRecipient);
+    event FeeRecipientUpdated(address indexed oldFeeRecipient, address indexed newFeeRecipient);
 
     /// @notice Emitted when the fee is updated
     ///
+    /// @param oldFeeBasisPoints Previous fee in basis points
     /// @param newFeeBasisPoints New fee in basis points (e.g., 100 = 1%)
-    event FeeUpdated(uint16 newFeeBasisPoints);
+    event FeeUpdated(uint16 oldFeeBasisPoints, uint16 newFeeBasisPoints);
 
     /// @notice Emitted when a feature flag is updated
     ///
@@ -152,8 +167,9 @@ contract StableSwapper is
     /// @notice Emitted when a token's reserved amount is updated
     ///
     /// @param token Address of the token whose reserved amount was updated
+    /// @param oldReservedAmount Previous reserved amount
     /// @param newReservedAmount New reserved amount (cannot be withdrawn from liquidity)
-    event ReservedAmountUpdated(address indexed token, uint256 newReservedAmount);
+    event ReservedAmountUpdated(address indexed token, uint256 oldReservedAmount, uint256 newReservedAmount);
 
     /// @notice Emitted when a token's swappable status is updated
     ///
@@ -300,7 +316,8 @@ contract StableSwapper is
             configureAuthority,
             pauseAuthority,
             initialFeeRecipient,
-            initialFeeBasisPoints
+            initialFeeBasisPoints,
+            initialAdminTransferDelay
         );
     }
 
@@ -379,7 +396,7 @@ contract StableSwapper is
         // Step 3: Transfer the amount out to the recipient
         SafeERC20.safeTransfer(IERC20(tokenOut), recipient, amountOut);
 
-        emit Swap(tokenIn, tokenOut, amountIn, amountOut, fee);
+        emit Swap(msg.sender, tokenIn, tokenOut, amountIn, amountOut, fee, recipient);
     }
 
     /// @notice Updates the listing status of a token
@@ -448,7 +465,7 @@ contract StableSwapper is
         // This allows treasury role to manage liquidity in emergency situations
         SafeERC20.safeTransfer(IERC20(token), recipient, amount);
 
-        emit LiquidityWithdrawn(token, recipient, amount);
+        emit LiquidityWithdrawn(msg.sender, token, recipient, amount);
     }
 
     /// @notice Updates the address that receives swap fees
@@ -458,8 +475,9 @@ contract StableSwapper is
         StableSwapperStorage storage $ = _stableSwapperStorage();
 
         require(newFeeRecipient != address(0), CannotBeZeroAddress());
+        address oldFeeRecipient = feeRecipient();
         $.feeRecipient = newFeeRecipient;
-        emit FeeRecipientUpdated(newFeeRecipient);
+        emit FeeRecipientUpdated(oldFeeRecipient, newFeeRecipient);
     }
 
     /// @notice Updates the fee charged on swaps
@@ -469,8 +487,9 @@ contract StableSwapper is
         StableSwapperStorage storage $ = _stableSwapperStorage();
 
         require(newFeeBasisPoints <= FEE_DENOMINATOR, FeeExceedsDenominator(newFeeBasisPoints));
+        uint16 oldFeeBasisPoints = feeBasisPoints();
         $.feeBasisPoints = newFeeBasisPoints;
-        emit FeeUpdated(newFeeBasisPoints);
+        emit FeeUpdated(oldFeeBasisPoints, newFeeBasisPoints);
     }
 
     /// @notice Updates the reserved amount for a token (amount that cannot be withdrawn by swaps)
@@ -484,8 +503,9 @@ contract StableSwapper is
 
         require(isTokenListed(token), TokenNotListed(token));
 
+        uint256 oldReservedAmount = getReservedAmount(token);
         $.reservedAmounts[token] = newReservedAmount;
-        emit ReservedAmountUpdated(token, newReservedAmount);
+        emit ReservedAmountUpdated(token, oldReservedAmount, newReservedAmount);
     }
 
     /// @notice Updates an address's allowlist status
