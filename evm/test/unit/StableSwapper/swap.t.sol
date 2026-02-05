@@ -51,7 +51,7 @@ contract SwapTest is StableSwapperBase {
         vm.prank(configureAuthority);
         swapper.updateTokenListing(address(usdc), true);
 
-        vm.prank(withdrawalAuthority);
+        vm.prank(treasuryAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
 
         vm.startPrank(wallet0);
@@ -215,7 +215,7 @@ contract SwapTest is StableSwapperBase {
         swapper.updateTokenStatus(address(appStable), true);
         vm.stopPrank();
 
-        vm.startPrank(withdrawalAuthority);
+        vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), initialLiquidity);
         appStable.transfer(address(swapper), initialLiquidity);
 
@@ -224,7 +224,7 @@ contract SwapTest is StableSwapperBase {
 
         // Withdraw liquidity below the reserved amount
         // This leaves balance < reservedAmount, triggering the check at line 364
-        swapper.withdrawLiquidity(address(appStable), withdrawAmount, withdrawalAuthority);
+        swapper.withdrawLiquidity(address(appStable), withdrawAmount, treasuryAuthority);
         vm.stopPrank();
 
         // Verify the balance is now below reserved amount
@@ -277,7 +277,7 @@ contract SwapTest is StableSwapperBase {
         swapper.updateTokenStatus(address(appStable), true);
         vm.stopPrank();
 
-        vm.startPrank(withdrawalAuthority);
+        vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
         appStable.transfer(address(swapper), liquidityAmount);
         vm.stopPrank();
@@ -346,7 +346,7 @@ contract SwapTest is StableSwapperBase {
         vm.stopPrank();
 
         // Deposit limited liquidity
-        vm.startPrank(withdrawalAuthority);
+        vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), limitedLiquidity);
         appStable.transfer(address(swapper), limitedLiquidity);
         vm.stopPrank();
@@ -384,7 +384,7 @@ contract SwapTest is StableSwapperBase {
         swapper.updateTokenStatus(address(appStable), true);
         vm.stopPrank();
 
-        vm.startPrank(withdrawalAuthority);
+        vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), depositedLiquidity);
         appStable.transfer(address(swapper), depositedLiquidity);
 
@@ -471,11 +471,11 @@ contract SwapTest is StableSwapperBase {
 
         MockERC20 tokenIn = new MockERC20("In Token", "IN", decimalsIn);
         // Mint enough for liquidity + swap amount to both treasury and wallet0
-        tokenIn.mint(withdrawalAuthority, liquidityAmountIn);
+        tokenIn.mint(treasuryAuthority, liquidityAmountIn);
         tokenIn.mint(wallet0, swapAmount);
 
         MockERC20 tokenOut = new MockERC20("Out Token", "OUT", decimalsOut);
-        tokenOut.mint(withdrawalAuthority, liquidityAmountOut);
+        tokenOut.mint(treasuryAuthority, liquidityAmountOut);
 
         vm.startPrank(configureAuthority);
         swapper.updateTokenListing(address(tokenIn), true);
@@ -487,7 +487,7 @@ contract SwapTest is StableSwapperBase {
         swapper.updateTokenStatus(address(tokenOut), true);
         vm.stopPrank();
 
-        vm.startPrank(withdrawalAuthority);
+        vm.startPrank(treasuryAuthority);
         tokenIn.transfer(address(swapper), liquidityAmountIn);
         tokenOut.transfer(address(swapper), liquidityAmountOut);
         vm.stopPrank();
@@ -537,11 +537,11 @@ contract SwapTest is StableSwapperBase {
 
         MockERC20 tokenIn = new MockERC20("In Token", "IN", decimalsIn);
         // Mint enough for liquidity + swap amount to both treasury and wallet0
-        tokenIn.mint(withdrawalAuthority, liquidityAmountIn);
+        tokenIn.mint(treasuryAuthority, liquidityAmountIn);
         tokenIn.mint(wallet0, swapAmount);
 
         MockERC20 tokenOut = new MockERC20("Out Token", "OUT", decimalsOut);
-        tokenOut.mint(withdrawalAuthority, liquidityAmountOut);
+        tokenOut.mint(treasuryAuthority, liquidityAmountOut);
 
         vm.startPrank(configureAuthority);
         swapper.updateTokenListing(address(tokenIn), true);
@@ -553,7 +553,7 @@ contract SwapTest is StableSwapperBase {
         swapper.updateTokenStatus(address(tokenOut), true);
         vm.stopPrank();
 
-        vm.startPrank(withdrawalAuthority);
+        vm.startPrank(treasuryAuthority);
         tokenIn.transfer(address(swapper), liquidityAmountIn);
         tokenOut.transfer(address(swapper), liquidityAmountOut);
         vm.stopPrank();

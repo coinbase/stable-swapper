@@ -91,14 +91,14 @@ contract StableSwapper is
     /// @dev DEFAULT_ADMIN_ROLE can grant/revoke other roles after initialization
     ///
     /// @param defaultAdmin Address granted the DEFAULT_ADMIN_ROLE (only role that can manage other roles)
-    /// @param withdrawAuthority Initial address granted the TREASURY_ROLE
+    /// @param treasuryAuthority Initial address granted the TREASURY_ROLE
     /// @param configureAuthority Initial address granted the CONFIGURE_ROLE
     /// @param pauseAuthority Initial address granted the PAUSE_ROLE
     /// @param initialFeeRecipient Address that will receive swap fees
     /// @param initialFeeBasisPoints Initial fee in basis points (e.g., 100 = 1%)
     event Initialized(
         address defaultAdmin,
-        address withdrawAuthority,
+        address treasuryAuthority,
         address configureAuthority,
         address pauseAuthority,
         address initialFeeRecipient,
@@ -253,7 +253,7 @@ contract StableSwapper is
     /// @dev Other roles (TREASURY_ROLE, CONFIGURE_ROLE, PAUSE_ROLE) can have multiple holders
     ///
     /// @param defaultAdmin Address granted DEFAULT_ADMIN_ROLE (can authorize UUPS upgrades and grant/revoke all other roles)
-    /// @param withdrawAuthority Initial address granted TREASURY_ROLE (can withdraw liquidity for treasury and update reserved amounts)
+    /// @param treasuryAuthority Initial address granted TREASURY_ROLE (can withdraw liquidity for treasury and update reserved amounts)
     /// @param configureAuthority Initial address granted CONFIGURE_ROLE (can add/remove tokens, update fees, manage allowlist)
     /// @param pauseAuthority Initial address granted PAUSE_ROLE (can pause/unpause operations and enable/disable tokens)
     /// @param initialFeeRecipient Address that will receive swap fees
@@ -261,7 +261,7 @@ contract StableSwapper is
     /// @param initialAdminTransferDelay Delay in seconds for 2-step DEFAULT_ADMIN_ROLE transfers (security feature)
     function initialize(
         address defaultAdmin,
-        address withdrawAuthority,
+        address treasuryAuthority,
         address configureAuthority,
         address pauseAuthority,
         address initialFeeRecipient,
@@ -270,11 +270,11 @@ contract StableSwapper is
     ) public initializer {
         __AccessControlDefaultAdminRules_init(initialAdminTransferDelay, defaultAdmin);
 
-        require(withdrawAuthority != address(0), CannotBeZeroAddress());
+        require(treasuryAuthority != address(0), CannotBeZeroAddress());
         require(configureAuthority != address(0), CannotBeZeroAddress());
         require(pauseAuthority != address(0), CannotBeZeroAddress());
 
-        _grantRole(TREASURY_ROLE, withdrawAuthority);
+        _grantRole(TREASURY_ROLE, treasuryAuthority);
         _grantRole(CONFIGURE_ROLE, configureAuthority);
         _grantRole(PAUSE_ROLE, pauseAuthority);
 
@@ -290,7 +290,7 @@ contract StableSwapper is
 
         emit Initialized(
             defaultAdmin,
-            withdrawAuthority,
+            treasuryAuthority,
             configureAuthority,
             pauseAuthority,
             initialFeeRecipient,

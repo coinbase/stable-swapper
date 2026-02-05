@@ -28,7 +28,7 @@ contract UpdateReservedAmountTest is StableSwapperBase {
 
     function test_updateReservedAmount_reverts_whenTokenNotListed() public {
         uint64 reservedAmount = 100 * 10 ** 6;
-        vm.prank(withdrawalAuthority);
+        vm.prank(treasuryAuthority);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenNotListed.selector, address(usdc)));
         swapper.updateReservedAmount(address(usdc), reservedAmount);
     }
@@ -48,10 +48,10 @@ contract UpdateReservedAmountTest is StableSwapperBase {
         vm.prank(configureAuthority);
         swapper.updateTokenListing(address(usdc), true);
 
-        vm.prank(withdrawalAuthority);
+        vm.prank(treasuryAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
 
-        vm.prank(withdrawalAuthority);
+        vm.prank(treasuryAuthority);
         swapper.updateReservedAmount(address(usdc), reservedAmount);
 
         assertEq(swapper.getReservedAmount(address(usdc)), reservedAmount);

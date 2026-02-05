@@ -67,7 +67,7 @@ contract VerifyDeployment is Script {
         // Authorities
         console.log("\n--- Authorities ---");
         bytes32 defaultAdminRole = stableSwapper.DEFAULT_ADMIN_ROLE();
-        bytes32 withdrawalAuthRole = stableSwapper.TREASURY_ROLE();
+        bytes32 treasuryAuthRole = stableSwapper.TREASURY_ROLE();
         bytes32 configureAuthRole = stableSwapper.CONFIGURE_ROLE();
         bytes32 pauseAuthRole = stableSwapper.PAUSE_ROLE();
 
@@ -79,7 +79,7 @@ contract VerifyDeployment is Script {
         // Other roles can have multiple holders, so we just check if anyone has them
         // For display purposes, we could use getRoleMemberCount() but it's not exposed
         // So we'll just note if the initial role holders still have their roles
-        console.log("Treasury Role Exists:", stableSwapper.hasRole(withdrawalAuthRole, address(0)) ? "NO" : "YES");
+        console.log("Treasury Role Exists:", stableSwapper.hasRole(treasuryAuthRole, address(0)) ? "NO" : "YES");
         console.log("Configure Role Exists:", stableSwapper.hasRole(configureAuthRole, address(0)) ? "NO" : "YES");
         console.log("Pause Role Exists:", stableSwapper.hasRole(pauseAuthRole, address(0)) ? "NO" : "YES");
 

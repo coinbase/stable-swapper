@@ -35,13 +35,13 @@ contract MultiTokenSwapTest is StableSwapperBase {
         dai.mint(wallet1, 5000 * 10 ** 18);
         busd.mint(wallet1, 5000 * 10 ** 18);
 
-        // Mint tokens to withdrawal authority for liquidity
+        // Mint tokens to treasury authority for liquidity
         // These amounts need to cover all transfers in the tests
-        usdc.mint(withdrawalAuthority, 10000 * 10 ** 6); // Additional USDC for our tests
-        usdt.mint(withdrawalAuthority, 20000 * 10 ** 6); // Extra for allowlist test
-        dai.mint(withdrawalAuthority, 30000 * 10 ** 18); // Need more for cross-decimal test
-        busd.mint(withdrawalAuthority, 10000 * 10 ** 18);
-        tusd.mint(withdrawalAuthority, 10000 * 10 ** 18);
+        usdc.mint(treasuryAuthority, 10000 * 10 ** 6); // Additional USDC for our tests
+        usdt.mint(treasuryAuthority, 20000 * 10 ** 6); // Extra for allowlist test
+        dai.mint(treasuryAuthority, 30000 * 10 ** 18); // Need more for cross-decimal test
+        busd.mint(treasuryAuthority, 10000 * 10 ** 18);
+        tusd.mint(treasuryAuthority, 10000 * 10 ** 18);
     }
 
     /// @dev Complete integration test covering:
@@ -76,7 +76,7 @@ contract MultiTokenSwapTest is StableSwapperBase {
         assertEq(swapper.getListedTokensCount(), 4);
 
         // Add liquidity for all tokens
-        vm.startPrank(withdrawalAuthority);
+        vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), 10000 * 10 ** 6);
         usdt.transfer(address(swapper), 10000 * 10 ** 6);
         dai.transfer(address(swapper), 10000 * 10 ** 18);
@@ -161,7 +161,7 @@ contract MultiTokenSwapTest is StableSwapperBase {
         uint256 reservedUSDC = 5000 * 10 ** 6; // Reserve 5000 USDC
         uint256 reservedDAI = 3000 * 10 ** 18; // Reserve 3000 DAI
 
-        vm.startPrank(withdrawalAuthority);
+        vm.startPrank(treasuryAuthority);
         swapper.updateReservedAmount(address(usdc), reservedUSDC);
         swapper.updateReservedAmount(address(dai), reservedDAI);
         vm.stopPrank();
@@ -240,7 +240,7 @@ contract MultiTokenSwapTest is StableSwapperBase {
         assertEq(swapper.getListedTokensCount(), 5);
 
         // Add liquidity for TUSD
-        vm.prank(withdrawalAuthority);
+        vm.prank(treasuryAuthority);
         tusd.transfer(address(swapper), 10000 * 10 ** 18);
 
         // Enable TUSD for swapping

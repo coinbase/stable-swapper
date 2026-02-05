@@ -16,7 +16,7 @@ contract DeployStableSwapperTest is Test {
     DeployStableSwapper deployer;
 
     address defaultAdmin = makeAddr("defaultAdmin");
-    address withdrawalAuthority = makeAddr("withdrawalAuthority");
+    address treasuryAuthority = makeAddr("treasuryAuthority");
     address configureAuthority = makeAddr("configureAuthority");
     address pauseAuthority = makeAddr("pauseAuthority");
     address feeRecipient = makeAddr("feeRecipient");
@@ -31,7 +31,7 @@ contract DeployStableSwapperTest is Test {
         vm.recordLogs();
 
         (address implementation, address proxy) = deployer.deploy(
-            defaultAdmin, withdrawalAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
+            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
         );
 
         // Get recorded logs
@@ -62,7 +62,7 @@ contract DeployStableSwapperTest is Test {
             stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Default admin role should be set"
         );
         assertTrue(
-            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), withdrawalAuthority), "Treasury role should be set"
+            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), treasuryAuthority), "Treasury role should be set"
         );
         assertTrue(
             stableSwapper.hasRole(stableSwapper.CONFIGURE_ROLE(), configureAuthority), "Configure role should be set"
@@ -91,7 +91,7 @@ contract DeployStableSwapperTest is Test {
 
     function test_deploy_implementation_cannot_be_initialized() public {
         (address implementation,) = deployer.deploy(
-            defaultAdmin, withdrawalAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
+            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
         );
 
         // Try to initialize the implementation directly (should fail)
@@ -99,13 +99,13 @@ contract DeployStableSwapperTest is Test {
 
         vm.expectRevert();
         impl.initialize(
-            defaultAdmin, withdrawalAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
+            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
         );
     }
 
     function test_deploy_proxy_cannot_be_initialized_twice() public {
         (, address proxy) = deployer.deploy(
-            defaultAdmin, withdrawalAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
+            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
         );
 
         StableSwapper stableSwapper = StableSwapper(proxy);
@@ -113,7 +113,7 @@ contract DeployStableSwapperTest is Test {
         // Try to initialize again (should fail)
         vm.expectRevert();
         stableSwapper.initialize(
-            defaultAdmin, withdrawalAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
+            defaultAdmin, treasuryAuthority, configureAuthority, pauseAuthority, feeRecipient, feeBasisPoints, 0
         );
     }
 }

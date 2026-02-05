@@ -36,7 +36,7 @@ contract StableSwapperBase is Test {
     MockERC20 public appStable;
 
     address public defaultAdmin;
-    address public withdrawalAuthority;
+    address public treasuryAuthority;
     address public configureAuthority;
     address public pauseAuthority;
     address public feeRecipient;
@@ -48,7 +48,7 @@ contract StableSwapperBase is Test {
     function setUp() public virtual {
         // Setup test accounts
         defaultAdmin = makeAddr("defaultAdmin");
-        withdrawalAuthority = makeAddr("withdrawalAuthority");
+        treasuryAuthority = makeAddr("treasuryAuthority");
         configureAuthority = makeAddr("configureAuthority");
         pauseAuthority = makeAddr("pauseAuthority");
         feeRecipient = makeAddr("feeRecipient");
@@ -67,7 +67,7 @@ contract StableSwapperBase is Test {
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             defaultAdmin,
-            withdrawalAuthority,
+            treasuryAuthority,
             configureAuthority,
             pauseAuthority,
             feeRecipient,
@@ -82,9 +82,9 @@ contract StableSwapperBase is Test {
         usdc.mint(wallet0, 1000 * 10 ** 6); // 1000 USDC
         appStable.mint(wallet0, 1000 * 10 ** 6); // 1000 AppStable
 
-        // Mint tokens to withdrawal authority for liquidity operations
-        usdc.mint(withdrawalAuthority, 1000 * 10 ** 6);
-        appStable.mint(withdrawalAuthority, 1000 * 10 ** 6);
+        // Mint tokens to treasury authority for liquidity operations
+        usdc.mint(treasuryAuthority, 1000 * 10 ** 6);
+        appStable.mint(treasuryAuthority, 1000 * 10 ** 6);
     }
 
     /**
@@ -103,8 +103,8 @@ contract StableSwapperBase is Test {
         swapper.updateTokenStatus(address(appStable), true);
         vm.stopPrank();
 
-        // Withdrawal authority deposits liquidity
-        vm.startPrank(withdrawalAuthority);
+        // Treasury authority deposits liquidity
+        vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), 500 * 10 ** 6);
         appStable.transfer(address(swapper), 500 * 10 ** 6);
         vm.stopPrank();

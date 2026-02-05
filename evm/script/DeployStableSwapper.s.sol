@@ -18,7 +18,7 @@ import {StableSwapper} from "../src/StableSwapper.sol";
  * Usage:
  *   Set environment variables:
  *     - DEFAULT_ADMIN: Address with DEFAULT_ADMIN_ROLE (can upgrade contract and manage roles)
- *     - WITHDRAW_AUTHORITY: Address with TREASURY_ROLE (can manage liquidity)
+ *     - TREASURY_AUTHORITY: Address with TREASURY_ROLE (can manage liquidity)
  *     - CONFIGURE_AUTHORITY: Address with CONFIGURE_ROLE (can add tokens, update fees)
  *     - PAUSE_AUTHORITY: Address with PAUSE_ROLE (can pause operations)
  *     - FEE_RECIPIENT: Address that receives swap fees
@@ -41,7 +41,7 @@ contract DeployStableSwapper is Script {
         address indexed implementation,
         address indexed proxy,
         address defaultAdmin,
-        address withdrawalAuthority,
+        address treasuryAuthority,
         address configureAuthority,
         address pauseAuthority,
         address feeRecipient,
@@ -55,7 +55,7 @@ contract DeployStableSwapper is Script {
     function run() external {
         // Read configuration from environment variables
         address defaultAdmin = vm.envAddress("DEFAULT_ADMIN");
-        address withdrawalAuthority = vm.envAddress("WITHDRAW_AUTHORITY");
+        address treasuryAuthority = vm.envAddress("TREASURY_AUTHORITY");
         address configureAuthority = vm.envAddress("CONFIGURE_AUTHORITY");
         address pauseAuthority = vm.envAddress("PAUSE_AUTHORITY");
         address feeRecipient = vm.envAddress("FEE_RECIPIENT");
@@ -64,7 +64,7 @@ contract DeployStableSwapper is Script {
 
         // Validate configuration
         require(defaultAdmin != address(0), "DEFAULT_ADMIN cannot be zero address");
-        require(withdrawalAuthority != address(0), "WITHDRAW_AUTHORITY cannot be zero address");
+        require(treasuryAuthority != address(0), "TREASURY_AUTHORITY cannot be zero address");
         require(configureAuthority != address(0), "CONFIGURE_AUTHORITY cannot be zero address");
         require(pauseAuthority != address(0), "PAUSE_AUTHORITY cannot be zero address");
         require(feeRecipient != address(0), "FEE_RECIPIENT cannot be zero address");
@@ -72,7 +72,7 @@ contract DeployStableSwapper is Script {
         // Log deployment configuration
         console.log("\n=== StableSwapper Deployment Configuration ===");
         console.log("Default Admin:", defaultAdmin);
-        console.log("Treasury Role Holder:", withdrawalAuthority);
+        console.log("Treasury Role Holder:", treasuryAuthority);
         console.log("Configure Role Holder:", configureAuthority);
         console.log("Pause Role Holder:", pauseAuthority);
         console.log("Fee Recipient:", feeRecipient);
@@ -87,7 +87,7 @@ contract DeployStableSwapper is Script {
         // Deploy contracts
         (address implementation, address proxy) = deploy(
             defaultAdmin,
-            withdrawalAuthority,
+            treasuryAuthority,
             configureAuthority,
             pauseAuthority,
             feeRecipient,
@@ -108,7 +108,7 @@ contract DeployStableSwapper is Script {
             implementation,
             proxy,
             defaultAdmin,
-            withdrawalAuthority,
+            treasuryAuthority,
             configureAuthority,
             pauseAuthority,
             feeRecipient,
@@ -120,7 +120,7 @@ contract DeployStableSwapper is Script {
     /// @notice Deploys StableSwapper implementation and proxy
     ///
     /// @param defaultAdmin Address with DEFAULT_ADMIN_ROLE
-    /// @param withdrawalAuthority Address with TREASURY_ROLE
+    /// @param treasuryAuthority Address with TREASURY_ROLE
     /// @param configureAuthority Address with CONFIGURE_ROLE
     /// @param pauseAuthority Address with PAUSE_ROLE
     /// @param feeRecipient Address that receives swap fees
@@ -131,7 +131,7 @@ contract DeployStableSwapper is Script {
     /// @return proxy Address of the proxy contract (main entry point)
     function deploy(
         address defaultAdmin,
-        address withdrawalAuthority,
+        address treasuryAuthority,
         address configureAuthority,
         address pauseAuthority,
         address feeRecipient,
@@ -148,7 +148,7 @@ contract DeployStableSwapper is Script {
         bytes memory initData = abi.encodeWithSelector(
             StableSwapper.initialize.selector,
             defaultAdmin,
-            withdrawalAuthority,
+            treasuryAuthority,
             configureAuthority,
             pauseAuthority,
             feeRecipient,
@@ -170,7 +170,7 @@ contract DeployStableSwapper is Script {
             stableSwapper.hasRole(stableSwapper.DEFAULT_ADMIN_ROLE(), defaultAdmin), "Default admin not set correctly"
         );
         require(
-            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), withdrawalAuthority), "Treasury role not set correctly"
+            stableSwapper.hasRole(stableSwapper.TREASURY_ROLE(), treasuryAuthority), "Treasury role not set correctly"
         );
         require(
             stableSwapper.hasRole(stableSwapper.CONFIGURE_ROLE(), configureAuthority),

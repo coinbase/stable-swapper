@@ -50,7 +50,7 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
         swapper.updateTokenStatus(address(appStable), true);
         vm.stopPrank();
 
-        vm.startPrank(withdrawalAuthority);
+        vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
         appStable.transfer(address(swapper), liquidityAmount);
         vm.stopPrank();
