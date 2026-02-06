@@ -4,6 +4,53 @@ pragma solidity ^0.8.20;
 import {StableSwapper} from "../../../src/StableSwapper.sol";
 
 import {MockERC20, StableSwapperBase} from "../../lib/StableSwapperBase.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+/**
+ * @notice Mock ERC20 token that does not implement the decimals() function
+ * @dev This token only implements the core ERC20 interface, not the metadata extension
+ */
+contract MockERC20NoDecimals {
+    string public name = "No Decimals Token";
+    string public symbol = "NODEC";
+    uint256 public totalSupply;
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        emit Transfer(msg.sender, to, amount);
+        return true;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        emit Approval(msg.sender, spender, amount);
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        if (allowance[from][msg.sender] != type(uint256).max) {
+            allowance[from][msg.sender] -= amount;
+        }
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        emit Transfer(from, to, amount);
+        return true;
+    }
+
+    function mint(address to, uint256 amount) external {
+        totalSupply += amount;
+        balanceOf[to] += amount;
+        emit Transfer(address(0), to, amount);
+    }
+
+    // Note: decimals() is intentionally NOT implemented
+}
 
 /**
  * @title UpdateTokenListingTest
@@ -114,6 +161,23 @@ contract UpdateTokenListingTest is StableSwapperBase {
         assertFalse(swapper.isTokenSwappable(address(testToken)));
         assertEq(swapper.getReservedAmount(address(testToken)), 0);
         assertEq(swapper.getTokenDecimals(address(testToken)), 6);
+    }
+
+    function test_updateTokenListing_listsTokenWithoutDecimals() public {
+        MockERC20NoDecimals noDecToken = new MockERC20NoDecimals();
+
+        vm.prank(configureAuthority);
+        swapper.updateTokenListing(address(noDecToken), true);
+
+        assertEq(swapper.getListedTokensCount(), 1);
+
+        address[] memory listedTokens = swapper.getListedTokens();
+        assertEq(listedTokens[0], address(noDecToken));
+
+        assertFalse(swapper.isTokenSwappable(address(noDecToken)));
+        assertEq(swapper.getReservedAmount(address(noDecToken)), 0);
+        // Should default to 18 decimals when decimals() is not implemented
+        assertEq(swapper.getTokenDecimals(address(noDecToken)), 18);
     }
 }
 
