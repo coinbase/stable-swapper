@@ -155,21 +155,21 @@ contract SwapTest is StableSwapperBase {
         vm.stopPrank();
     }
 
-    function testFuzz_swap_reverts_whenFeeNumeratorOverflows(uint256 feeRateSeed, uint256 amountSeed) public {
+    function testFuzz_swap_reverts_whenFeeNumeratorOverflows(uint256 feeBasisPointsSeed, uint256 amountSeed) public {
         setupBasicSwapEnvironment();
 
-        // Bound fee rate to valid range [2, MAX_FEE_RATE]
+        // Bound fee rate to valid range [2, MAX_FEE_BASIS_POINTS]
         // Must be at least 2 to avoid edge case where (max/1)+1 wraps to 0
-        uint16 feeRate = uint16(bound(feeRateSeed, 2, 1000));
+        uint16 feeBasisPoints = uint16(bound(feeBasisPointsSeed, 2, 1000));
 
         vm.prank(configureAuthority);
-        swapper.updateFeeBasisPoints(feeRate);
+        swapper.updateFeeBasisPoints(feeBasisPoints);
 
         // To cause overflow in feeNumerator calculation (line 348):
-        // feeNumerator = amountIn * feeRate
-        // We need: amountIn * feeRate > type(uint256).max
+        // feeNumerator = amountIn * feeBasisPoints
+        // We need: amountIn * feeBasisPoints > type(uint256).max
         // Calculate the maximum safe amount, then use any value above it
-        uint256 maxSafeAmount = type(uint256).max / feeRate;
+        uint256 maxSafeAmount = type(uint256).max / feeBasisPoints;
         uint256 amountThatCausesOverflow = bound(amountSeed, maxSafeAmount + 1, type(uint256).max);
 
         // Deal tokens to wallet0 (we can't actually transfer this much, but we can mock the balance)
