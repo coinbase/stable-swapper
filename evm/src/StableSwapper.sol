@@ -423,7 +423,7 @@ contract StableSwapper is
 
         if (isListed) {
             $.listedTokens.add(token);
-            $.tokenDecimals[token] = IERC20Metadata(token).decimals();
+            $.tokenDecimals[token] = _safeDecimals(token);
         } else {
             $.listedTokens.remove(token);
             delete $.tokenDecimals[token];
@@ -651,6 +651,25 @@ contract StableSwapper is
         assembly {
             $.slot := STABLE_SWAPPER_STORAGE_LOCATION
         }
+    }
+
+    /// @dev Safely retrieves the decimals value for a token using staticcall
+    ///
+    /// @dev Uses staticcall to prevent state mutations during what should be a read-only operation
+    /// @dev Returns 18 as the default if the token does not implement decimals() or if the call fails
+    ///
+    /// @param token Address of the token
+    ///
+    /// @return The decimals value (defaults to 18 if not implemented or if call fails)
+    function _safeDecimals(address token) internal view returns (uint8) {
+        (bool success, bytes memory data) = token.staticcall(abi.encodeWithSelector(IERC20Metadata.decimals.selector));
+        if (success && data.length >= 32) {
+            uint256 value = abi.decode(data, (uint256));
+            if (value <= type(uint8).max) {
+                return uint8(value);
+            }
+        }
+        return 18; // default decimals if not implemented or if call fails
     }
 
     /// @dev Normalizes token amounts between different decimal places
