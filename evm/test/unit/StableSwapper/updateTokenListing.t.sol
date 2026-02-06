@@ -77,6 +77,7 @@ contract UpdateTokenListingTest is StableSwapperBase {
 
         assertFalse(swapper.isTokenSwappable(address(usdc)));
         assertEq(swapper.getReservedAmount(address(usdc)), 0);
+        assertEq(swapper.getTokenDecimals(address(usdc)), 6);
     }
 
     function test_updateTokenListing_unlistsToken() public {
@@ -89,6 +90,10 @@ contract UpdateTokenListingTest is StableSwapperBase {
         swapper.updateTokenListing(address(testToken), false);
 
         assertEq(swapper.getListedTokensCount(), 0);
+
+        // getTokenDecimals should revert for unlisted tokens
+        vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenNotListed.selector, address(testToken)));
+        swapper.getTokenDecimals(address(testToken));
     }
 
     function test_updateTokenListing_canRelistToken() public {
@@ -108,6 +113,7 @@ contract UpdateTokenListingTest is StableSwapperBase {
         assertEq(swapper.getListedTokensCount(), 1);
         assertFalse(swapper.isTokenSwappable(address(testToken)));
         assertEq(swapper.getReservedAmount(address(testToken)), 0);
+        assertEq(swapper.getTokenDecimals(address(testToken)), 6);
     }
 }
 

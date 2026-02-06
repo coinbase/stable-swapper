@@ -78,6 +78,8 @@ contract StableSwapper is
         mapping(address => uint256) reservedAmounts;
         /// @dev Mapping from token address to swappable status
         mapping(address => bool) tokenSwappable;
+        /// @dev Mapping from token address to cached decimals value
+        mapping(address => uint8) tokenDecimals;
         /// @dev Address that receives fees collected from swaps
         address feeRecipient;
         /// @dev Current fee in basis points (e.g., 100 = 1%)
@@ -349,9 +351,9 @@ contract StableSwapper is
             amountInAfterFee -= fee;
         }
 
-        // Get decimals directly from tokens to avoid desync risk
-        uint8 decimalsIn = IERC20Metadata(tokenIn).decimals();
-        uint8 decimalsOut = IERC20Metadata(tokenOut).decimals();
+        // Get decimals from cache (set when tokens are listed)
+        uint8 decimalsIn = getTokenDecimals(tokenIn);
+        uint8 decimalsOut = getTokenDecimals(tokenOut);
         uint256 amountOut = _normalizeDecimals(amountInAfterFee, decimalsIn, decimalsOut);
 
         // Slippage protection: ensure normalized output meets user's minimum acceptable amount
@@ -404,8 +406,10 @@ contract StableSwapper is
 
         if (isListed) {
             $.listedTokens.add(token);
+            $.tokenDecimals[token] = IERC20Metadata(token).decimals();
         } else {
             $.listedTokens.remove(token);
+            delete $.tokenDecimals[token];
         }
 
         emit TokenListingUpdated(token, isListed);
@@ -601,6 +605,17 @@ contract StableSwapper is
     function isAllowlisted(address addr) public view returns (bool) {
         StableSwapperStorage storage $ = _stableSwapperStorage();
         return $.allowlist[addr];
+    }
+
+    /// @notice Returns the cached decimals value for a token
+    ///
+    /// @param token Address of the token
+    ///
+    /// @return The cached decimals value (set when token is listed)
+    function getTokenDecimals(address token) public view returns (uint8) {
+        require(isTokenListed(token), TokenNotListed(token));
+        StableSwapperStorage storage $ = _stableSwapperStorage();
+        return $.tokenDecimals[token];
     }
 
     /// @dev Function that authorizes an upgrade to a new implementation
