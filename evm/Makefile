@@ -4,4 +4,4 @@ build:
 
 # Build only src
 build-production:
-	clear && forge clean && forge build --skip test --skip script
+	clear && forge clean && forge build --skip test --skip script --build-info src
