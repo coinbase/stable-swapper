@@ -40,9 +40,10 @@ forge fmt --check
 
 ## Deploy
 
-Set the required environment variables and run the deployment script:
+Set the required environment variables and run the deployment script. `RPC_URL` should be set to an RPC endpoint for the target network (e.g., from [Alchemy](https://www.alchemy.com/), [Infura](https://www.infura.io/), or a self-hosted node):
 
 ```sh
+export RPC_URL=<https://your-rpc-endpoint>
 export DEFAULT_ADMIN=<address>
 export TREASURY_AUTHORITY=<address>
 export CONFIGURE_AUTHORITY=<address>
@@ -60,6 +61,7 @@ forge script script/DeployStableSwapper.s.sol:DeployStableSwapper \
 ## Verify an Existing Deployment
 
 ```sh
+export RPC_URL=<https://your-rpc-endpoint>
 export STABLE_SWAPPER_PROXY=<proxy_address>
 
 forge script script/VerifyDeployment.s.sol:VerifyDeployment \
