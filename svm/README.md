@@ -1,0 +1,159 @@
+# SCaaS - Stablecoin-as-a-Service Liquidity Management
+
+A production-ready Solana-based liquidity management system designed for secure, efficient 1:1 stablecoin swapping with configurable fees and comprehensive admin controls.
+
+## 🏗️ Key Features
+
+- ✅ **1:1 Token Swaps**: Guaranteed parity swapping between supported stablecoins
+- ✅ **Dual Authority Model**: Separate operations and pause authorities with multisig support
+- ✅ **Slippage Protection**: User-defined minimum output amounts prevent unexpected losses
+- ✅ **Granular Pause Controls**: Independent pause flags for swaps and liquidity management
+- ✅ **Configurable Fees**: Admin-controlled fee rates (0-10% max) with separate fee recipient
+- ✅ **Multi-token Support**: Dynamic token addition with vault creation (up to 50 tokens)
+- ✅ **Liquidity Reservation**: Reserved amounts respected in withdrawals and swaps
+- ✅ **Access Controls**: Comprehensive authority validation and security measures
+
+## 📁 Project Structure
+
+```
+├── programs/scaas-liquidity/         # Solana program (Rust/Anchor)
+│   ├── src/
+│   │   |── lib.rs                    # Main program logic
+│   │   |── state.rs
+│   │   |── constants.rs
+│   │   └── errors.rs
+│   └── Cargo.toml
+├── tests/                            # Program tests
+├── target/                           # Build artifacts
+├── Anchor.toml                       # Anchor configuration
+└── Cargo.toml                        # Workspace configuration
+```
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- **Rust** 1.70.0+
+- **Node.js** 18.0.0+
+- **Anchor CLI** 0.31.1+
+- **Solana CLI** 1.18.0+
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd stablecoin-liquidity-audit
+   ```
+
+2. **Install dependencies**
+   ```bash
+   # Install Rust dependencies
+   cargo build
+   ```
+
+3. **Configure Solana for development**
+   ```bash
+   # Set to devnet
+   solana config set --url devnet
+
+   # Create a keypair (if needed)
+   solana-keygen new --outfile ~/.config/solana/id.json
+
+   # Airdrop SOL for testing
+   solana airdrop 2
+   ```
+
+## 🔧 Development Workflow
+
+### Building the Solana Program
+
+```bash
+# Build the program
+anchor build
+
+# Run tests
+anchor test
+
+# Deploy to devnet
+anchor deploy --provider.cluster devnet
+```
+
+### Network Configuration
+
+The system is configured for **Solana Devnet** by default. To change networks:
+
+2. Update your Solana CLI configuration:
+   ```bash
+   solana config set --url mainnet-beta # or devnet
+   ```
+
+## 🏛️ Program Architecture
+
+### Design Philosophy
+
+**SCaaS uses a single centralized pool** for all users and tokens:
+- Pool PDA: `[b"liquidity_pool"]` (no authority in seeds)
+- Only ONE pool exists per program deployment
+- All users interact with the same global pool
+- Authority controls the pool but doesn't "own" separate instances
+
+**Fee Model**:
+- Fees are charged on the **input token** (the token being swapped FROM)
+- User provides the full swap amount, which is split:
+  - **Net amount** (after fee) → goes to vault as liquidity
+  - **Fee amount** → goes to fee_recipient as protocol revenue
+- Example: Swap 100 USDC → AppStable with 1% fee:
+  - User transfers: 100 USDC total
+  - Vault receives: 99 USDC (liquidity)
+  - Fee recipient receives: 1 USDC (protocol fee)
+  - User receives: 99 AppStable (1:1 with net amount)
+
+### Core Instructions
+
+- **`initialize_pool`**: Creates pool with operations & pause authorities, fee configuration
+- **`add_supported_token`**: Adds token with dedicated vault (operations authority)
+- **`swap`**: Executes 1:1 swaps with slippage protection (`min_amount_out`)
+- **`deposit_liquidity`**: Adds liquidity to vaults (operations authority, checks `liquidity_paused`)
+- **`withdraw_liquidity`**: Removes liquidity respecting reserved amounts (operations authority)
+- **`update_fee_config`**: Updates fee rate and recipient (operations authority)
+- **`update_pause_config`**: Controls `swaps_paused` and `liquidity_paused` (pause authority)
+- **`update_operations_authority`**: Self-updates operations authority (operations authority only)
+- **`update_pause_authority`**: Self-updates pause authority (pause authority only)
+- **`update_reserved_amount`**: Sets reserved liquidity per vault (operations authority)
+
+## 🔐 Security Features
+
+### Access Controls
+- **Dual authority model**: Separate operations and pause authorities (multisig-ready)
+- **Self-updating authorities**: Each authority can only update itself
+- **Authority validation**: Operations enforce constraints via PDAs
+- **Granular pause controls**: Independent `swaps_paused` and `liquidity_paused` flags
+- **Fee rate cap**: Maximum 10% (1000 basis points) enforced at program level
+
+### Liquidity Safety
+- **Slippage protection**: Users specify `min_amount_out` to prevent TOCTOU attacks
+- **Reserved amount enforcement**: Withdrawals and swaps respect reserved liquidity
+- **PDA-based validation**: Accounts validated using program-derived addresses
+- **Balance validation**: Ensures sufficient liquidity (total - reserved) before operations
+- **Overflow protection**: Checked arithmetic throughout
+
+### Error Handling
+- **Comprehensive error codes**: Detailed error messages for debugging
+- **Input validation**: All parameters validated at program level
+- **Account ownership verification**: Fee recipient token accounts verified to match pool configuration
+
+## 🚀 Deployment
+
+### Program Deployment
+
+```bash
+# Build for production
+anchor build --verifiable
+
+# Deploy
+anchor deploy --provider.cluster <devnet or mainnet>
+
+# Verify deployment
+solana program show <PROGRAM_ID>
+```
