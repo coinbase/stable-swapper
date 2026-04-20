@@ -49,3 +49,69 @@ jobs:
           forge test -vvv
         id: test
         working-directory: evm
+
+  svm:
+    strategy:
+      fail-fast: true
+
+    name: Anchor project
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: svm
+    env:
+      SOLANA_VERSION: v1.18.26
+      ANCHOR_VERSION: 0.31.1
+      NODE_VERSION: "20"
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo build
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: svm
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+          cache-dependency-path: svm/yarn.lock
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/${SOLANA_VERSION}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: Install Anchor (avm)
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+          avm install ${ANCHOR_VERSION}
+          avm use ${ANCHOR_VERSION}
+
+      - name: Show versions
+        run: |
+          rustc --version
+          solana --version
+          anchor --version
+          node --version
+          yarn --version
+
+      - name: Install Node deps
+        run: yarn install --frozen-lockfile
+
+      - name: Anchor build
+        run: anchor build
+
+      - name: Anchor test
+        run: anchor test
