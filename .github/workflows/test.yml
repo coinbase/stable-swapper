@@ -50,7 +50,7 @@ jobs:
         id: test
         working-directory: evm
 
-  svm:
+  solana:
     strategy:
       fail-fast: true
 
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: svm
+        working-directory: solana
     env:
       SOLANA_VERSION: v2.1.0
       ANCHOR_VERSION: 0.31.1
@@ -79,14 +79,14 @@ jobs:
       - name: Cache Cargo build
         uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
-          workspaces: svm
+          workspaces: solana
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: yarn
-          cache-dependency-path: svm/yarn.lock
+          cache-dependency-path: solana/yarn.lock
 
       - name: Install Solana CLI
         run: |

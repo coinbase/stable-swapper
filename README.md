@@ -20,7 +20,7 @@ StableSwapper enables swapping between stablecoins at a 1:1 ratio, automatically
 | Chain | Directory | Details |
 |---|---|---|
 | EVM | [`evm/`](evm/) | Solidity, UUPS upgradeable proxy, OpenZeppelin |
-| SVM | [`svm/`](svm/) | Rust / Anchor 0.31, single centralized liquidity pool |
+| SVM | [`solana/`](solana/) | Rust / Anchor 0.31, single centralized liquidity pool |
 
 See each implementation's README for chain-specific quickstart, build, test, and deployment instructions.
 
@@ -33,7 +33,7 @@ stable-swapper/
 │   ├── script/                # Deployment and utility scripts
 │   ├── test/                  # Unit and integration tests
 │   └── README.md
-├── svm/                       # SVM (Rust / Anchor) implementation
+├── solana/                    # SVM (Rust / Anchor) implementation
 │   ├── programs/              # On-chain Anchor program
 │   ├── tests/                 # Anchor / Mocha integration tests
 │   ├── scripts/               # Admin, whitelist, and emergency scripts
