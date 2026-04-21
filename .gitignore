@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# Editor swap files
+*.swp
+*.swo
+
+# Local agent / tooling
+.claude
+
+# Environment files
+.env
+**/*.env
+
+# Node / JS
+node_modules
+.yarn
+
+# Rust / Anchor (Solana)
+target/
+.anchor
+**/*.rs.bk
+test-ledger
+
+# Solana keypairs and deploy artifacts
+**/*-keypair.json
+**/id.json
+**/deploy/*.json
+
+# EVM / Foundry
+evm/cache/
+evm/out/
+evm/docs/
+!evm/broadcast
+evm/broadcast/*/31337/
+evm/broadcast/**/dry-run/
