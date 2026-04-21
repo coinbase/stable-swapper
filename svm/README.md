@@ -42,8 +42,8 @@ A production-ready Solana-based liquidity management system designed for secure,
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
-   cd stablecoin-liquidity-audit
+   git clone https://github.com/coinbase/stable-swapper.git
+   cd stable-swapper/svm
    ```
 
 2. **Install dependencies**
@@ -72,12 +72,43 @@ A production-ready Solana-based liquidity management system designed for secure,
 # Build the program
 anchor build
 
-# Run tests
-anchor test
-
 # Deploy to devnet
 anchor deploy --provider.cluster devnet
 ```
+
+### Running the Test Suite
+
+The committed `declare_id!` and `[programs.devnet]` / `[programs.mainnet]`
+entries point at the real deployed programs. To run the Anchor / Mocha suite
+against a local validator, generate a throwaway keypair and align all three
+references to it before building:
+
+```bash
+# Mint an ephemeral test keypair and align the program ID everywhere
+mkdir -p target/deploy
+solana-keygen new --no-bip39-passphrase --silent --force \
+  --outfile target/deploy/scaas_liquidity-keypair.json
+TEST_ID=$(solana address -k target/deploy/scaas_liquidity-keypair.json)
+perl -pi -e "s/declare_id!\\(\"[^\"]+\"\\)/declare_id!(\"$TEST_ID\")/" \
+  programs/scaas-liquidity/src/lib.rs
+awk -v id="$TEST_ID" '
+  /^\[/  { in_localnet = ($0 ~ /^\[programs\.localnet\]$/) }
+  in_localnet && /^scaas_liquidity[[:space:]]*=/ {
+    print "scaas_liquidity = \"" id "\""; next
+  }
+  { print }
+' Anchor.toml > Anchor.toml.tmp && mv Anchor.toml.tmp Anchor.toml
+
+# Build and run the suite
+yarn install --frozen-lockfile
+anchor build
+anchor test --provider.cluster localnet --skip-build
+
+# Restore the committed IDs when done
+git checkout -- programs/scaas-liquidity/src/lib.rs Anchor.toml
+```
+
+CI runs the equivalent of these steps in `.github/workflows/test.yml`.
 
 ### Network Configuration
 
