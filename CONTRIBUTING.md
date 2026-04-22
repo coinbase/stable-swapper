@@ -7,6 +7,7 @@ Thanks for your interest in contributing! This guide covers how to set up a deve
 - Git with [signed commits enabled](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits)
 - See each implementation's README for chain-specific tooling requirements:
   - [EVM](evm/README.md) -- requires [Foundry](https://book.getfoundry.sh/getting-started/installation)
+  - [SVM](solana/README.md) -- requires [Rust](https://www.rust-lang.org/tools/install), [Solana CLI](https://docs.solana.com/cli/install-solana-cli-tools), [Anchor](https://www.anchor-lang.com/docs/installation), and Node.js with [Yarn](https://classic.yarnpkg.com/lang/en/docs/install/)
 
 ## Getting Started
 
@@ -30,6 +31,7 @@ git submodule update --init --recursive
 ```
 stable-swapper/
 ├── evm/          # EVM (Solidity) implementation
+├── solana/       # SVM (Rust / Anchor) implementation
 ├── LICENSE
 ├── SECURITY.md
 ├── CONTRIBUTING.md
