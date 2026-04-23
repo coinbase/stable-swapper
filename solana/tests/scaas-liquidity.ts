@@ -235,8 +235,10 @@ describe("scaas-liquidity", () => {
   });
 
   describe("Liquidity Management", () => {
-    it("Seeds USDC liquidity via direct SPL transfer", async () => {
-      const depositAmount = BigInt(500 * 10 ** 6); // 500 USDC
+    // Seed both vaults via direct SPL transfer so downstream withdraw/swap
+    // tests have liquidity to operate on.
+    before(async () => {
+      const seedAmount = BigInt(500 * 10 ** 6);
 
       await transfer(
         provider.connection,
@@ -244,18 +246,8 @@ describe("scaas-liquidity", () => {
         userUsdcAccount,
         usdcVaultTokenAccount,
         payer.payer,
-        depositAmount
+        seedAmount
       );
-
-      const vaultBalance = await getAccount(
-        provider.connection,
-        usdcVaultTokenAccount
-      );
-      assert.equal(vaultBalance.amount.toString(), depositAmount.toString());
-    });
-
-    it("Seeds AppStable liquidity via direct SPL transfer", async () => {
-      const depositAmount = BigInt(500 * 10 ** 6); // 500 AppStable
 
       await transfer(
         provider.connection,
@@ -263,14 +255,8 @@ describe("scaas-liquidity", () => {
         userAppStableAccount,
         appStableVaultTokenAccount,
         payer.payer,
-        depositAmount
+        seedAmount
       );
-
-      const vaultBalance = await getAccount(
-        provider.connection,
-        appStableVaultTokenAccount
-      );
-      assert.equal(vaultBalance.amount.toString(), depositAmount.toString());
     });
 
     it("Withdraws USDC liquidity successfully", async () => {
