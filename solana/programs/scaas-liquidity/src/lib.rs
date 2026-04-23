@@ -129,35 +129,6 @@ pub mod scaas_liquidity {
         Ok(())
     }
 
-    /// Deposits liquidity into a vault.
-    ///
-    /// Note: The liquidity_paused check only applies to deposit_liquidity and withdraw_liquidity instructions.
-    /// Anyone can still transfer tokens directly to vault_token_account via SPL Token transfers,
-    /// bypassing this check entirely. This is an inherent limitation of Solana's token program
-    /// and cannot be prevented at the protocol level.
-    pub fn deposit_liquidity(
-        ctx: Context<DepositLiquidity>,
-        amount: u64,
-    ) -> Result<()> {
-        let pool = &ctx.accounts.pool;
-        require!(!pool.liquidity_paused, LiquidityError::LiquidityPaused);
-        require!(amount > 0, LiquidityError::InvalidAmount);
-
-        let transfer_ctx = CpiContext::new(
-            ctx.accounts.token_program.to_account_info(),
-            Transfer {
-                from: ctx.accounts.operations_authority_token_account.to_account_info(),
-                to: ctx.accounts.vault_token_account.to_account_info(),
-                authority: ctx.accounts.operations_authority.to_account_info(),
-            },
-        );
-
-        token::transfer(transfer_ctx, amount)?;
-
-        msg!("Deposited {} tokens to vault", amount);
-        Ok(())
-    }
-
     pub fn swap(
         ctx: Context<Swap>,
         amount_in: u64,
@@ -242,14 +213,8 @@ pub mod scaas_liquidity {
             LiquidityError::SlippageExceeded
         );
 
-        // Check available liquidity (total - reserved) in destination token
-        let out_vault = &ctx.accounts.out_vault;
-        let available_liquidity = ctx.accounts.out_vault_token_account.amount
-            .checked_sub(out_vault.reserved_amount)
-            .ok_or(LiquidityError::InsufficientLiquidity)?;
-
         require!(
-            available_liquidity >= amount_out,
+            ctx.accounts.out_vault_token_account.amount >= amount_out,
             LiquidityError::InsufficientLiquidity
         );
 
@@ -317,8 +282,6 @@ pub mod scaas_liquidity {
         require!(!pool.liquidity_paused, LiquidityError::LiquidityPaused);
         require!(amount > 0, LiquidityError::InvalidAmount);
 
-        // Operations authority can withdraw freely (reserved_amount only restricts user swaps)
-        // Just ensure we don't overdraw the vault balance
         require!(
             amount <= ctx.accounts.vault_token_account.amount,
             LiquidityError::InsufficientLiquidity
@@ -407,31 +370,6 @@ pub mod scaas_liquidity {
         let pool = &mut ctx.accounts.pool;
         pool.pause_authority = new_pause_authority;
         msg!("Updated pause_authority to: {}", new_pause_authority);
-        Ok(())
-    }
-
-    pub fn update_reserved_amount(
-        ctx: Context<UpdateReservedAmount>,
-        new_reserved_amount: u64,
-    ) -> Result<()> {
-        let vault = &mut ctx.accounts.vault;
-
-        // Ensure reserved amount doesn't exceed actual balance
-        require!(
-            new_reserved_amount <= ctx.accounts.vault_token_account.amount,
-            LiquidityError::InvalidReservedAmount
-        );
-
-        let old_reserved = vault.reserved_amount;
-        vault.reserved_amount = new_reserved_amount;
-
-        msg!(
-            "Updated reserved amount from {} to {} for vault {}",
-            old_reserved,
-            new_reserved_amount,
-            vault.mint
-        );
-
         Ok(())
     }
 
@@ -622,41 +560,6 @@ pub struct RemoveSupportedToken<'info> {
 }
 
 #[derive(Accounts)]
-pub struct DepositLiquidity<'info> {
-    #[account(
-        has_one = operations_authority,
-        seeds = [LIQUIDITY_POOL_SEED],
-        bump = pool.bump
-    )]
-    pub pool: Account<'info, LiquidityPool>,
-
-    #[account(
-        seeds = [TOKEN_VAULT_SEED, pool.key().as_ref(), mint.key().as_ref()],
-        bump = vault.bump
-    )]
-    pub vault: Account<'info, TokenVault>,
-
-    #[account(
-        mut,
-        seeds = [VAULT_TOKEN_ACCOUNT_SEED, vault.key().as_ref()],
-        bump
-    )]
-    pub vault_token_account: Account<'info, TokenAccount>,
-
-    #[account(
-        mut,
-        token::mint = mint,
-    )]
-    pub operations_authority_token_account: Account<'info, TokenAccount>,
-
-    pub mint: Account<'info, Mint>,
-
-    pub operations_authority: Signer<'info>,
-
-    pub token_program: Program<'info, Token>,
-}
-
-#[derive(Accounts)]
 pub struct Swap<'info> {
     #[account(
         seeds = [LIQUIDITY_POOL_SEED],
@@ -832,33 +735,6 @@ pub struct UpdatePauseAuthority<'info> {
     pub pool: Account<'info, LiquidityPool>,
 
     pub pause_authority: Signer<'info>,
-}
-
-#[derive(Accounts)]
-pub struct UpdateReservedAmount<'info> {
-    #[account(
-        has_one = operations_authority,
-        seeds = [LIQUIDITY_POOL_SEED],
-        bump = pool.bump
-    )]
-    pub pool: Account<'info, LiquidityPool>,
-
-    #[account(
-        mut,
-        seeds = [TOKEN_VAULT_SEED, pool.key().as_ref(), mint.key().as_ref()],
-        bump = vault.bump
-    )]
-    pub vault: Account<'info, TokenVault>,
-
-    #[account(
-        seeds = [VAULT_TOKEN_ACCOUNT_SEED, vault.key().as_ref()],
-        bump
-    )]
-    pub vault_token_account: Account<'info, TokenAccount>,
-
-    pub mint: Account<'info, Mint>,
-
-    pub operations_authority: Signer<'info>,
 }
 
 #[derive(Accounts)]

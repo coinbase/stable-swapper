@@ -102,20 +102,11 @@ async function main() {
           );
           const balance =
             Number(vaultTokenAccountInfo.amount) / Math.pow(10, decimals);
-          const reservedBalance =
-            Number(vaultAccount.reservedAmount) / Math.pow(10, decimals);
-          const availableBalance = balance - reservedBalance;
 
           console.log(`- Vault: ${vault.toString()}`);
           console.log(`- Vault Token Account: ${vaultTokenAccount.toString()}`);
           console.log(`- Decimals: ${decimals}`);
           console.log(`- Total Balance: ${balance.toLocaleString()} tokens`);
-          console.log(
-            `- Reserved Amount: ${reservedBalance.toLocaleString()} tokens`
-          );
-          console.log(
-            `- Available Liquidity: ${availableBalance.toLocaleString()} tokens`
-          );
           console.log(`- Disabled: ${vaultAccount.disabled}`);
         } catch (error: any) {
           console.log(`- Error fetching vault info: ${error.message}`);

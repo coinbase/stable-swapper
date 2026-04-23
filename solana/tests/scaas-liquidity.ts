@@ -10,6 +10,7 @@ import {
   mintTo,
   getAccount,
   getAssociatedTokenAddress,
+  transfer,
 } from "@solana/spl-token";
 import { assert } from "chai";
 
@@ -198,7 +199,6 @@ describe("scaas-liquidity", () => {
       // Verify vault creation
       const vaultAccount = await program.account.tokenVault.fetch(usdcVault);
       assert.equal(vaultAccount.mint.toString(), usdcMint.toString());
-      assert.equal(vaultAccount.reservedAmount.toNumber(), 0);
 
       // Verify token was added to pool
       const poolAccount = await program.account.liquidityPool.fetch(pool);
@@ -235,24 +235,18 @@ describe("scaas-liquidity", () => {
   });
 
   describe("Liquidity Management", () => {
-    it("Deposits USDC liquidity", async () => {
-      const depositAmount = new anchor.BN(500 * 10 ** 6); // 500 USDC
+    it("Seeds USDC liquidity via direct SPL transfer", async () => {
+      const depositAmount = BigInt(500 * 10 ** 6); // 500 USDC
 
-      await program.methods
-        .depositLiquidity(depositAmount)
-        .accounts({
-          pool,
-          vault: usdcVault,
-          vaultTokenAccount: usdcVaultTokenAccount,
-          operationsAuthorityTokenAccount: userUsdcAccount, // Operations authority deposits from their token account
-          mint: usdcMint,
-          operationsAuthority: operationsAuthority.publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([operationsAuthority.payer])
-        .rpc();
+      await transfer(
+        provider.connection,
+        payer.payer,
+        userUsdcAccount,
+        usdcVaultTokenAccount,
+        payer.payer,
+        depositAmount
+      );
 
-      // Verify liquidity was deposited
       const vaultBalance = await getAccount(
         provider.connection,
         usdcVaultTokenAccount
@@ -260,73 +254,23 @@ describe("scaas-liquidity", () => {
       assert.equal(vaultBalance.amount.toString(), depositAmount.toString());
     });
 
-    it("Deposits AppStable liquidity", async () => {
-      const depositAmount = new anchor.BN(500 * 10 ** 6); // 500 AppStable
+    it("Seeds AppStable liquidity via direct SPL transfer", async () => {
+      const depositAmount = BigInt(500 * 10 ** 6); // 500 AppStable
 
-      await program.methods
-        .depositLiquidity(depositAmount)
-        .accounts({
-          pool,
-          vault: appStableVault,
-          vaultTokenAccount: appStableVaultTokenAccount,
-          operationsAuthorityTokenAccount: userAppStableAccount, // Operations authority deposits from their token account
-          mint: appStableMint,
-          operationsAuthority: operationsAuthority.publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([operationsAuthority.payer])
-        .rpc();
+      await transfer(
+        provider.connection,
+        payer.payer,
+        userAppStableAccount,
+        appStableVaultTokenAccount,
+        payer.payer,
+        depositAmount
+      );
 
-      // Verify liquidity was deposited
       const vaultBalance = await getAccount(
         provider.connection,
         appStableVaultTokenAccount
       );
       assert.equal(vaultBalance.amount.toString(), depositAmount.toString());
-    });
-
-    it("Fails to deposit when liquidity is paused", async () => {
-      // Pause liquidity
-      await program.methods
-        .updatePauseConfig(null, true) // swapsPaused=null, liquidityPaused=true
-        .accounts({
-          pool,
-          pauseAuthority: pauseAuthority.publicKey,
-        })
-        .signers([pauseAuthority.payer])
-        .rpc();
-
-      const depositAmount = new anchor.BN(10 * 10 ** 6);
-
-      try {
-        await program.methods
-          .depositLiquidity(depositAmount)
-          .accounts({
-            pool,
-            vault: usdcVault,
-            vaultTokenAccount: usdcVaultTokenAccount,
-            operationsAuthorityTokenAccount: userUsdcAccount,
-            mint: usdcMint,
-            operationsAuthority: operationsAuthority.publicKey,
-            tokenProgram: TOKEN_PROGRAM_ID,
-          })
-          .signers([operationsAuthority.payer])
-          .rpc();
-
-        assert.fail("Expected liquidity paused error");
-      } catch (error) {
-        assert.include(error.toString(), "LiquidityPaused");
-      }
-
-      // Unpause liquidity
-      await program.methods
-        .updatePauseConfig(null, false)
-        .accounts({
-          pool,
-          pauseAuthority: pauseAuthority.publicKey,
-        })
-        .signers([pauseAuthority.payer])
-        .rpc();
     });
 
     it("Withdraws USDC liquidity successfully", async () => {
@@ -422,76 +366,6 @@ describe("scaas-liquidity", () => {
         .rpc();
     });
 
-    it("Allows operations authority to withdraw regardless of reserved amount", async () => {
-      // Get current vault balance
-      const vaultBalance = await getAccount(
-        provider.connection,
-        usdcVaultTokenAccount
-      );
-      const currentBalance = Number(vaultBalance.amount);
-
-      // Set a reserved amount
-      const reservedAmount = new anchor.BN(100 * 10 ** 6); // Reserve 100 USDC
-      await program.methods
-        .updateReservedAmount(reservedAmount)
-        .accounts({
-          pool,
-          vault: usdcVault,
-          vaultTokenAccount: usdcVaultTokenAccount,
-          mint: usdcMint,
-          operationsAuthority: operationsAuthority.publicKey,
-        })
-        .signers([operationsAuthority.payer])
-        .rpc();
-
-      // Operations authority can withdraw even into reserved amount
-      // Withdraw 50 USDC (which would have been blocked before if available < reserved)
-      const withdrawAmount = new anchor.BN(50 * 10 ** 6);
-
-      const initialRecipientBalance = await getAccount(
-        provider.connection,
-        userUsdcAccount
-      );
-
-      await program.methods
-        .withdrawLiquidity(withdrawAmount)
-        .accounts({
-          pool,
-          vault: usdcVault,
-          vaultTokenAccount: usdcVaultTokenAccount,
-          recipientTokenAccount: userUsdcAccount,
-          mint: usdcMint,
-          operationsAuthority: operationsAuthority.publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([operationsAuthority.payer])
-        .rpc();
-
-      const finalRecipientBalance = await getAccount(
-        provider.connection,
-        userUsdcAccount
-      );
-
-      // Verify withdrawal succeeded
-      assert.equal(
-        finalRecipientBalance.amount - initialRecipientBalance.amount,
-        BigInt(withdrawAmount.toString()),
-        "Operations authority should be able to withdraw regardless of reserved amount"
-      );
-
-      // Reset reserved amount to 50 for other tests
-      await program.methods
-        .updateReservedAmount(new anchor.BN(50 * 10 ** 6))
-        .accounts({
-          pool,
-          vault: usdcVault,
-          vaultTokenAccount: usdcVaultTokenAccount,
-          mint: usdcMint,
-          operationsAuthority: operationsAuthority.publicKey,
-        })
-        .signers([operationsAuthority.payer])
-        .rpc();
-    });
   });
 
   describe("Swapping", () => {
@@ -1433,20 +1307,15 @@ describe("scaas-liquidity", () => {
       }
     });
 
-    it("Deposits liquidity into test token vault", async () => {
-      await program.methods
-        .depositLiquidity(new anchor.BN(100_000))
-        .accounts({
-          pool,
-          vault: testTokenVault,
-          vaultTokenAccount: testTokenVaultTokenAccount,
-          operationsAuthorityTokenAccount: userTestTokenAccount,
-          mint: testTokenMint,
-          operationsAuthority: operationsAuthority.publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([operationsAuthority.payer])
-        .rpc();
+    it("Seeds test token vault via direct SPL transfer", async () => {
+      await transfer(
+        provider.connection,
+        payer.payer,
+        userTestTokenAccount,
+        testTokenVaultTokenAccount,
+        payer.payer,
+        BigInt(100_000)
+      );
 
       const vaultTokenAccountInfo = await getAccount(
         provider.connection,
@@ -1759,44 +1628,17 @@ describe("scaas-liquidity", () => {
     });
   });
 
-  describe("Liquidity Reservation", () => {
-    it("Updates reserved amount", async () => {
-      const reservedAmount = new anchor.BN(50 * 10 ** 6); // Reserve 50 tokens
-
-      await program.methods
-        .updateReservedAmount(reservedAmount)
-        .accounts({
-          pool,
-          vault: usdcVault,
-          vaultTokenAccount: usdcVaultTokenAccount,
-          mint: usdcMint,
-          operationsAuthority: operationsAuthority.publicKey,
-        })
-        .signers([operationsAuthority.payer])
-        .rpc();
-
-      // Verify reserved amount was set
-      const vaultAccount = await program.account.tokenVault.fetch(usdcVault);
-      assert.equal(
-        vaultAccount.reservedAmount.toString(),
-        reservedAmount.toString()
-      );
-    });
-
-    it("Respects reserved amount in swaps", async () => {
-      // Try to swap more than available (total - reserved)
+  describe("Liquidity Limits", () => {
+    it("Fails swap when amount exceeds vault balance", async () => {
       const vaultBalance = await getAccount(
         provider.connection,
         usdcVaultTokenAccount
       );
-      const vaultAccount = await program.account.tokenVault.fetch(usdcVault);
 
-      const availableAmount =
-        vaultBalance.amount - BigInt(vaultAccount.reservedAmount.toString());
-      const excessiveAmount = new anchor.BN(availableAmount.toString()).add(
+      const excessiveAmount = new anchor.BN(vaultBalance.amount.toString()).add(
         new anchor.BN(1)
       );
-      const minAmountOut = excessiveAmount; // Want same amount out
+      const minAmountOut = excessiveAmount;
 
       try {
         await program.methods
@@ -1822,7 +1664,7 @@ describe("scaas-liquidity", () => {
           .signers([payer.payer])
           .rpc();
 
-        assert.fail("Expected insufficient liquidity error due to reservation");
+        assert.fail("Expected insufficient liquidity error");
       } catch (error) {
         assert.include(error.toString(), "InsufficientLiquidity");
       }
@@ -2452,20 +2294,15 @@ describe("scaas-liquidity", () => {
         .signers([operationsAuthority.payer])
         .rpc();
 
-      // Deposit liquidity for 9-decimal token
-      await program.methods
-        .depositLiquidity(new anchor.BN(500 * 10 ** 9)) // 500 tokens
-        .accounts({
-          pool,
-          vault: token9DecVault,
-          vaultTokenAccount: token9DecVaultTokenAccount,
-          operationsAuthorityTokenAccount: userToken9DecAccount,
-          mint: token9DecMint,
-          operationsAuthority: operationsAuthority.publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([operationsAuthority.payer])
-        .rpc();
+      // Seed liquidity for 9-decimal token via direct SPL transfer
+      await transfer(
+        provider.connection,
+        payer.payer,
+        userToken9DecAccount,
+        token9DecVaultTokenAccount,
+        payer.payer,
+        BigInt(500 * 10 ** 9)
+      );
     });
 
     it("Swaps from 6 decimals (USDC) to 9 decimals (scaling up)", async () => {
@@ -2991,28 +2828,6 @@ describe("scaas-liquidity", () => {
   });
 
   describe("Amount Validation", () => {
-    it("Fails to deposit zero amount", async () => {
-      try {
-        await program.methods
-          .depositLiquidity(new anchor.BN(0))
-          .accounts({
-            pool,
-            vault: usdcVault,
-            vaultTokenAccount: usdcVaultTokenAccount,
-            operationsAuthorityTokenAccount: userUsdcAccount,
-            mint: usdcMint,
-            operationsAuthority: operationsAuthority.publicKey,
-            tokenProgram: TOKEN_PROGRAM_ID,
-          })
-          .signers([operationsAuthority.payer])
-          .rpc();
-
-        assert.fail("Should have failed - zero amount");
-      } catch (error) {
-        assert.include(error.toString().toLowerCase(), "invalidamount");
-      }
-    });
-
     it("Fails to withdraw zero amount", async () => {
       try {
         await program.methods
@@ -3314,28 +3129,6 @@ describe("scaas-liquidity", () => {
       }
     });
 
-    it("Fails when unauthorized user tries to deposit liquidity", async () => {
-      try {
-        await program.methods
-          .depositLiquidity(new anchor.BN(10 * 10 ** 6))
-          .accounts({
-            pool,
-            vault: usdcVault,
-            vaultTokenAccount: usdcVaultTokenAccount,
-            operationsAuthorityTokenAccount: unauthorizedUserUsdcAccount,
-            mint: usdcMint,
-            operationsAuthority: unauthorizedUser.publicKey, // Wrong authority
-            tokenProgram: TOKEN_PROGRAM_ID,
-          })
-          .signers([unauthorizedUser])
-          .rpc();
-
-        assert.fail("Expected constraint violation");
-      } catch (error) {
-        assert.include(error.toString().toLowerCase(), "constraint");
-      }
-    });
-
     it("Fails when unauthorized user tries to withdraw liquidity", async () => {
       try {
         await program.methods
@@ -3392,24 +3185,5 @@ describe("scaas-liquidity", () => {
       }
     });
 
-    it("Fails when unauthorized user tries to update reserved amount", async () => {
-      try {
-        await program.methods
-          .updateReservedAmount(new anchor.BN(100 * 10 ** 6))
-          .accounts({
-            pool,
-            vault: usdcVault,
-            vaultTokenAccount: usdcVaultTokenAccount,
-            mint: usdcMint,
-            operationsAuthority: unauthorizedUser.publicKey, // Wrong authority
-          })
-          .signers([unauthorizedUser])
-          .rpc();
-
-        assert.fail("Expected constraint violation");
-      } catch (error) {
-        assert.include(error.toString().toLowerCase(), "constraint");
-      }
-    });
   });
 });

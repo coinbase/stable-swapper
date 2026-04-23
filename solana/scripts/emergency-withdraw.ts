@@ -115,13 +115,9 @@ async function main() {
   // Fetch vault balance
   const vaultTokenAccountInfo = await getAccount(provider.connection, vaultTokenAccount);
   const vaultBalance = Number(vaultTokenAccountInfo.amount) / Math.pow(10, decimals);
-  const reservedBalance = Number(vaultAccount.reservedAmount) / Math.pow(10, decimals);
-  const availableBalance = vaultBalance - reservedBalance;
 
   console.log("Current State:");
   console.log("- Vault Total Balance:", vaultBalance.toLocaleString(), "tokens");
-  console.log("- Reserved Amount:", reservedBalance.toLocaleString(), "tokens");
-  console.log("- Available to Withdraw:", availableBalance.toLocaleString(), "tokens");
   console.log("- Token Disabled:", vaultAccount.disabled);
   console.log();
 

@@ -86,8 +86,7 @@ async function main() {
   console.log("⚠️  WARNING: This will transfer operations authority control!");
   console.log("   The new operations authority will be able to:");
   console.log("   - Add and remove tokens");
-  console.log("   - Deposit and withdraw liquidity");
-  console.log("   - Update reserved amounts");
+  console.log("   - Withdraw liquidity");
   console.log("   - Transfer operations authority to another address");
   console.log();
   console.log("Sending transaction...");

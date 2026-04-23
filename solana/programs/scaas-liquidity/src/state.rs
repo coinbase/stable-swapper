@@ -9,8 +9,8 @@ pub struct LiquidityPool {
     pub supported_tokens: Vec<Pubkey>,
     pub fee_rate: u64, // in basis points
     pub swaps_paused: bool,
-    /// Controls deposit_liquidity and withdraw_liquidity instructions only.
-    /// Note: Direct SPL Token transfers to vault accounts bypass this check.
+    /// Controls the withdraw_liquidity instruction only.
+    /// Note: Deposits go directly to vault_token_account via SPL Token transfers and are not gated.
     pub liquidity_paused: bool,
     pub bump: u8,
 }
@@ -22,13 +22,16 @@ impl LiquidityPool {
 #[account]
 pub struct TokenVault {
     pub mint: Pubkey,
+    /// Deprecated: liquidity reservation was removed. This field is retained to
+    /// preserve the on-chain account layout for vaults that were created before
+    /// removal; it is always written as 0 and never read.
     pub reserved_amount: u64,
     pub disabled: bool, // If true, this token cannot be used in swaps
     pub bump: u8,
 }
 
 impl TokenVault {
-    pub const INIT_SPACE: usize = 32 + 8 + 1 + 1; // mint + reserved_amount + disabled + bump
+    pub const INIT_SPACE: usize = 32 + 8 + 1 + 1; // mint + reserved_amount (deprecated, layout-only) + disabled + bump
 }
 
 /// Address whitelist for controlling swap access.

@@ -18,8 +18,6 @@ pub enum LiquidityError {
     InsufficientLiquidity,
     #[msg("Invalid fee rate")]
     InvalidFeeRate,
-    #[msg("Invalid reserved amount")]
-    InvalidReservedAmount,
     #[msg("Maximum number of supported tokens reached (50)")]
     MaxTokensReached,
     #[msg("Output amount below minimum acceptable (slippage exceeded)")]

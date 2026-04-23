@@ -383,38 +383,42 @@ Fund your wallet with your custom token and USDC, e.g. 10 of each.
 
 ---
 
-### ✅ Step 6.2: Deposit Custom Token Liquidity
+### ✅ Step 6.2: Seed Custom Token Liquidity
 **Planned Amount:** `___________________` tokens
 
-**Note:** We use a universal `03-deposit-liquidity.ts` script for all tokens.
+**Note:** Liquidity is seeded by sending tokens directly to the vault token account with a standard SPL Token transfer. The vault token account address for each mint is printed by `scripts/verify-pool.ts`.
 
 **Command:**
 ```bash
-yarn ts-node scripts/03-deposit-liquidity.ts <YOUR_CUSTOM_TOKEN_MINT> <AMOUNT>
+# Look up the vault token account address
+yarn ts-node scripts/verify-pool.ts
+
+# Transfer liquidity to it
+spl-token transfer <YOUR_CUSTOM_TOKEN_MINT> <AMOUNT> <VAULT_TOKEN_ACCOUNT> --fund-recipient --allow-unfunded-recipient
 ```
 
 **Result:**
 - [ ] Completed
 - Transaction Signature: `___________________`
-- Amount Deposited: `___________________` tokens
+- Amount Transferred: `___________________` tokens
 - Vault Balance After: `___________________`
 - Timestamp: `___________________`
 - Notes: `___________________`
 
 ---
 
-### ✅ Step 6.3: Deposit USDC Liquidity
+### ✅ Step 6.3: Seed USDC Liquidity
 **Planned Amount:** `___________________` USDC
 
 **Command:**
 ```bash
-yarn ts-node scripts/03-deposit-liquidity.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v <AMOUNT>
+spl-token transfer EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v <AMOUNT> <USDC_VAULT_TOKEN_ACCOUNT> --fund-recipient --allow-unfunded-recipient
 ```
 
 **Result:**
 - [ ] Completed
 - Transaction Signature: `___________________`
-- Amount Deposited: `___________________` USDC
+- Amount Transferred: `___________________` USDC
 - Vault Balance After: `___________________`
 - Timestamp: `___________________`
 - Notes: `___________________`
