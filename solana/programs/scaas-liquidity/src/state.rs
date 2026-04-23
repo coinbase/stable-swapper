@@ -20,17 +20,16 @@ impl LiquidityPool {
 }
 
 #[account]
-#[allow(non_snake_case)]
 pub struct TokenVault {
     pub mint: Pubkey,
     /// Deprecated: liquidity reservation was removed.
-    pub _DEPRECATED_reserved_amount: u64,
+    pub _deprecated_reserved_amount: u64,
     pub disabled: bool, // If true, this token cannot be used in swaps
     pub bump: u8,
 }
 
 impl TokenVault {
-    pub const INIT_SPACE: usize = 32 + 8 + 1 + 1; // mint + _DEPRECATED_reserved_amount (layout-only) + disabled + bump
+    pub const INIT_SPACE: usize = 32 + 8 + 1 + 1; // mint + _deprecated_reserved_amount (layout-only) + disabled + bump
 }
 
 /// Address whitelist for controlling swap access.

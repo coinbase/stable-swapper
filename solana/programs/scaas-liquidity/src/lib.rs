@@ -65,7 +65,7 @@ pub mod scaas_liquidity {
 
         let vault = &mut ctx.accounts.vault;
         vault.mint = mint;
-        vault._DEPRECATED_reserved_amount = 0;
+        vault._deprecated_reserved_amount = 0;
         vault.disabled = false;
         vault.bump = ctx.bumps.vault;
 
@@ -216,7 +216,7 @@ pub mod scaas_liquidity {
         // Check available liquidity (total - reserved) in destination token
         let out_vault = &ctx.accounts.out_vault;
         let available_liquidity = ctx.accounts.out_vault_token_account.amount
-            .checked_sub(out_vault._DEPRECATED_reserved_amount)
+            .checked_sub(out_vault._deprecated_reserved_amount)
             .ok_or(LiquidityError::InsufficientLiquidity)?;
 
         require!(
