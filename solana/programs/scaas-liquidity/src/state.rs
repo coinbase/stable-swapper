@@ -20,18 +20,21 @@ impl LiquidityPool {
 }
 
 #[account]
+#[allow(non_snake_case)]
 pub struct TokenVault {
     pub mint: Pubkey,
     /// Deprecated: liquidity reservation was removed. This field is retained to
-    /// preserve the on-chain account layout for vaults that were created before
-    /// removal; it is always written as 0 and never read.
-    pub reserved_amount: u64,
+    /// preserve the on-chain account layout (Borsh is positional) for vaults
+    /// created before removal. New vaults initialize it to 0. The swap path
+    /// still subtracts it defensively so any legacy non-zero value on an
+    /// already-deployed vault continues to behave as it did prior to removal.
+    pub _DEPRECATED_reserved_amount: u64,
     pub disabled: bool, // If true, this token cannot be used in swaps
     pub bump: u8,
 }
 
 impl TokenVault {
-    pub const INIT_SPACE: usize = 32 + 8 + 1 + 1; // mint + reserved_amount (deprecated, layout-only) + disabled + bump
+    pub const INIT_SPACE: usize = 32 + 8 + 1 + 1; // mint + _DEPRECATED_reserved_amount (layout-only) + disabled + bump
 }
 
 /// Address whitelist for controlling swap access.

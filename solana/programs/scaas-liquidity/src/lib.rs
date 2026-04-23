@@ -65,7 +65,7 @@ pub mod scaas_liquidity {
 
         let vault = &mut ctx.accounts.vault;
         vault.mint = mint;
-        vault.reserved_amount = 0;
+        vault._DEPRECATED_reserved_amount = 0;
         vault.disabled = false;
         vault.bump = ctx.bumps.vault;
 
@@ -213,8 +213,14 @@ pub mod scaas_liquidity {
             LiquidityError::SlippageExceeded
         );
 
+        // Check available liquidity (total - reserved) in destination token
+        let out_vault = &ctx.accounts.out_vault;
+        let available_liquidity = ctx.accounts.out_vault_token_account.amount
+            .checked_sub(out_vault._DEPRECATED_reserved_amount)
+            .ok_or(LiquidityError::InsufficientLiquidity)?;
+
         require!(
-            ctx.accounts.out_vault_token_account.amount >= amount_out,
+            available_liquidity >= amount_out,
             LiquidityError::InsufficientLiquidity
         );
 
@@ -282,6 +288,8 @@ pub mod scaas_liquidity {
         require!(!pool.liquidity_paused, LiquidityError::LiquidityPaused);
         require!(amount > 0, LiquidityError::InvalidAmount);
 
+        // Operations authority can withdraw freely (reserved_amount only restricts user swaps)
+        // Just ensure we don't overdraw the vault balance
         require!(
             amount <= ctx.accounts.vault_token_account.amount,
             LiquidityError::InsufficientLiquidity
