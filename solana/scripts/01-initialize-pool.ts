@@ -66,15 +66,9 @@ async function main() {
     program.programId
   );
 
-  const [whitelist] = PublicKey.findProgramAddressSync(
-    [Buffer.from("address_whitelist")],
-    program.programId
-  );
-
   console.log("Configuration:");
   console.log("- Program ID:", program.programId.toString());
   console.log("- Pool PDA:", pool.toString());
-  console.log("- Whitelist PDA:", whitelist.toString());
   console.log("- Deployer/Authority:", payer.publicKey.toString());
   console.log();
 
@@ -119,7 +113,6 @@ async function main() {
       .initialize(feeRate)
       .accounts({
         pool: pool,
-        whitelist: whitelist,
         payer: payer.publicKey,
         operationsAuthority: payer.publicKey,
         pauseAuthority: payer.publicKey,
@@ -137,9 +130,6 @@ async function main() {
 
     // Fetch and display pool state
     const poolAccount = await program.account.liquidityPool.fetch(pool);
-    const whitelistAccount = await program.account.addressWhitelist.fetch(
-      whitelist
-    );
 
     console.log("Pool State:");
     console.log(
@@ -154,16 +144,10 @@ async function main() {
     console.log("- Supported Tokens:", poolAccount.supportedTokens.length);
     console.log();
 
-    console.log("Whitelist State:");
-    console.log("- Enabled:", whitelistAccount.enabled);
-    console.log("- Addresses:", whitelistAccount.addresses.length);
-    console.log();
-
     console.log("=".repeat(60));
     console.log("SAVE THESE ADDRESSES:");
     console.log("=".repeat(60));
     console.log("Pool:", pool.toString());
-    console.log("Whitelist:", whitelist.toString());
     console.log("=".repeat(60));
   } catch (error: any) {
     console.error("❌ Error initializing pool:");

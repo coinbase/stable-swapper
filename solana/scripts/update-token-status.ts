@@ -8,7 +8,9 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args.length < 2 || args[0] === "--help" || args[0] === "-h") {
-    console.log("Usage: yarn ts-node scripts/update-token-status.ts <TOKEN_MINT> <DISABLED>");
+    console.log(
+      "Usage: yarn ts-node scripts/update-token-status.ts <TOKEN_MINT> <DISABLED>"
+    );
     console.log();
     console.log("Arguments:");
     console.log("  TOKEN_MINT    Token mint address to update");
@@ -16,16 +18,21 @@ async function main() {
     console.log();
     console.log("Examples:");
     console.log("  # Disable a token (prevent swaps)");
-    console.log("  yarn ts-node scripts/update-token-status.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v true");
+    console.log(
+      "  yarn ts-node scripts/update-token-status.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v true"
+    );
     console.log();
     console.log("  # Enable a token (allow swaps)");
-    console.log("  yarn ts-node scripts/update-token-status.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v false");
+    console.log(
+      "  yarn ts-node scripts/update-token-status.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v false"
+    );
     process.exit(args.length < 2 ? 1 : 0);
   }
 
   const mintAddress = args[0];
   const disabledArg = args[1].toLowerCase();
-  const disabled = disabledArg === "true" || disabledArg === "1" || disabledArg === "yes";
+  const disabled =
+    disabledArg === "true" || disabledArg === "1" || disabledArg === "yes";
 
   // Validate mint address
   let mint: PublicKey;
@@ -41,7 +48,8 @@ async function main() {
     process.env.ANCHOR_PROVIDER_URL = "https://api.mainnet-beta.solana.com";
   }
   if (!process.env.ANCHOR_WALLET) {
-    process.env.ANCHOR_WALLET = require('os').homedir() + "/.config/solana/id.json";
+    process.env.ANCHOR_WALLET =
+      require("os").homedir() + "/.config/solana/id.json";
   }
 
   // Load provider from environment
@@ -82,7 +90,9 @@ async function main() {
   // Verify you are the pause authority
   if (!poolAccount.pauseAuthority.equals(payer.publicKey)) {
     console.error("❌ Error: You are not the pause authority");
-    console.error(`   Pause authority is: ${poolAccount.pauseAuthority.toString()}`);
+    console.error(
+      `   Pause authority is: ${poolAccount.pauseAuthority.toString()}`
+    );
     console.error(`   Your wallet is: ${payer.publicKey.toString()}`);
     process.exit(1);
   }
@@ -95,11 +105,11 @@ async function main() {
   console.log();
 
   if (vaultAccount.disabled === disabled) {
-    console.log(`ℹ️  Token is already ${disabled ? 'disabled' : 'enabled'}`);
+    console.log(`ℹ️  Token is already ${disabled ? "disabled" : "enabled"}`);
     process.exit(0);
   }
 
-  console.log(`Setting token to: ${disabled ? 'DISABLED' : 'ENABLED'}`);
+  console.log(`Setting token to: ${disabled ? "DISABLED" : "ENABLED"}`);
   console.log("Sending transaction...");
   console.log();
 
@@ -114,7 +124,7 @@ async function main() {
       } as any)
       .rpc();
 
-    console.log(`${disabled ? '🛑' : '✅'} Token status updated successfully!`);
+    console.log(`${disabled ? "🛑" : "✅"} Token status updated successfully!`);
     console.log();
     console.log("Transaction Details:");
     console.log("- Signature:", tx);
@@ -126,15 +136,16 @@ async function main() {
     console.log();
 
     console.log("=".repeat(60));
-    console.log(`${disabled ? '🛑 TOKEN DISABLED' : '✅ TOKEN ENABLED'}`);
+    console.log(`${disabled ? "🛑 TOKEN DISABLED" : "✅ TOKEN ENABLED"}`);
     console.log("=".repeat(60));
 
     if (disabled) {
       console.log();
       console.log("Note: Disabled tokens cannot be used in swaps.");
-      console.log("This is useful for emergency situations or token migrations.");
+      console.log(
+        "This is useful for emergency situations or token migrations."
+      );
     }
-
   } catch (error: any) {
     console.error("❌ Error updating token status:");
     console.error(error);

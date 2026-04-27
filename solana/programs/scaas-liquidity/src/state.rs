@@ -1,5 +1,5 @@
+use crate::constants::MAX_SUPPORTED_TOKENS;
 use anchor_lang::prelude::*;
-use crate::constants::{MAX_SUPPORTED_TOKENS, MAX_WHITELISTED_ADDRESSES};
 
 #[account]
 pub struct LiquidityPool {
@@ -22,37 +22,15 @@ impl LiquidityPool {
 #[account]
 pub struct TokenVault {
     pub mint: Pubkey,
-    /// Deprecated: liquidity reservation was removed.
-    pub _deprecated_reserved_amount: u64,
+    /// Deprecated: liquidity reservation was removed in STBLE-2811.
+    #[deprecated(
+        note = "Liquidity reservation was removed in STBLE-2811; field retained for layout compatibility and is always zero on new vaults."
+    )]
+    pub reserved_amount: u64,
     pub disabled: bool, // If true, this token cannot be used in swaps
     pub bump: u8,
 }
 
 impl TokenVault {
-    pub const INIT_SPACE: usize = 32 + 8 + 1 + 1; // mint + _deprecated_reserved_amount (layout-only) + disabled + bump
-}
-
-/// Address whitelist for controlling swap access.
-///
-/// WHITELIST SEMANTICS: This whitelist validates TRANSACTION SIGNERS, not token ownership.
-///
-/// When enabled, only addresses in this list can sign swap transactions. However:
-/// - Whitelisted signers can swap tokens they don't own (via delegation)
-/// - Outputs can be routed to any address (not restricted to the signer)
-///
-/// Managed exclusively by pool.pause_authority via add_to_whitelist, remove_from_whitelist,
-/// and toggle_whitelist instructions.
-#[account]
-pub struct AddressWhitelist {
-    pub addresses: Vec<Pubkey>,
-    pub enabled: bool,
-    pub bump: u8,
-}
-
-impl AddressWhitelist {
-    pub const INIT_SPACE: usize = (4 + 32 * MAX_WHITELISTED_ADDRESSES) + 1 + 1; // addresses + enabled + bump
-
-    pub fn is_whitelisted(&self, address: &Pubkey) -> bool {
-        self.addresses.contains(address)
-    }
+    pub const INIT_SPACE: usize = 32 + 8 + 1 + 1; // mint + reserved_amount (layout-only) + disabled + bump
 }

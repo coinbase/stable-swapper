@@ -139,6 +139,11 @@ The system is configured for **Solana Devnet** by default. To change networks:
   - Fee recipient receives: 1 USDC (protocol fee)
   - User receives: 99 AppStable (1:1 with net amount)
 
+**Swap Account Model**:
+- Swaps are permissionless when `swaps_paused` is false and both tokens are enabled
+- `user_from_token_account` does not need to be owned by `user`; the SPL Token program enforces that `user` is either the owner or a valid delegate
+- `to_token_account` may be any valid token account for the output mint, so delegated swaps can route output to a recipient chosen by the delegate
+
 ### Core Instructions
 
 - **`initialize_pool`**: Creates pool with operations & pause authorities, fee configuration

@@ -100,11 +100,6 @@ async function main() {
     program.programId
   );
 
-  const [whitelist] = PublicKey.findProgramAddressSync(
-    [Buffer.from("address_whitelist")],
-    program.programId
-  );
-
   const [inVault] = PublicKey.findProgramAddressSync(
     [Buffer.from("token_vault"), pool.toBuffer(), fromMint.toBuffer()],
     program.programId
@@ -249,7 +244,6 @@ async function main() {
         fromMint: fromMint,
         toMint: toMint,
         user: payer.publicKey,
-        whitelist: whitelist,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,

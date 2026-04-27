@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Mint, Transfer};
 use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 mod constants;
 mod errors;
@@ -18,10 +18,7 @@ declare_id!("9vDwZVJXw5nxymWmUcgmNpemDH5EBcJwLNhtsznrgJDH");
 pub mod scaas_liquidity {
     use super::*;
 
-    pub fn initialize(
-        ctx: Context<Initialize>,
-        fee_rate: u64,
-    ) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, fee_rate: u64) -> Result<()> {
         require!(fee_rate <= MAX_FEE_RATE, LiquidityError::InvalidFeeRate);
 
         let pool = &mut ctx.accounts.pool;
@@ -34,20 +31,11 @@ pub mod scaas_liquidity {
         pool.liquidity_paused = false;
         pool.bump = ctx.bumps.pool;
 
-        // Initialize whitelist (disabled by default)
-        // Note: Whitelist is controlled by pool.pause_authority (validated in ManageWhitelist context)
-        let whitelist = &mut ctx.accounts.whitelist;
-        whitelist.addresses = Vec::new();
-        whitelist.enabled = false;
-        whitelist.bump = ctx.bumps.whitelist;
-
-        msg!("Liquidity pool and whitelist initialized with fee rate: {}", fee_rate);
+        msg!("Liquidity pool initialized with fee rate: {}", fee_rate);
         Ok(())
     }
 
-    pub fn add_supported_token(
-        ctx: Context<AddSupportedToken>,
-    ) -> Result<()> {
+    pub fn add_supported_token(ctx: Context<AddSupportedToken>) -> Result<()> {
         let pool = &mut ctx.accounts.pool;
         let mint = ctx.accounts.mint.key();
         let decimals = ctx.accounts.mint.decimals;
@@ -58,14 +46,20 @@ pub mod scaas_liquidity {
             LiquidityError::InvalidTokenDecimals
         );
 
-        require!(!pool.supported_tokens.contains(&mint), LiquidityError::TokenAlreadySupported);
-        require!(pool.supported_tokens.len() < MAX_SUPPORTED_TOKENS, LiquidityError::MaxTokensReached);
+        require!(
+            !pool.supported_tokens.contains(&mint),
+            LiquidityError::TokenAlreadySupported
+        );
+        require!(
+            pool.supported_tokens.len() < MAX_SUPPORTED_TOKENS,
+            LiquidityError::MaxTokensReached
+        );
 
         pool.supported_tokens.push(mint);
 
         let vault = &mut ctx.accounts.vault;
         vault.mint = mint;
-        vault._deprecated_reserved_amount = 0;
+        // reserved_amount is layout-only and stays zero because Anchor initializes account data with zeroes.
         vault.disabled = false;
         vault.bump = ctx.bumps.vault;
 
@@ -87,9 +81,7 @@ pub mod scaas_liquidity {
     ///
     /// Note: Anyone can send tokens directly to vault_token_account via SPL transfers.
     /// To prevent griefing, operations_authority can always withdraw() any balance first.
-    pub fn remove_supported_token(
-        ctx: Context<RemoveSupportedToken>,
-    ) -> Result<()> {
+    pub fn remove_supported_token(ctx: Context<RemoveSupportedToken>) -> Result<()> {
         let pool = &mut ctx.accounts.pool;
         let vault = &ctx.accounts.vault;
         let mint = ctx.accounts.mint.key();
@@ -104,24 +96,22 @@ pub mod scaas_liquidity {
         );
 
         // Find and remove token from supported_tokens
-        let position = pool.supported_tokens.iter().position(|&token| token == mint)
+        let position = pool
+            .supported_tokens
+            .iter()
+            .position(|&token| token == mint)
             .ok_or(LiquidityError::TokenNotFound)?;
 
         // Close vault_token_account and reclaim rent
-        anchor_spl::token::close_account(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                anchor_spl::token::CloseAccount {
-                    account: ctx.accounts.vault_token_account.to_account_info(),
-                    destination: ctx.accounts.operations_authority.to_account_info(),
-                    authority: pool.to_account_info(),
-                },
-                &[&[
-                    LIQUIDITY_POOL_SEED,
-                    &[pool.bump],
-                ]],
-            ),
-        )?;
+        anchor_spl::token::close_account(CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            anchor_spl::token::CloseAccount {
+                account: ctx.accounts.vault_token_account.to_account_info(),
+                destination: ctx.accounts.operations_authority.to_account_info(),
+                authority: pool.to_account_info(),
+            },
+            &[&[LIQUIDITY_POOL_SEED, &[pool.bump]]],
+        ))?;
 
         pool.supported_tokens.swap_remove(position);
 
@@ -129,41 +119,32 @@ pub mod scaas_liquidity {
         Ok(())
     }
 
-    pub fn swap(
-        ctx: Context<Swap>,
-        amount_in: u64,
-        min_amount_out: u64,
-    ) -> Result<()> {
+    pub fn swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64) -> Result<()> {
         let pool = &ctx.accounts.pool;
         require!(!pool.swaps_paused, LiquidityError::SwapsPaused);
         require!(amount_in > 0, LiquidityError::InvalidAmount);
 
-        // WHITELIST DESIGN: Signer-based, intentionally allows delegation/relaying
-        //
-        // The whitelist validates the TRANSACTION SIGNER (user), NOT token account ownership.
-        // This intentionally permits Whitelisted users to act as delegates for non-whitelisted token accounts
-        //
-        // Example: If Alice is whitelisted and Bob delegates his tokens to Alice,
-        // Alice can execute swaps using Bob's tokens. The output can go to any account.
-        //
-        // This design choice favors composability and legitimate delegation patterns over
-        // strict ownership enforcement.
-        if ctx.accounts.whitelist.enabled {
-            require!(
-                ctx.accounts.whitelist.is_whitelisted(&ctx.accounts.user.key()),
-                LiquidityError::NotWhitelisted
-            );
-        }
-
         // Check that neither token is disabled
-        require!(!ctx.accounts.in_vault.disabled, LiquidityError::TokenDisabled);
-        require!(!ctx.accounts.out_vault.disabled, LiquidityError::TokenDisabled);
+        require!(
+            !ctx.accounts.in_vault.disabled,
+            LiquidityError::TokenDisabled
+        );
+        require!(
+            !ctx.accounts.out_vault.disabled,
+            LiquidityError::TokenDisabled
+        );
 
         let from_mint = ctx.accounts.from_mint.key();
         let to_mint = ctx.accounts.to_mint.key();
 
-        require!(pool.supported_tokens.contains(&from_mint), LiquidityError::TokenNotSupported);
-        require!(pool.supported_tokens.contains(&to_mint), LiquidityError::TokenNotSupported);
+        require!(
+            pool.supported_tokens.contains(&from_mint),
+            LiquidityError::TokenNotSupported
+        );
+        require!(
+            pool.supported_tokens.contains(&to_mint),
+            LiquidityError::TokenNotSupported
+        );
         require!(from_mint != to_mint, LiquidityError::SameToken);
 
         // Read decimals from both mints
@@ -213,14 +194,9 @@ pub mod scaas_liquidity {
             LiquidityError::SlippageExceeded
         );
 
-        // Check available liquidity (total - reserved) in destination token
-        let out_vault = &ctx.accounts.out_vault;
-        let available_liquidity = ctx.accounts.out_vault_token_account.amount
-            .checked_sub(out_vault._deprecated_reserved_amount)
-            .ok_or(LiquidityError::InsufficientLiquidity)?;
-
+        // Check available liquidity in the destination vault.
         require!(
-            available_liquidity >= amount_out,
+            ctx.accounts.out_vault_token_account.amount >= amount_out,
             LiquidityError::InsufficientLiquidity
         );
 
@@ -252,10 +228,7 @@ pub mod scaas_liquidity {
 
         // Step 3: Transfer normalized amount from destination vault to user
         // amount_out is already normalized to destination token decimals
-        let pool_seeds = &[
-            LIQUIDITY_POOL_SEED,
-            &[pool.bump],
-        ];
+        let pool_seeds = &[LIQUIDITY_POOL_SEED, &[pool.bump]];
         let signer_seeds = &[&pool_seeds[..]];
 
         let transfer_out_ctx = CpiContext::new_with_signer(
@@ -280,25 +253,18 @@ pub mod scaas_liquidity {
         Ok(())
     }
 
-    pub fn withdraw_liquidity(
-        ctx: Context<WithdrawLiquidity>,
-        amount: u64,
-    ) -> Result<()> {
+    pub fn withdraw_liquidity(ctx: Context<WithdrawLiquidity>, amount: u64) -> Result<()> {
         let pool = &ctx.accounts.pool;
         require!(!pool.liquidity_paused, LiquidityError::LiquidityPaused);
         require!(amount > 0, LiquidityError::InvalidAmount);
 
-        // Operations authority can withdraw freely (reserved_amount only restricts user swaps)
-        // Just ensure we don't overdraw the vault balance
+        // Ensure the operations authority does not overdraw the vault balance.
         require!(
             amount <= ctx.accounts.vault_token_account.amount,
             LiquidityError::InsufficientLiquidity
         );
 
-        let pool_seeds = &[
-            LIQUIDITY_POOL_SEED,
-            &[pool.bump],
-        ];
+        let pool_seeds = &[LIQUIDITY_POOL_SEED, &[pool.bump]];
         let signer_seeds = &[&pool_seeds[..]];
 
         let transfer_ctx = CpiContext::new_with_signer(
@@ -367,7 +333,10 @@ pub mod scaas_liquidity {
     ) -> Result<()> {
         let pool = &mut ctx.accounts.pool;
         pool.operations_authority = new_operations_authority;
-        msg!("Updated operations_authority to: {}", new_operations_authority);
+        msg!(
+            "Updated operations_authority to: {}",
+            new_operations_authority
+        );
         Ok(())
     }
 
@@ -383,65 +352,15 @@ pub mod scaas_liquidity {
 
     /// Disables or enables a token for swaps.
     /// Useful for emergency response or to deprecate tokens for operational reasons.
-    pub fn update_token_status(
-        ctx: Context<UpdateTokenStatus>,
-        disabled: bool,
-    ) -> Result<()> {
+    pub fn update_token_status(ctx: Context<UpdateTokenStatus>, disabled: bool) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
         vault.disabled = disabled;
 
-        msg!("Updated token {} status to disabled: {}", ctx.accounts.mint.key(), disabled);
-        Ok(())
-    }
-
-    /// Adds an address to the whitelist.
-    pub fn add_to_whitelist(
-        ctx: Context<ManageWhitelist>,
-        address: Pubkey,
-    ) -> Result<()> {
-        let whitelist = &mut ctx.accounts.whitelist;
-
-        require!(
-            !whitelist.addresses.contains(&address),
-            LiquidityError::AddressAlreadyWhitelisted
+        msg!(
+            "Updated token {} status to disabled: {}",
+            ctx.accounts.mint.key(),
+            disabled
         );
-        require!(
-            whitelist.addresses.len() < MAX_WHITELISTED_ADDRESSES,
-            LiquidityError::MaxWhitelistedAddressesReached
-        );
-
-        whitelist.addresses.push(address);
-
-        msg!("Added address {} to whitelist", address);
-        Ok(())
-    }
-
-    /// Removes an address from the whitelist.
-    pub fn remove_from_whitelist(
-        ctx: Context<ManageWhitelist>,
-        address: Pubkey,
-    ) -> Result<()> {
-        let whitelist = &mut ctx.accounts.whitelist;
-
-        let position = whitelist.addresses.iter().position(|&addr| addr == address)
-            .ok_or(LiquidityError::AddressNotInWhitelist)?;
-
-        whitelist.addresses.swap_remove(position);
-
-        msg!("Removed address {} from whitelist", address);
-        Ok(())
-    }
-
-    /// Enables or disables the whitelist.
-    /// When disabled, all users can swap. When enabled, only whitelisted users can swap.
-    pub fn toggle_whitelist(
-        ctx: Context<ManageWhitelist>,
-        enabled: bool,
-    ) -> Result<()> {
-        let whitelist = &mut ctx.accounts.whitelist;
-        whitelist.enabled = enabled;
-
-        msg!("Whitelist enabled status set to: {}", enabled);
         Ok(())
     }
 }
@@ -457,15 +376,6 @@ pub struct Initialize<'info> {
         bump
     )]
     pub pool: Account<'info, LiquidityPool>,
-
-    #[account(
-        init,
-        payer = payer,
-        space = 8 + AddressWhitelist::INIT_SPACE,
-        seeds = [ADDRESS_WHITELIST_SEED],
-        bump
-    )]
-    pub whitelist: Account<'info, AddressWhitelist>,
 
     #[account(mut)]
     pub payer: Signer<'info>,
@@ -608,7 +518,7 @@ pub struct Swap<'info> {
     /// - `user` owns this account, OR
     /// - `user` is a valid delegate with sufficient allowance
     ///
-    /// This intentionally allows delegation patterns (see whitelist design docs above).
+    /// This intentionally allows delegation patterns.
     #[account(
         mut,
         token::mint = from_mint,
@@ -618,8 +528,7 @@ pub struct Swap<'info> {
     /// Output token account (where swap output is sent).
     ///
     /// IMPORTANT: This account is NOT constrained to be owned by `user`.
-    /// Any valid token account for the output mint can be used, enabling
-    /// whitelisted relayers to route swaps to any recipient address.
+    /// Any valid token account for the output mint can receive swap output.
     ///
     /// Note: The recipient's token account must exist before the swap.
     /// Users can create it with: spl-token create-account <MINT>
@@ -646,12 +555,6 @@ pub struct Swap<'info> {
 
     #[account(mut)]
     pub user: Signer<'info>,
-
-    #[account(
-        seeds = [ADDRESS_WHITELIST_SEED],
-        bump = whitelist.bump
-    )]
-    pub whitelist: Account<'info, AddressWhitelist>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -762,25 +665,6 @@ pub struct UpdateTokenStatus<'info> {
     pub vault: Account<'info, TokenVault>,
 
     pub mint: Account<'info, Mint>,
-
-    pub pause_authority: Signer<'info>,
-}
-
-#[derive(Accounts)]
-pub struct ManageWhitelist<'info> {
-    #[account(
-        has_one = pause_authority,
-        seeds = [LIQUIDITY_POOL_SEED],
-        bump = pool.bump
-    )]
-    pub pool: Account<'info, LiquidityPool>,
-
-    #[account(
-        mut,
-        seeds = [ADDRESS_WHITELIST_SEED],
-        bump = whitelist.bump
-    )]
-    pub whitelist: Account<'info, AddressWhitelist>,
 
     pub pause_authority: Signer<'info>,
 }

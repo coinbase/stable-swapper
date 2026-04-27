@@ -36,7 +36,7 @@ stable-swapper/
 ├── solana/                    # SVM (Rust / Anchor) implementation
 │   ├── programs/              # On-chain Anchor program
 │   ├── tests/                 # Anchor / Mocha integration tests
-│   ├── scripts/               # Admin, whitelist, and emergency scripts
+│   ├── scripts/               # Admin and emergency scripts
 │   ├── runbooks/              # Deployment runbooks
 │   └── README.md
 ├── LICENSE

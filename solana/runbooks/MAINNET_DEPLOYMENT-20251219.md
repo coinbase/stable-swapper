@@ -22,7 +22,6 @@ This runbook guides you through deploying the liquidity pool program to Solana m
 - **Custom Token Decimals:** `6`
 - **USDC Mint:** `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
 - **Pool PDA:** `5QoFtuiVkt5cXcBxmPUGp1waq3b9H5Q9RgKTpV3NcjEh`
-- **Whitelist PDA:** `9bEDjK1LWyi9dxWcW2qNbYqc6MWTmwoMuX6qucEyJTmm`
 - **Custom Token Vault:** `EPFgtsNL4VVqwbh6cPwFoWCoqjW1WQvgbRAcitV49HYH`
 - **Custom Token Vault Token Account:** `3y6MPgBvQqCS5EJkWE8w6dYwVLT3sue4s6inP8AoAkJv`
 - **USDC Vault:** `GZHACYSwd3TWc4AVjWnHVwudVXrXWdh6qqKhgGcf1aFx`
@@ -246,7 +245,6 @@ yarn ts-node scripts/01-initialize-pool.ts 100
 - Transaction Signature: `G9jf2bis2HzXBg1zZkdwpWUTgAe442NQgBnM4nc8kUSnBcz3iaa8Goz1zvWZZnomrAGrWFSqbaYm8RZz4xt7pMX`
 - Explorer: https://solscan.io/tx/G9jf2bis2HzXBg1zZkdwpWUTgAe442NQgBnM4nc8kUSnBcz3iaa8Goz1zvWZZnomrAGrWFSqbaYm8RZz4xt7pMX
 - Pool PDA: `5QoFtuiVkt5cXcBxmPUGp1waq3b9H5Q9RgKTpV3NcjEh`
-- Whitelist PDA: `9bEDjK1LWyi9dxWcW2qNbYqc6MWTmwoMuX6qucEyJTmm`
 - Timestamp: `2025-12-19`
 - Notes: `Successfully initialized with 0% fee for 1:1 swaps`
 
@@ -258,7 +256,6 @@ INITIALIZING LIQUIDITY POOL
 Configuration:
 - Program ID: GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
 - Pool PDA: 5QoFtuiVkt5cXcBxmPUGp1waq3b9H5Q9RgKTpV3NcjEh
-- Whitelist PDA: 9bEDjK1LWyi9dxWcW2qNbYqc6MWTmwoMuX6qucEyJTmm
 - Deployer/Authority: 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
 
 ✓ Pool not yet initialized, proceeding...
@@ -285,15 +282,11 @@ Pool State:
 - Liquidity Paused: false
 - Supported Tokens: 0
 
-Whitelist State:
-- Enabled: false
-- Addresses: 0
 
 ============================================================
 SAVE THESE ADDRESSES:
 ============================================================
 Pool: 5QoFtuiVkt5cXcBxmPUGp1waq3b9H5Q9RgKTpV3NcjEh
-Whitelist: 9bEDjK1LWyi9dxWcW2qNbYqc6MWTmwoMuX6qucEyJTmm
 ============================================================
 ✨  Done in 6.50s.
 ```
@@ -315,7 +308,6 @@ yarn ts-node scripts/verify-pool.ts
 - Swaps Paused: `false`
 - Liquidity Paused: `false`
 - Supported Tokens Count: `0`
-- Whitelist Enabled: `false`
 - Notes: `Pool successfully initialized and verified`
 
 ```
@@ -326,7 +318,6 @@ POOL STATE VERIFICATION
 Addresses:
 - Program ID: GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
 - Pool PDA: 5QoFtuiVkt5cXcBxmPUGp1waq3b9H5Q9RgKTpV3NcjEh
-- Whitelist PDA: 9bEDjK1LWyi9dxWcW2qNbYqc6MWTmwoMuX6qucEyJTmm
 
 Pool Configuration:
 - Operations Authority: 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
@@ -339,9 +330,6 @@ Pool Configuration:
 Supported Tokens:
 - Count: 0
 
-Whitelist State:
-- Enabled: false
-- Addresses Count: 0
 
 ============================================================
 ✅ Pool verification complete!
@@ -512,7 +500,6 @@ POOL STATE VERIFICATION
 Addresses:
 - Program ID: GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
 - Pool PDA: 5QoFtuiVkt5cXcBxmPUGp1waq3b9H5Q9RgKTpV3NcjEh
-- Whitelist PDA: 9bEDjK1LWyi9dxWcW2qNbYqc6MWTmwoMuX6qucEyJTmm
 
 Pool Configuration:
 - Operations Authority: 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
@@ -527,9 +514,6 @@ Supported Tokens:
   1. 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms
   2. EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
 
-Whitelist State:
-- Enabled: false
-- Addresses Count: 0
 
 ============================================================
 ✅ Pool verification complete!
@@ -695,7 +679,6 @@ yarn ts-node scripts/verify-pool.ts
 - Fee Rate: `0 bps (0%)`
 - Swaps Paused: `false`
 - Liquidity Paused: `false`
-- Whitelist Enabled: `false`
 - Notes: `Pool fully operational and ready for swaps`
 
 ---
@@ -884,406 +867,6 @@ Recipient Balance After (To Token): 1 tokens
 ============================================================
 ✨  Done in 6.41s.
 ```
-
----
-
-## PHASE 8: Whitelist Testing
-
-### ✅ Step 8.1: Enable Whitelist
-
-**Command:**
-```bash
-yarn ts-node scripts/whitelist-toggle.ts true
-```
-
-**Result:**
-- [x] Completed
-- Transaction Signature: `5g5b4anEQLuHxjpPRQGfz9dg9CuLDjzWiQmCtZZt61UA7yurQhFUF4pC95eXTdWErEdoreimd7szZU2QHPgwbzsZ`
-- Explorer: https://solscan.io/tx/5g5b4anEQLuHxjpPRQGfz9dg9CuLDjzWiQmCtZZt61UA7yurQhFUF4pC95eXTdWErEdoreimd7szZU2QHPgwbzsZ
-- Previous State: Whitelist Enabled = false, 0 addresses
-- New State: Whitelist Enabled = true, 0 addresses
-- Timestamp: `2025-12-23`
-- Notes: `Whitelist enabled successfully`
-
-```
-============================================================
-TOGGLE WHITELIST
-============================================================
-
-Configuration:
-- Program ID: GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
-- Pool PDA: 5QoFtuiVkt5cXcBxmPUGp1waq3b9H5Q9RgKTpV3NcjEh
-- Whitelist PDA: 9bEDjK1LWyi9dxWcW2qNbYqc6MWTmwoMuX6qucEyJTmm
-- Pause Authority: 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
-- Your Wallet: 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
-
-Current State:
-- Whitelist Enabled: false
-- Addresses in Whitelist: 0
-
-Setting whitelist to: ENABLED
-Sending transaction...
-
-✅ Whitelist toggled successfully!
-
-Transaction Details:
-- Signature: 5g5b4anEQLuHxjpPRQGfz9dg9CuLDjzWiQmCtZZt61UA7yurQhFUF4pC95eXTdWErEdoreimd7szZU2QHPgwbzsZ
-- Explorer: https://solscan.io/tx/5g5b4anEQLuHxjpPRQGfz9dg9CuLDjzWiQmCtZZt61UA7yurQhFUF4pC95eXTdWErEdoreimd7szZU2QHPgwbzsZ
-
-New State:
-- Whitelist Enabled: true
-
-============================================================
-✅ Complete!
-============================================================
-✨  Done in 2.09s.
-```
-
----
-
-### ✅ Step 8.2: Test Swap (Not Whitelisted - Should Fail)
-
-**Command:**
-```bash
-yarn ts-node scripts/04-test-swap.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms 1 9TcjK2ToqoAtCr5jrLdDXNTNbZBbDQB1zy2BNGMr7nQE
-```
-
-**Result:**
-- [x] Completed
-- Transaction: Failed (as expected)
-- Error Code: `NotWhitelisted (0x177f)`
-- Error Message: `User address is not whitelisted`
-- Error Location: `programs/scaas-liquidity/src/lib.rs:181`
-- Compute Units Used: 32,185
-- Notes: `✅ Whitelist enforcement working correctly - swap blocked for non-whitelisted user`
-
-```
-❌ Error performing swap:
-SendTransactionError: Simulation failed.
-Message: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x177f.
-Logs:
-[
-  "Program GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv invoke [1]",
-  "Program log: Instruction: Swap",
-  "Program log: AnchorError thrown in programs/scaas-liquidity/src/lib.rs:181. Error Code: NotWhitelisted. Error Number: 6015. Error Message: User address is not whitelisted.",
-  "Program GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv consumed 32185 of 200000 compute units",
-  "Program GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv failed: custom program error: 0x177f"
-]
-```
-
----
-
-### ✅ Step 8.3: Add Address to Whitelist
-
-**Command:**
-```bash
-yarn ts-node scripts/whitelist-add.ts 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
-```
-
-**Result:**
-- [x] Completed
-- Transaction Signature: `33bbtPQoj1Jx8yD48JJVEiTYENL7Ydah3ykSUvQSqUPqytWNiuK449YbJvw9kFx87YTTsxL3rjNC8RPs4BRYC5DK`
-- Explorer: https://solscan.io/tx/33bbtPQoj1Jx8yD48JJVEiTYENL7Ydah3ykSUvQSqUPqytWNiuK449YbJvw9kFx87YTTsxL3rjNC8RPs4BRYC5DK
-- Address Added: `13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD`
-- Whitelist Count: 1 address
-- Notes: `Address added successfully to whitelist`
-
-```
-============================================================
-ADD TO WHITELIST
-============================================================
-
-Configuration:
-- Program ID: GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
-- Pool PDA: 5QoFtuiVkt5cXcBxmPUGp1waq3b9H5Q9RgKTpV3NcjEh
-- Whitelist PDA: 9bEDjK1LWyi9dxWcW2qNbYqc6MWTmwoMuX6qucEyJTmm
-- Pause Authority: 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
-- Your Wallet: 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
-
-Current Whitelist State:
-- Enabled: true
-- Current Addresses: 0
-
-Adding 1 address(es) to whitelist:
-  1. 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
-
-Adding 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD...
-✅ Added successfully! Tx: 33bbtPQoj1Jx8yD48JJVEiTYENL7Ydah3ykSUvQSqUPqytWNiuK449YbJvw9kFx87YTTsxL3rjNC8RPs4BRYC5DK
-
-============================================================
-Summary:
-- Successfully added: 1
-- Already whitelisted: 0
-- Failed: 0
-============================================================
-
-Updated Whitelist:
-- Total Addresses: 1
-  1. 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
-✨  Done in 1.82s.
-```
-
----
-
-### ✅ Step 8.4: Test Swap to Different Recipient (Whitelisted - Should Succeed)
-
-**Command:**
-```bash
-yarn ts-node scripts/04-test-swap.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms 1 9TcjK2ToqoAtCr5jrLdDXNTNbZBbDQB1zy2BNGMr7nQE
-```
-
-**Result:**
-- [x] Completed
-- Transaction Signature: `5VXKcrkDs4sV2vixN6pXJy2sQyTPTAjj2n9gc3scUEcFwL5PBKGysEypLT6XM6NipLeJk7wv8ESiQKd2xBU74eco`
-- Explorer: https://solscan.io/tx/5VXKcrkDs4sV2vixN6pXJy2sQyTPTAjj2n9gc3scUEcFwL5PBKGysEypLT6XM6NipLeJk7wv8ESiQKd2xBU74eco
-- Signer: `13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD` (whitelisted)
-- Recipient: `9TcjK2ToqoAtCr5jrLdDXNTNbZBbDQB1zy2BNGMr7nQE`
-- Input: 1 USDC
-- Output: 1 Custom Token (to recipient)
-- Notes: `Transaction timed out but succeeded. ✅ Whitelist allows whitelisted signer to swap to any recipient`
-
----
-
-### ✅ Step 8.5: Test Swap to Own Account (Whitelisted - Should Succeed)
-
-**Command:**
-```bash
-yarn ts-node scripts/04-test-swap.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms 1
-```
-
-**Result:**
-- [x] Completed
-- Transaction Signature: `4CyDgxvhsU9YstgiVzpiF8tNjEmhhuY2Bh8vvDXanr9HzbsrqyLfPARZRyQfXRGkD1nWZYc3cG4WADLu7MrQA3BB`
-- Explorer: https://solscan.io/tx/4CyDgxvhsU9YstgiVzpiF8tNjEmhhuY2Bh8vvDXanr9HzbsrqyLfPARZRyQfXRGkD1nWZYc3cG4WADLu7MrQA3BB
-- Input: 1 USDC
-- Output: 1 Custom Token
-- Balance Before: 3 USDC, 15 Custom Token
-- Balance After: 2 USDC, 16 Custom Token
-- Exchange Rate: 1:1 (0% fee)
-- Notes: `✅ Swap successful with whitelisted address`
-
-```
-yarn ts-node scripts/04-test-swap.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms 1
-yarn run v1.22.22
-$ /Users/salioudiallo/base/stablecoin-liquidity-audit/node_modules/.bin/ts-node scripts/04-test-swap.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms 1
-============================================================
-TEST SWAP
-============================================================
-
-Configuration:
-- Program ID: GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
-- Pool PDA: 5QoFtuiVkt5cXcBxmPUGp1waq3b9H5Q9RgKTpV3NcjEh
-- User: 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
-
-Swap Details:
-- From Token: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
-- To Token: 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms
-- Amount In: 1 tokens
-- Amount In (base units): 1000000
-- Min Amount Out (base units): 990000
-- From Decimals: 6
-- To Decimals: 6
-
-Your Balance (From Token): 3 tokens
-Your Balance (To Token): 15 tokens
-
-Sending transaction...
-✅ Swap successful!
-
-Transaction Details:
-- Signature: 4CyDgxvhsU9YstgiVzpiF8tNjEmhhuY2Bh8vvDXanr9HzbsrqyLfPARZRyQfXRGkD1nWZYc3cG4WADLu7MrQA3BB
-- Explorer: https://solscan.io/tx/4CyDgxvhsU9YstgiVzpiF8tNjEmhhuY2Bh8vvDXanr9HzbsrqyLfPARZRyQfXRGkD1nWZYc3cG4WADLu7MrQA3BB
-
-Your Balance After (From Token): 2 tokens
-Your Balance After (To Token): 16 tokens
-
-============================================================
-✅ Swap complete!
-============================================================
-✨  Done in 3.38s.
-```
-
----
-
-### ✅ Step 8.6: Remove Address from Whitelist
-
-**Command:**
-```bash
-yarn ts-node scripts/whitelist-remove.ts 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
-```
-
-**Result:**
-- [x] Completed
-- Transaction Signature: `5Vz6ATKEVobHYjiS2vDe6P8HMu53Xf77F52SYErSRL73cEX4C4mvnBz67rZaFtisb62qWny4DmcmhTj4iz1yRMYo`
-- Explorer: https://solscan.io/tx/5Vz6ATKEVobHYjiS2vDe6P8HMu53Xf77F52SYErSRL73cEX4C4mvnBz67rZaFtisb62qWny4DmcmhTj4iz1yRMYo
-- Address Removed: `13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD`
-- Whitelist Count: 0 addresses
-- Notes: `Transaction timed out but succeeded. Address removed from whitelist`
-
----
-
-### ✅ Step 8.7: Verify Pool State (Whitelist Enabled, Empty)
-
-**Command:**
-```bash
-yarn ts-node scripts/verify-pool.ts
-```
-
-**Result:**
-- [x] Completed
-- Whitelist Enabled: true
-- Whitelist Addresses: 0 (empty)
-- Custom Token Liquidity: 0 tokens
-- USDC Liquidity: 10 tokens
-- Notes: `Whitelist is enabled but empty - no addresses allowed to swap`
-
----
-
-### ✅ Step 8.8: Test Swap (Removed from Whitelist - Should Fail)
-
-**Command:**
-```bash
-yarn ts-node scripts/04-test-swap.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms 1
-```
-
-**Result:**
-- [x] Completed
-- Transaction: Failed (as expected)
-- Error Code: `NotWhitelisted (0x177f)`
-- Error Message: `User address is not whitelisted`
-- Error Location: `programs/scaas-liquidity/src/lib.rs:181`
-- Compute Units Used: 32,185
-- Notes: `✅ Whitelist enforcement working correctly - swap blocked after address removed`
-
----
-
-### ✅ Step 8.9: Disable Whitelist
-
-**Command:**
-```bash
-yarn ts-node scripts/whitelist-toggle.ts false
-```
-
-**Result:**
-- [x] Completed
-- Transaction Signature: `BbK3E4CF5m3NDCkz5VP7r2iyubaNM9hvH14vjRXBfC5ZCjgt3kK2mSMHmw4xiwkPSCTFGXtVDm2K9DgCeYgPvW6`
-- Explorer: https://solscan.io/tx/BbK3E4CF5m3NDCkz5VP7r2iyubaNM9hvH14vjRXBfC5ZCjgt3kK2mSMHmw4xiwkPSCTFGXtVDm2K9DgCeYgPvW6
-- Previous State: Whitelist Enabled = true
-- New State: Whitelist Enabled = false
-- Notes: `Transaction timed out but succeeded. Whitelist disabled - permissionless swaps restored`
-
----
-
-### ✅ Step 8.10: Verify Pool State (Whitelist Disabled)
-
-**Command:**
-```bash
-yarn ts-node scripts/verify-pool.ts
-```
-
-**Result:**
-- [x] Completed
-- Whitelist Enabled: false
-- Whitelist Addresses: 0
-- Custom Token Liquidity: 0 tokens
-- USDC Liquidity: 10 tokens
-- Notes: `Whitelist disabled - anyone can swap`
-
----
-
-### ✅ Step 8.11: Test Swap (Whitelist Disabled - Should Succeed)
-
-**Command:**
-```bash
-yarn ts-node scripts/04-test-swap.ts 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 1
-```
-
-**Result:**
-- [x] Completed
-- Transaction Signature: `fpexdNQ3vz8eNRHpbBvxY8fx7pgjRkk9m5XqJmtYLnbUfwGQtrz9aT1QRaHsrUFnc7A2kD3eTbWQhEWvuNFJygg`
-- Explorer: https://solscan.io/tx/fpexdNQ3vz8eNRHpbBvxY8fx7pgjRkk9m5XqJmtYLnbUfwGQtrz9aT1QRaHsrUFnc7A2kD3eTbWQhEWvuNFJygg
-- Input: 1 Custom Token
-- Output: 1 USDC
-- Balance Before: 16 Custom Token, 2 USDC
-- Balance After: 15 Custom Token, 3 USDC
-- Exchange Rate: 1:1 (0% fee)
-- Notes: `✅ Swap successful with whitelist disabled - permissionless mode restored. Note: Swapped in reverse direction due to insufficient custom token liquidity`
-
-```
-yarn ts-node scripts/04-test-swap.ts 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 1
-yarn run v1.22.22
-$ /Users/salioudiallo/base/stablecoin-liquidity-audit/node_modules/.bin/ts-node scripts/04-test-swap.ts 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 1
-============================================================
-TEST SWAP
-============================================================
-
-Configuration:
-- Program ID: GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
-- Pool PDA: 5QoFtuiVkt5cXcBxmPUGp1waq3b9H5Q9RgKTpV3NcjEh
-- User: 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
-
-Swap Details:
-- From Token: 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms
-- To Token: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
-- Amount In: 1 tokens
-- Amount In (base units): 1000000
-- Min Amount Out (base units): 990000
-- From Decimals: 6
-- To Decimals: 6
-
-Your Balance (From Token): 16 tokens
-Your Balance (To Token): 2 tokens
-
-Sending transaction...
-✅ Swap successful!
-
-Transaction Details:
-- Signature: fpexdNQ3vz8eNRHpbBvxY8fx7pgjRkk9m5XqJmtYLnbUfwGQtrz9aT1QRaHsrUFnc7A2kD3eTbWQhEWvuNFJygg
-- Explorer: https://solscan.io/tx/fpexdNQ3vz8eNRHpbBvxY8fx7pgjRkk9m5XqJmtYLnbUfwGQtrz9aT1QRaHsrUFnc7A2kD3eTbWQhEWvuNFJygg
-
-Your Balance After (From Token): 15 tokens
-Your Balance After (To Token): 3 tokens
-
-============================================================
-✅ Swap complete!
-============================================================
-✨  Done in 5.13s.
-```
-
----
-
-### Whitelist Testing Summary
-
-**All Tests Passed:** ✅
-
-| Test | Expected | Actual | Result |
-|------|----------|--------|--------|
-| Enable whitelist | Enabled | Enabled | ✅ Pass |
-| Swap (not whitelisted) | Fail | Failed (NotWhitelisted) | ✅ Pass |
-| Add to whitelist | Added | Added (1 address) | ✅ Pass |
-| Swap to different recipient (whitelisted) | Success | Success | ✅ Pass |
-| Swap to own account (whitelisted) | Success | Success | ✅ Pass |
-| Remove from whitelist | Removed | Removed (0 addresses) | ✅ Pass |
-| Swap (removed from whitelist) | Fail | Failed (NotWhitelisted) | ✅ Pass |
-| Disable whitelist | Disabled | Disabled | ✅ Pass |
-| Swap (whitelist disabled) | Success | Success | ✅ Pass |
-
-**Key Findings:**
-1. ✅ Whitelist enforcement works correctly - blocks non-whitelisted signers
-2. ✅ Whitelist validates transaction SIGNER, not token owner - enables delegation
-3. ✅ Whitelisted signer can swap to any recipient address
-4. ✅ Toggle functionality works bidirectionally (enable/disable)
-5. ✅ Add/remove address functionality works correctly
-6. ⚠️ Some transactions experienced timeout but succeeded (mainnet congestion)
-
-**Whitelist Transactions:**
-- Enable: `5g5b4anEQLuHxjpPRQGfz9dg9CuLDjzWiQmCtZZt61UA7yurQhFUF4pC95eXTdWErEdoreimd7szZU2QHPgwbzsZ`
-- Add address: `33bbtPQoj1Jx8yD48JJVEiTYENL7Ydah3ykSUvQSqUPqytWNiuK449YbJvw9kFx87YTTsxL3rjNC8RPs4BRYC5DK`
-- Swap (whitelisted, delegation): `5VXKcrkDs4sV2vixN6pXJy2sQyTPTAjj2n9gc3scUEcFwL5PBKGysEypLT6XM6NipLeJk7wv8ESiQKd2xBU74eco`
-- Swap (whitelisted, own account): `4CyDgxvhsU9YstgiVzpiF8tNjEmhhuY2Bh8vvDXanr9HzbsrqyLfPARZRyQfXRGkD1nWZYc3cG4WADLu7MrQA3BB`
-- Remove address: `5Vz6ATKEVobHYjiS2vDe6P8HMu53Xf77F52SYErSRL73cEX4C4mvnBz67rZaFtisb62qWny4DmcmhTj4iz1yRMYo`
-- Disable: `BbK3E4CF5m3NDCkz5VP7r2iyubaNM9hvH14vjRXBfC5ZCjgt3kK2mSMHmw4xiwkPSCTFGXtVDm2K9DgCeYgPvW6`
-- Swap (disabled): `fpexdNQ3vz8eNRHpbBvxY8fx7pgjRkk9m5XqJmtYLnbUfwGQtrz9aT1QRaHsrUFnc7A2kD3eTbWQhEWvuNFJygg`
 
 ---
 
@@ -2075,7 +1658,6 @@ Configuration:
    The new pause authority will be able to:
    - Pause/unpause swaps and liquidity operations
    - Enable/disable tokens
-   - Manage the whitelist
    - Transfer pause authority to another address
 
 Sending transaction...
@@ -2512,7 +2094,6 @@ POOL STATE VERIFICATION
 Addresses:
 - Program ID: GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
 - Pool PDA: 5QoFtuiVkt5cXcBxmPUGp1waq3b9H5Q9RgKTpV3NcjEh
-- Whitelist PDA: 9bEDjK1LWyi9dxWcW2qNbYqc6MWTmwoMuX6qucEyJTmm
 
 Pool Configuration:
 - Operations Authority: 13V7ou4zHHwDVaAGWxqHSwU2sVzRR4m62XWqCFxhA5fD
@@ -2545,9 +2126,6 @@ Token 2:
 - Available Liquidity: 2 tokens
 - Disabled: false
 
-Whitelist State:
-- Enabled: false
-- Addresses Count: 0
 
 ============================================================
 ✅ Pool verification complete!
@@ -2560,7 +2138,6 @@ Whitelist State:
 - ✅ No pausing active (swaps and liquidity operational)
 - ✅ Fee rate at 0% as configured
 - ✅ Both tokens active and available
-- ✅ Whitelist disabled
 - ✅ Pool fully operational after all testing phases
 
 ---
@@ -2602,7 +2179,6 @@ Whitelist State:
 ```
 Program ID: GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
 Pool: 5QoFtuiVkt5cXcBxmPUGp1waq3b9H5Q9RgKTpV3NcjEh
-Whitelist: 9bEDjK1LWyi9dxWcW2qNbYqc6MWTmwoMuX6qucEyJTmm
 Custom Token Mint: 9gJ94RYM3kUbFyKzzXAaGaRQ4n39XrDCLPZ1XnpZhnms
 Custom Token Vault: EPFgtsNL4VVqwbh6cPwFoWCoqjW1WQvgbRAcitV49HYH
 Custom Token Vault Token Account: 3y6MPgBvQqCS5EJkWE8w6dYwVLT3sue4s6inP8AoAkJv
@@ -2618,7 +2194,6 @@ USDC Vault Token Account: 9XX1dwrvpxAqzZ8jEbE8NMmTA7nGK2eVApuoXJxPGrfS
 - **Status:** Live and operational ✅
 
 ### Next Steps
-- [x] Configure whitelist if needed
 - [ ] Set up monitoring
 - [ ] Update frontend with new addresses
 - [ ] Communicate pool address to users

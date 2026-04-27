@@ -22,7 +22,6 @@ This runbook guides you through deploying the liquidity pool program to Solana m
 - **Custom Token Decimals:** `6`
 - **USDC Mint:** `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
 - **Pool PDA:** `CrDL9SoCyW1tBgn8k7rgGSpWhnszneWDbvKvqPAU4PL9`
-- **Whitelist PDA:** `24UrnpmHQWUgTYjovHWySFg1JT4AXUCUp4Ly25C25GNj`
 - **Custom Token Vault:** `3vxe5BnJUWNz3kgSLXKaGuibTnjofxgGuAjhpMeEq95s`
 - **Custom Token Vault Token Account:** `ZR8euZnAt7duoF7PfEqkq6ZqFJmaLQzKqEWAmozH4uq`
 - **USDC Vault:** `2bQv8iFVXm9Z6wJk7KMFhhtLegNFZPtcDeJc5qrwJNqZ`
@@ -275,7 +274,6 @@ yarn ts-node scripts/01-initialize-pool.ts 100
 - Fee Rate Used: `0` bps
 - Transaction Signature: `4K3GHRFcfirJhvWGf6ztqebSAjx5enab49Ymx9TRjs94mNA3wcQSXmcqk9m4v9uYrdKMk2bqMTxRKxKYNpDHHaEm`
 - Pool PDA: `CrDL9SoCyW1tBgn8k7rgGSpWhnszneWDbvKvqPAU4PL9`
-- Whitelist PDA: `24UrnpmHQWUgTYjovHWySFg1JT4AXUCUp4Ly25C25GNj`
 - Timestamp: `2026-01-08`
 - Notes: Pool initialized successfully with 0% fee for 1:1 swaps
 
@@ -296,7 +294,6 @@ ts-node scripts/verify-pool.ts
 - Swaps Paused: `___________________`
 - Liquidity Paused: `___________________`
 - Supported Tokens Count: `___________________`
-- Whitelist Enabled: `___________________`
 - Notes: `___________________`
 
 ---
@@ -653,7 +650,6 @@ https://www.orbmarkets.io/address/pqgqKahpG1y2wsgxFhzaAnkV1cL9vk8MSg9qm4q646F/an
 ```
 Program ID: GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
 Pool: ___________________
-Whitelist: ___________________
 Custom Token Mint: ___________________
 Custom Token Vault: ___________________
 Custom Token Vault Token Account: ___________________
@@ -663,7 +659,6 @@ USDC Vault Token Account: ___________________
 ```
 
 ### Next Steps
-- [ ] Configure whitelist if needed
 - [ ] Set up monitoring
 - [ ] Update frontend with new addresses
 - [ ] Communicate pool address to users

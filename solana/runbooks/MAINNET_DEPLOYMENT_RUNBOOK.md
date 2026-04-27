@@ -22,7 +22,6 @@ This runbook guides you through deploying the liquidity pool program to Solana m
 - **Custom Token Decimals:** `___`
 - **USDC Mint:** `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
 - **Pool PDA:** `___________________`
-- **Whitelist PDA:** `___________________`
 - **Custom Token Vault:** `___________________`
 - **Custom Token Vault Token Account:** `___________________`
 - **USDC Vault:** `___________________`
@@ -271,7 +270,6 @@ yarn ts-node scripts/01-initialize-pool.ts 100
 - Fee Rate Used: `___________________` bps
 - Transaction Signature: `___________________`
 - Pool PDA: `___________________`
-- Whitelist PDA: `___________________`
 - Timestamp: `___________________`
 - Notes: `___________________`
 
@@ -292,7 +290,6 @@ ts-node scripts/verify-pool.ts
 - Swaps Paused: `___________________`
 - Liquidity Paused: `___________________`
 - Supported Tokens Count: `___________________`
-- Whitelist Enabled: `___________________`
 - Notes: `___________________`
 
 ---
@@ -498,7 +495,6 @@ yarn ts-node scripts/04-test-swap.ts <YOUR_CUSTOM_TOKEN_MINT> EPjFWdd5AufqSSqeM2
 ```
 Program ID: GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
 Pool: ___________________
-Whitelist: ___________________
 Custom Token Mint: ___________________
 Custom Token Vault: ___________________
 Custom Token Vault Token Account: ___________________
@@ -508,7 +504,6 @@ USDC Vault Token Account: ___________________
 ```
 
 ### Next Steps
-- [ ] Configure whitelist if needed
 - [ ] Set up monitoring
 - [ ] Update frontend with new addresses
 - [ ] Communicate pool address to users

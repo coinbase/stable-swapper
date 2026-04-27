@@ -11,6 +11,7 @@ import {
   getAccount,
   getAssociatedTokenAddress,
   transfer,
+  approve,
 } from "@solana/spl-token";
 import { assert } from "chai";
 
@@ -31,7 +32,6 @@ describe("scaas-liquidity", () => {
   let appStableVault: PublicKey;
   let usdcVaultTokenAccount: PublicKey;
   let appStableVaultTokenAccount: PublicKey;
-  let whitelist: PublicKey;
 
   // User accounts (also used for fee collection since authority is the fee recipient in tests)
   let userUsdcAccount: PublicKey;
@@ -82,12 +82,6 @@ describe("scaas-liquidity", () => {
 
     [appStableVaultTokenAccount] = PublicKey.findProgramAddressSync(
       [Buffer.from("vault_token_account"), appStableVault.toBuffer()],
-      program.programId
-    );
-
-    // Derive whitelist PDA
-    [whitelist] = PublicKey.findProgramAddressSync(
-      [Buffer.from("address_whitelist")],
       program.programId
     );
 
@@ -144,7 +138,6 @@ describe("scaas-liquidity", () => {
         .initialize(new anchor.BN(feeRate))
         .accounts({
           pool,
-          whitelist,
           payer: payer.publicKey,
           operationsAuthority: operationsAuthority.publicKey,
           pauseAuthority: pauseAuthority.publicKey,
@@ -168,13 +161,6 @@ describe("scaas-liquidity", () => {
       assert.equal(poolAccount.swapsPaused, false);
       assert.equal(poolAccount.liquidityPaused, false);
       assert.equal(poolAccount.supportedTokens.length, 0);
-
-      // Verify whitelist was initialized
-      const whitelistAccount = await program.account.addressWhitelist.fetch(
-        whitelist
-      );
-      assert.equal(whitelistAccount.addresses.length, 0);
-      assert.equal(whitelistAccount.enabled, false);
     });
 
     it("Adds USDC as supported token", async () => {
@@ -351,7 +337,6 @@ describe("scaas-liquidity", () => {
         .signers([pauseAuthority.payer])
         .rpc();
     });
-
   });
 
   describe("Swapping", () => {
@@ -384,7 +369,6 @@ describe("scaas-liquidity", () => {
           fromMint: usdcMint,
           toMint: appStableMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -441,7 +425,6 @@ describe("scaas-liquidity", () => {
           fromMint: appStableMint,
           toMint: usdcMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -469,6 +452,239 @@ describe("scaas-liquidity", () => {
       assert.equal(usdcDiff.toString(), swapAmount.toString()); // 1:1 with 0% fee
     });
 
+    it("Allows any token account owner to swap", async () => {
+      const swapper = anchor.web3.Keypair.generate();
+      const swapperUsdcAccount = await createAccount(
+        provider.connection,
+        payer.payer,
+        usdcMint,
+        swapper.publicKey
+      );
+      const swapperAppStableAccount = await createAccount(
+        provider.connection,
+        payer.payer,
+        appStableMint,
+        swapper.publicKey
+      );
+
+      await mintTo(
+        provider.connection,
+        payer.payer,
+        usdcMint,
+        swapperUsdcAccount,
+        payer.publicKey,
+        100 * 10 ** 6
+      );
+
+      const swapAmount = new anchor.BN(10 * 10 ** 6);
+      const minAmountOut = new anchor.BN(10 * 10 ** 6);
+      const beforeBalance = await getAccount(
+        provider.connection,
+        swapperAppStableAccount
+      );
+
+      await program.methods
+        .swap(swapAmount, minAmountOut)
+        .accounts({
+          pool,
+          inVault: usdcVault,
+          outVault: appStableVault,
+          inVaultTokenAccount: usdcVaultTokenAccount,
+          outVaultTokenAccount: appStableVaultTokenAccount,
+          userFromTokenAccount: swapperUsdcAccount,
+          toTokenAccount: swapperAppStableAccount,
+          feeRecipientTokenAccount: feeRecipientUsdcAccount,
+          feeRecipient: payer.publicKey,
+          fromMint: usdcMint,
+          toMint: appStableMint,
+          user: swapper.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([swapper])
+        .rpc();
+
+      const afterBalance = await getAccount(
+        provider.connection,
+        swapperAppStableAccount
+      );
+      assert.equal(
+        (afterBalance.amount - beforeBalance.amount).toString(),
+        swapAmount.toString()
+      );
+    });
+
+    it("Rejects swaps from token accounts without owner or delegate authority", async () => {
+      const unauthorizedUser = anchor.web3.Keypair.generate();
+      const swapAmount = new anchor.BN(1 * 10 ** 6);
+      const minAmountOut = new anchor.BN(1 * 10 ** 6);
+      let rejectedByTokenProgram = false;
+
+      try {
+        await program.methods
+          .swap(swapAmount, minAmountOut)
+          .accounts({
+            pool,
+            inVault: usdcVault,
+            outVault: appStableVault,
+            inVaultTokenAccount: usdcVaultTokenAccount,
+            outVaultTokenAccount: appStableVaultTokenAccount,
+            userFromTokenAccount: userUsdcAccount,
+            toTokenAccount: userAppStableAccount,
+            feeRecipientTokenAccount: feeRecipientUsdcAccount,
+            feeRecipient: payer.publicKey,
+            fromMint: usdcMint,
+            toMint: appStableMint,
+            user: unauthorizedUser.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([unauthorizedUser])
+          .rpc();
+      } catch (error) {
+        rejectedByTokenProgram = true;
+        assert.notInclude(
+          error.toString(),
+          "Expected SPL Token authority check",
+          "Swap should fail in the token program, not via test assertion"
+        );
+      }
+
+      assert.isTrue(
+        rejectedByTokenProgram,
+        "Expected SPL Token authority check to reject the swap"
+      );
+    });
+
+    it("Allows delegated token account swaps to route output to any recipient", async () => {
+      const owner = anchor.web3.Keypair.generate();
+      const delegate = anchor.web3.Keypair.generate();
+      const ownerUsdcAccount = await createAccount(
+        provider.connection,
+        payer.payer,
+        usdcMint,
+        owner.publicKey
+      );
+      const delegateAppStableAccount = await createAccount(
+        provider.connection,
+        payer.payer,
+        appStableMint,
+        delegate.publicKey
+      );
+
+      const swapAmount = new anchor.BN(10 * 10 ** 6);
+      await mintTo(
+        provider.connection,
+        payer.payer,
+        usdcMint,
+        ownerUsdcAccount,
+        payer.publicKey,
+        100 * 10 ** 6
+      );
+      await approve(
+        provider.connection,
+        payer.payer,
+        ownerUsdcAccount,
+        delegate.publicKey,
+        owner,
+        BigInt(swapAmount.toString())
+      );
+
+      const beforeBalance = await getAccount(
+        provider.connection,
+        delegateAppStableAccount
+      );
+
+      await program.methods
+        .swap(swapAmount, swapAmount)
+        .accounts({
+          pool,
+          inVault: usdcVault,
+          outVault: appStableVault,
+          inVaultTokenAccount: usdcVaultTokenAccount,
+          outVaultTokenAccount: appStableVaultTokenAccount,
+          userFromTokenAccount: ownerUsdcAccount,
+          toTokenAccount: delegateAppStableAccount,
+          feeRecipientTokenAccount: feeRecipientUsdcAccount,
+          feeRecipient: payer.publicKey,
+          fromMint: usdcMint,
+          toMint: appStableMint,
+          user: delegate.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([delegate])
+        .rpc();
+
+      const afterBalance = await getAccount(
+        provider.connection,
+        delegateAppStableAccount
+      );
+      assert.equal(
+        (afterBalance.amount - beforeBalance.amount).toString(),
+        swapAmount.toString()
+      );
+    });
+
+    it("Allows swapping exactly the full destination vault balance", async () => {
+      const destinationVaultBefore = await getAccount(
+        provider.connection,
+        appStableVaultTokenAccount
+      );
+      const fullDrainAmount = new anchor.BN(
+        destinationVaultBefore.amount.toString()
+      );
+
+      await mintTo(
+        provider.connection,
+        payer.payer,
+        usdcMint,
+        userUsdcAccount,
+        payer.publicKey,
+        BigInt(fullDrainAmount.toString())
+      );
+
+      await program.methods
+        .swap(fullDrainAmount, fullDrainAmount)
+        .accounts({
+          pool,
+          inVault: usdcVault,
+          outVault: appStableVault,
+          inVaultTokenAccount: usdcVaultTokenAccount,
+          outVaultTokenAccount: appStableVaultTokenAccount,
+          userFromTokenAccount: userUsdcAccount,
+          toTokenAccount: userAppStableAccount,
+          feeRecipientTokenAccount: feeRecipientUsdcAccount,
+          feeRecipient: payer.publicKey,
+          fromMint: usdcMint,
+          toMint: appStableMint,
+          user: payer.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([payer.payer])
+        .rpc();
+
+      const drainedVault = await getAccount(
+        provider.connection,
+        appStableVaultTokenAccount
+      );
+      assert.equal(drainedVault.amount.toString(), "0");
+
+      await transfer(
+        provider.connection,
+        payer.payer,
+        userAppStableAccount,
+        appStableVaultTokenAccount,
+        payer.payer,
+        BigInt(fullDrainAmount.toString())
+      );
+    });
+
     it("Fails to swap when insufficient liquidity", async () => {
       const excessiveAmount = new anchor.BN(1000 * 10 ** 6); // More than vault has
       const minAmountOut = new anchor.BN(1000 * 10 ** 6);
@@ -489,7 +705,6 @@ describe("scaas-liquidity", () => {
             fromMint: usdcMint,
             toMint: appStableMint,
             user: payer.publicKey,
-            whitelist: whitelist,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -535,7 +750,6 @@ describe("scaas-liquidity", () => {
             fromMint: usdcMint,
             toMint: appStableMint,
             user: payer.publicKey,
-            whitelist: whitelist,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -593,7 +807,6 @@ describe("scaas-liquidity", () => {
             fromMint: usdcMint,
             toMint: appStableMint,
             user: payer.publicKey,
-            whitelist: whitelist,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -617,411 +830,6 @@ describe("scaas-liquidity", () => {
         })
         .signers([operationsAuthority.payer])
         .rpc();
-    });
-  });
-
-  describe("Address Whitelist", () => {
-    let testUser1: anchor.web3.Keypair;
-    let testUser2: anchor.web3.Keypair;
-    let testUser1UsdcAccount: PublicKey;
-    let testUser1AppStableAccount: PublicKey;
-    let testUser2UsdcAccount: PublicKey;
-
-    before(async () => {
-      // Create test users
-      testUser1 = anchor.web3.Keypair.generate();
-      testUser2 = anchor.web3.Keypair.generate();
-
-      // Fund test users
-      const tx1 = new anchor.web3.Transaction().add(
-        anchor.web3.SystemProgram.transfer({
-          fromPubkey: payer.publicKey,
-          toPubkey: testUser1.publicKey,
-          lamports: 10 * anchor.web3.LAMPORTS_PER_SOL,
-        })
-      );
-      await provider.sendAndConfirm(tx1);
-
-      const tx2 = new anchor.web3.Transaction().add(
-        anchor.web3.SystemProgram.transfer({
-          fromPubkey: payer.publicKey,
-          toPubkey: testUser2.publicKey,
-          lamports: 10 * anchor.web3.LAMPORTS_PER_SOL,
-        })
-      );
-      await provider.sendAndConfirm(tx2);
-
-      // Create token accounts for test users
-      testUser1UsdcAccount = await createAccount(
-        provider.connection,
-        testUser1,
-        usdcMint,
-        testUser1.publicKey
-      );
-      testUser1AppStableAccount = await createAccount(
-        provider.connection,
-        testUser1,
-        appStableMint,
-        testUser1.publicKey
-      );
-      testUser2UsdcAccount = await createAccount(
-        provider.connection,
-        testUser2,
-        usdcMint,
-        testUser2.publicKey
-      );
-
-      // Mint tokens to test users
-      await mintTo(
-        provider.connection,
-        payer.payer,
-        usdcMint,
-        testUser1UsdcAccount,
-        payer.publicKey,
-        1000 * 10 ** 6
-      );
-      await mintTo(
-        provider.connection,
-        payer.payer,
-        usdcMint,
-        testUser2UsdcAccount,
-        payer.publicKey,
-        1000 * 10 ** 6
-      );
-    });
-
-    it("Allows any user to swap when whitelist is disabled", async () => {
-      const swapAmount = new anchor.BN(10 * 10 ** 6);
-      const minAmountOut = new anchor.BN(10 * 10 ** 6);
-
-      // Get balance before swap
-      const balanceBefore = await getAccount(
-        provider.connection,
-        testUser1AppStableAccount
-      );
-
-      await program.methods
-        .swap(swapAmount, minAmountOut)
-        .accounts({
-          pool,
-          inVault: usdcVault,
-          outVault: appStableVault,
-          inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
-          userFromTokenAccount: testUser2UsdcAccount,
-          toTokenAccount: testUser1AppStableAccount,
-          feeRecipientTokenAccount: feeRecipientUsdcAccount,
-          feeRecipient: payer.publicKey,
-          fromMint: usdcMint,
-          toMint: appStableMint,
-          user: testUser2.publicKey,
-          whitelist: whitelist,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([testUser2])
-        .rpc();
-
-      // Verify swap succeeded by checking balance increased
-      const balanceAfter = await getAccount(
-        provider.connection,
-        testUser1AppStableAccount
-      );
-      assert(
-        balanceAfter.amount > balanceBefore.amount,
-        "Balance should increase after swap"
-      );
-    });
-
-    it("Adds user to whitelist", async () => {
-      // Fetch current whitelist authority from the whitelist account
-      const whitelistAccount = await program.account.addressWhitelist.fetch(
-        whitelist
-      );
-
-      await program.methods
-        .addToWhitelist(testUser1.publicKey)
-        .accounts({
-          pool,
-          whitelist,
-          pauseAuthority: pauseAuthority.publicKey,
-        })
-        .signers([pauseAuthority.payer])
-        .rpc();
-
-      const updatedWhitelist = await program.account.addressWhitelist.fetch(
-        whitelist
-      );
-      assert.equal(updatedWhitelist.addresses.length, 1);
-      assert.equal(
-        updatedWhitelist.addresses[0].toString(),
-        testUser1.publicKey.toString()
-      );
-    });
-
-    it("Fails to add duplicate address", async () => {
-      const whitelistAccount = await program.account.addressWhitelist.fetch(
-        whitelist
-      );
-
-      try {
-        await program.methods
-          .addToWhitelist(testUser1.publicKey)
-          .accounts({
-            pool,
-            whitelist,
-            pauseAuthority: pauseAuthority.publicKey,
-          })
-          .signers([pauseAuthority.payer])
-          .rpc();
-
-        assert.fail("Expected AddressAlreadyWhitelisted error");
-      } catch (error) {
-        assert.include(error.toString(), "AddressAlreadyWhitelisted");
-      }
-    });
-
-    it("Enables the whitelist", async () => {
-      const whitelistAccount = await program.account.addressWhitelist.fetch(
-        whitelist
-      );
-
-      await program.methods
-        .toggleWhitelist(true)
-        .accounts({
-          pool,
-          whitelist,
-          pauseAuthority: pauseAuthority.publicKey,
-        })
-        .signers([pauseAuthority.payer])
-        .rpc();
-
-      const updatedWhitelist = await program.account.addressWhitelist.fetch(
-        whitelist
-      );
-      assert.equal(updatedWhitelist.enabled, true);
-    });
-
-    it("Allows whitelisted user to swap", async () => {
-      const swapAmount = new anchor.BN(10 * 10 ** 6);
-      const minAmountOut = new anchor.BN(10 * 10 ** 6);
-
-      const beforeBalance = await getAccount(
-        provider.connection,
-        testUser1AppStableAccount
-      );
-
-      await program.methods
-        .swap(swapAmount, minAmountOut)
-        .accounts({
-          pool,
-          inVault: usdcVault,
-          outVault: appStableVault,
-          inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
-          userFromTokenAccount: testUser1UsdcAccount,
-          toTokenAccount: testUser1AppStableAccount,
-          feeRecipientTokenAccount: feeRecipientUsdcAccount,
-          feeRecipient: payer.publicKey,
-          fromMint: usdcMint,
-          toMint: appStableMint,
-          user: testUser1.publicKey,
-          whitelist: whitelist,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([testUser1])
-        .rpc();
-
-      const afterBalance = await getAccount(
-        provider.connection,
-        testUser1AppStableAccount
-      );
-      assert(afterBalance.amount > beforeBalance.amount);
-    });
-
-    it("Blocks non-whitelisted user from swapping", async () => {
-      const swapAmount = new anchor.BN(10 * 10 ** 6);
-      const minAmountOut = new anchor.BN(10 * 10 ** 6);
-
-      try {
-        await program.methods
-          .swap(swapAmount, minAmountOut)
-          .accounts({
-            pool,
-            inVault: usdcVault,
-            outVault: appStableVault,
-            inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
-            userFromTokenAccount: testUser2UsdcAccount,
-            toTokenAccount: testUser1AppStableAccount,
-            feeRecipientTokenAccount: feeRecipientUsdcAccount,
-            feeRecipient: payer.publicKey,
-            fromMint: usdcMint,
-            toMint: appStableMint,
-            user: testUser2.publicKey,
-            whitelist: whitelist,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-          })
-          .signers([testUser2])
-          .rpc();
-
-        assert.fail("Expected NotWhitelisted error");
-      } catch (error) {
-        assert.include(error.toString(), "NotWhitelisted");
-      }
-    });
-
-    it("Removes user from whitelist", async () => {
-      const whitelistAccount = await program.account.addressWhitelist.fetch(
-        whitelist
-      );
-
-      await program.methods
-        .removeFromWhitelist(testUser1.publicKey)
-        .accounts({
-          pool,
-          whitelist,
-          pauseAuthority: pauseAuthority.publicKey,
-        })
-        .signers([pauseAuthority.payer])
-        .rpc();
-
-      const updatedWhitelist = await program.account.addressWhitelist.fetch(
-        whitelist
-      );
-      assert.equal(updatedWhitelist.addresses.length, 0);
-    });
-
-    it("Blocks previously whitelisted user after removal", async () => {
-      const swapAmount = new anchor.BN(10 * 10 ** 6);
-      const minAmountOut = new anchor.BN(10 * 10 ** 6);
-
-      try {
-        await program.methods
-          .swap(swapAmount, minAmountOut)
-          .accounts({
-            pool,
-            inVault: usdcVault,
-            outVault: appStableVault,
-            inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
-            userFromTokenAccount: testUser1UsdcAccount,
-            toTokenAccount: testUser1AppStableAccount,
-            feeRecipientTokenAccount: feeRecipientUsdcAccount,
-            feeRecipient: payer.publicKey,
-            fromMint: usdcMint,
-            toMint: appStableMint,
-            user: testUser1.publicKey,
-            whitelist: whitelist,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-          })
-          .signers([testUser1])
-          .rpc();
-
-        assert.fail("Expected NotWhitelisted error");
-      } catch (error) {
-        assert.include(error.toString(), "NotWhitelisted");
-      }
-    });
-
-    it("Disables the whitelist", async () => {
-      const whitelistAccount = await program.account.addressWhitelist.fetch(
-        whitelist
-      );
-
-      await program.methods
-        .toggleWhitelist(false)
-        .accounts({
-          pool,
-          whitelist,
-          pauseAuthority: pauseAuthority.publicKey,
-        })
-        .signers([pauseAuthority.payer])
-        .rpc();
-
-      const updatedWhitelist = await program.account.addressWhitelist.fetch(
-        whitelist
-      );
-      assert.equal(updatedWhitelist.enabled, false);
-    });
-
-    it("Allows any user to swap when whitelist is disabled again", async () => {
-      const swapAmount = new anchor.BN(1 * 10 ** 6);
-      const minAmountOut = new anchor.BN(1 * 10 ** 6);
-
-      // Get balance before swap
-      const balanceBefore = await getAccount(
-        provider.connection,
-        testUser1AppStableAccount
-      );
-
-      await program.methods
-        .swap(swapAmount, minAmountOut)
-        .accounts({
-          pool,
-          inVault: usdcVault,
-          outVault: appStableVault,
-          inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
-          userFromTokenAccount: testUser2UsdcAccount,
-          toTokenAccount: testUser1AppStableAccount,
-          feeRecipientTokenAccount: feeRecipientUsdcAccount,
-          feeRecipient: payer.publicKey,
-          fromMint: usdcMint,
-          toMint: appStableMint,
-          user: testUser2.publicKey,
-          whitelist: whitelist,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([testUser2])
-        .rpc();
-
-      // Verify swap succeeded by checking balance increased
-      const balanceAfter = await getAccount(
-        provider.connection,
-        testUser1AppStableAccount
-      );
-      assert(
-        balanceAfter.amount > balanceBefore.amount,
-        "Balance should increase after swap"
-      );
-    });
-
-    it("Fails when unauthorized user tries to manage whitelist", async () => {
-      const unauthorizedUser = anchor.web3.Keypair.generate();
-      const tx = new anchor.web3.Transaction().add(
-        anchor.web3.SystemProgram.transfer({
-          fromPubkey: payer.publicKey,
-          toPubkey: unauthorizedUser.publicKey,
-          lamports: anchor.web3.LAMPORTS_PER_SOL,
-        })
-      );
-      await provider.sendAndConfirm(tx);
-
-      try {
-        await program.methods
-          .addToWhitelist(unauthorizedUser.publicKey)
-          .accounts({
-            pool,
-            whitelist,
-            pauseAuthority: unauthorizedUser.publicKey, // Wrong authority
-          })
-          .signers([unauthorizedUser])
-          .rpc();
-
-        assert.fail("Expected constraint violation error");
-      } catch (error) {
-        assert.include(error.toString().toLowerCase(), "constraint");
-      }
     });
   });
 
@@ -1063,7 +871,6 @@ describe("scaas-liquidity", () => {
             fromMint: usdcMint,
             toMint: appStableMint,
             user: payer.publicKey,
-            whitelist: whitelist,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -1098,7 +905,6 @@ describe("scaas-liquidity", () => {
             fromMint: appStableMint,
             toMint: usdcMint,
             user: payer.publicKey,
-            whitelist: whitelist,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -1148,7 +954,6 @@ describe("scaas-liquidity", () => {
           fromMint: usdcMint,
           toMint: appStableMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -1584,7 +1389,6 @@ describe("scaas-liquidity", () => {
             fromMint: usdcMint,
             toMint: appStableMint,
             user: payer.publicKey,
-            whitelist: whitelist,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -1642,7 +1446,6 @@ describe("scaas-liquidity", () => {
             fromMint: appStableMint,
             toMint: usdcMint,
             user: payer.publicKey,
-            whitelist: whitelist,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -1716,7 +1519,6 @@ describe("scaas-liquidity", () => {
           fromMint: usdcMint,
           toMint: appStableMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -1836,7 +1638,6 @@ describe("scaas-liquidity", () => {
           fromMint: usdcMint,
           toMint: appStableMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -1899,7 +1700,6 @@ describe("scaas-liquidity", () => {
           fromMint: usdcMint,
           toMint: appStableMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -1994,7 +1794,6 @@ describe("scaas-liquidity", () => {
           fromMint: usdcMint,
           toMint: appStableMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -2043,7 +1842,6 @@ describe("scaas-liquidity", () => {
           fromMint: usdcMint,
           toMint: appStableMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -2130,7 +1928,6 @@ describe("scaas-liquidity", () => {
           fromMint: usdcMint,
           toMint: appStableMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -2319,7 +2116,6 @@ describe("scaas-liquidity", () => {
           fromMint: usdcMint,
           toMint: token9DecMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -2379,7 +2175,6 @@ describe("scaas-liquidity", () => {
           fromMint: token9DecMint,
           toMint: usdcMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -2439,7 +2234,6 @@ describe("scaas-liquidity", () => {
           fromMint: token9DecMint,
           toMint: usdcMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -2590,7 +2384,6 @@ describe("scaas-liquidity", () => {
           fromMint: usdcMint,
           toMint: appStableMint,
           user: payer.publicKey,
-          whitelist: whitelist,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -2722,54 +2515,6 @@ describe("scaas-liquidity", () => {
         assert.include(error.toString().toLowerCase(), "maxtokensreached");
       }
     });
-
-    it("Fails when max whitelist addresses reached (100 limit)", async () => {
-      // Generate 100 addresses
-      const addressesToAdd = Array(100)
-        .fill(null)
-        .map(() => anchor.web3.Keypair.generate().publicKey);
-
-      // Add 100 addresses
-      for (const address of addressesToAdd) {
-        await program.methods
-          .addToWhitelist(address)
-          .accounts({
-            pool,
-            whitelist,
-            pauseAuthority: pauseAuthority.publicKey,
-          })
-          .signers([pauseAuthority.payer])
-          .rpc();
-      }
-
-      // Verify we're at the limit
-      const whitelistAccount = await program.account.addressWhitelist.fetch(
-        whitelist
-      );
-      assert.equal(whitelistAccount.addresses.length, 100);
-
-      // Try to add the 101st address
-      const extraAddress = anchor.web3.Keypair.generate().publicKey;
-
-      try {
-        await program.methods
-          .addToWhitelist(extraAddress)
-          .accounts({
-            pool,
-            whitelist,
-            pauseAuthority: pauseAuthority.publicKey,
-          })
-          .signers([pauseAuthority.payer])
-          .rpc();
-
-        assert.fail("Should have failed - max whitelist addresses reached");
-      } catch (error) {
-        assert.include(
-          error.toString().toLowerCase(),
-          "maxwhitelistedaddressesreached"
-        );
-      }
-    });
   });
 
   // Note: Duplicate token prevention test is omitted because it's impossible to trigger
@@ -2798,7 +2543,6 @@ describe("scaas-liquidity", () => {
             fromMint: usdcMint,
             toMint: usdcMint, // Same mint
             user: payer.publicKey,
-            whitelist,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -2888,7 +2632,6 @@ describe("scaas-liquidity", () => {
             fromMint: usdcMint,
             toMint: usdcMint, // Same mint
             user: payer.publicKey,
-            whitelist,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -2899,28 +2642,6 @@ describe("scaas-liquidity", () => {
         assert.fail("Should have failed - same token swap");
       } catch (error) {
         assert.include(error.toString().toLowerCase(), "sametoken");
-      }
-    });
-  });
-
-  describe("Whitelist Validation", () => {
-    it("Fails to remove missing address from whitelist", async () => {
-      const missingAddress = anchor.web3.Keypair.generate().publicKey;
-
-      try {
-        await program.methods
-          .removeFromWhitelist(missingAddress)
-          .accounts({
-            pool,
-            whitelist,
-            pauseAuthority: pauseAuthority.publicKey,
-          })
-          .signers([pauseAuthority.payer])
-          .rpc();
-
-        assert.fail("Should have failed - address not in whitelist");
-      } catch (error) {
-        assert.include(error.toString().toLowerCase(), "addressnotinwhitelist");
       }
     });
   });
@@ -3170,6 +2891,5 @@ describe("scaas-liquidity", () => {
         assert.include(error.toString().toLowerCase(), "constraint");
       }
     });
-
   });
 });
