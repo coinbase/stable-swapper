@@ -783,9 +783,9 @@ yarn ts-node scripts/verify-pool.ts
 
 ---
 
-## PHASE 11: Optional - Publish IDL to Devnet
+## PHASE 10: Optional - Publish IDL to Devnet
 
-### ✅ Step 11.1: Publish IDL
+### ✅ Step 10.1: Publish IDL
 
 **Command:**
 ```bash
@@ -801,7 +801,7 @@ anchor idl init 9vDwZVJXw5nxymWmUcgmNpemDH5EBcJwLNhtsznrgJDH --filepath target/i
 
 ---
 
-### ✅ Step 11.2: Verify IDL Published
+### ✅ Step 10.2: Verify IDL Published
 
 **Command:**
 ```bash

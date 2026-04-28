@@ -14,6 +14,10 @@ use utils::*;
 
 declare_id!("9vDwZVJXw5nxymWmUcgmNpemDH5EBcJwLNhtsznrgJDH");
 
+// NOTE: The previously deployed whitelist PDA (seeded b"address_whitelist") is orphaned
+// on devnet/mainnet after whitelist removal. Its rent is intentionally forfeited; adding a
+// close_whitelist instruction is not worth the complexity for the small amount involved.
+
 #[program]
 pub mod scaas_liquidity {
     use super::*;
