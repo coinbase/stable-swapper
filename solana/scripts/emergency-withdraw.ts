@@ -9,19 +9,29 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args.length < 1 || args[0] === "--help" || args[0] === "-h") {
-    console.log("Usage: yarn ts-node scripts/emergency-withdraw.ts <TOKEN_MINT> [AMOUNT]");
+    console.log(
+      "Usage: yarn ts-node scripts/emergency-withdraw.ts <TOKEN_MINT> [AMOUNT]"
+    );
     console.log();
     console.log("Arguments:");
     console.log("  TOKEN_MINT    Token mint address to withdraw");
-    console.log("  AMOUNT        Amount to withdraw in tokens (optional, defaults to 'max' for all available)");
+    console.log(
+      "  AMOUNT        Amount to withdraw in tokens (optional, defaults to 'max' for all available)"
+    );
     console.log();
     console.log("Examples:");
     console.log("  # Withdraw all available liquidity");
-    console.log("  yarn ts-node scripts/emergency-withdraw.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
-    console.log("  yarn ts-node scripts/emergency-withdraw.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v max");
+    console.log(
+      "  yarn ts-node scripts/emergency-withdraw.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    );
+    console.log(
+      "  yarn ts-node scripts/emergency-withdraw.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v max"
+    );
     console.log();
     console.log("  # Withdraw specific amount");
-    console.log("  yarn ts-node scripts/emergency-withdraw.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 100");
+    console.log(
+      "  yarn ts-node scripts/emergency-withdraw.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 100"
+    );
     process.exit(args.length < 1 ? 1 : 0);
   }
 
@@ -42,7 +52,8 @@ async function main() {
     process.env.ANCHOR_PROVIDER_URL = "https://api.mainnet-beta.solana.com";
   }
   if (!process.env.ANCHOR_WALLET) {
-    process.env.ANCHOR_WALLET = require('os').homedir() + "/.config/solana/id.json";
+    process.env.ANCHOR_WALLET =
+      require("os").homedir() + "/.config/solana/id.json";
   }
 
   // Load provider from environment
@@ -99,29 +110,41 @@ async function main() {
   console.log("- Token Decimals:", decimals);
   console.log("- Vault PDA:", vault.toString());
   console.log("- Vault Token Account:", vaultTokenAccount.toString());
-  console.log("- Operations Authority:", poolAccount.operationsAuthority.toString());
-  console.log("- Operations Authority Token Account:", operationsAuthorityTokenAccount.toString());
+  console.log(
+    "- Operations Authority:",
+    poolAccount.operationsAuthority.toString()
+  );
+  console.log(
+    "- Operations Authority Token Account:",
+    operationsAuthorityTokenAccount.toString()
+  );
   console.log("- Your Wallet:", payer.publicKey.toString());
   console.log();
 
   // Verify you are the operations authority
   if (!poolAccount.operationsAuthority.equals(payer.publicKey)) {
     console.error("❌ Error: You are not the operations authority");
-    console.error(`   Operations authority is: ${poolAccount.operationsAuthority.toString()}`);
+    console.error(
+      `   Operations authority is: ${poolAccount.operationsAuthority.toString()}`
+    );
     console.error(`   Your wallet is: ${payer.publicKey.toString()}`);
     process.exit(1);
   }
 
   // Fetch vault balance
-  const vaultTokenAccountInfo = await getAccount(provider.connection, vaultTokenAccount);
-  const vaultBalance = Number(vaultTokenAccountInfo.amount) / Math.pow(10, decimals);
-  const reservedBalance = Number(vaultAccount.reservedAmount) / Math.pow(10, decimals);
-  const availableBalance = vaultBalance - reservedBalance;
+  const vaultTokenAccountInfo = await getAccount(
+    provider.connection,
+    vaultTokenAccount
+  );
+  const vaultBalance =
+    Number(vaultTokenAccountInfo.amount) / Math.pow(10, decimals);
 
   console.log("Current State:");
-  console.log("- Vault Total Balance:", vaultBalance.toLocaleString(), "tokens");
-  console.log("- Reserved Amount:", reservedBalance.toLocaleString(), "tokens");
-  console.log("- Available to Withdraw:", availableBalance.toLocaleString(), "tokens");
+  console.log(
+    "- Vault Total Balance:",
+    vaultBalance.toLocaleString(),
+    "tokens"
+  );
   console.log("- Token Disabled:", vaultAccount.disabled);
   console.log();
 
@@ -136,7 +159,9 @@ async function main() {
 
   if (amountArg.toLowerCase() === "max") {
     withdrawAmount = vaultBalance;
-    withdrawAmountBaseUnits = new anchor.BN(vaultTokenAccountInfo.amount.toString());
+    withdrawAmountBaseUnits = new anchor.BN(
+      vaultTokenAccountInfo.amount.toString()
+    );
     console.log("⚠️  WITHDRAWING ALL LIQUIDITY (MAX)");
   } else {
     withdrawAmount = parseFloat(amountArg);
@@ -145,10 +170,14 @@ async function main() {
       process.exit(1);
     }
     if (withdrawAmount > vaultBalance) {
-      console.error(`❌ Error: Amount ${withdrawAmount} exceeds vault balance ${vaultBalance}`);
+      console.error(
+        `❌ Error: Amount ${withdrawAmount} exceeds vault balance ${vaultBalance}`
+      );
       process.exit(1);
     }
-    withdrawAmountBaseUnits = new anchor.BN(Math.floor(withdrawAmount * Math.pow(10, decimals)));
+    withdrawAmountBaseUnits = new anchor.BN(
+      Math.floor(withdrawAmount * Math.pow(10, decimals))
+    );
     console.log(`⚠️  WITHDRAWING ${withdrawAmount.toLocaleString()} TOKENS`);
   }
 
@@ -182,18 +211,29 @@ async function main() {
     console.log();
 
     // Fetch updated balance
-    const updatedVaultTokenAccountInfo = await getAccount(provider.connection, vaultTokenAccount);
-    const updatedVaultBalance = Number(updatedVaultTokenAccountInfo.amount) / Math.pow(10, decimals);
+    const updatedVaultTokenAccountInfo = await getAccount(
+      provider.connection,
+      vaultTokenAccount
+    );
+    const updatedVaultBalance =
+      Number(updatedVaultTokenAccountInfo.amount) / Math.pow(10, decimals);
 
     console.log("Updated State:");
-    console.log("- Vault Balance After:", updatedVaultBalance.toLocaleString(), "tokens");
-    console.log("- Amount Withdrawn:", withdrawAmount.toLocaleString(), "tokens");
+    console.log(
+      "- Vault Balance After:",
+      updatedVaultBalance.toLocaleString(),
+      "tokens"
+    );
+    console.log(
+      "- Amount Withdrawn:",
+      withdrawAmount.toLocaleString(),
+      "tokens"
+    );
     console.log();
 
     console.log("=".repeat(60));
     console.log("✅ EMERGENCY WITHDRAWAL COMPLETE");
     console.log("=".repeat(60));
-
   } catch (error: any) {
     console.error("❌ Error withdrawing liquidity:");
     console.error(error);

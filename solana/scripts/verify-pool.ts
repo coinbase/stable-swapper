@@ -26,11 +26,6 @@ async function main() {
     program.programId
   );
 
-  const [whitelist] = PublicKey.findProgramAddressSync(
-    [Buffer.from("address_whitelist")],
-    program.programId
-  );
-
   console.log("=".repeat(60));
   console.log("POOL STATE VERIFICATION");
   console.log("=".repeat(60));
@@ -39,7 +34,6 @@ async function main() {
   console.log("Addresses:");
   console.log("- Program ID:", program.programId.toString());
   console.log("- Pool PDA:", pool.toString());
-  console.log("- Whitelist PDA:", whitelist.toString());
   console.log();
 
   try {
@@ -102,20 +96,11 @@ async function main() {
           );
           const balance =
             Number(vaultTokenAccountInfo.amount) / Math.pow(10, decimals);
-          const reservedBalance =
-            Number(vaultAccount.reservedAmount) / Math.pow(10, decimals);
-          const availableBalance = balance - reservedBalance;
 
           console.log(`- Vault: ${vault.toString()}`);
           console.log(`- Vault Token Account: ${vaultTokenAccount.toString()}`);
           console.log(`- Decimals: ${decimals}`);
           console.log(`- Total Balance: ${balance.toLocaleString()} tokens`);
-          console.log(
-            `- Reserved Amount: ${reservedBalance.toLocaleString()} tokens`
-          );
-          console.log(
-            `- Available Liquidity: ${availableBalance.toLocaleString()} tokens`
-          );
           console.log(`- Disabled: ${vaultAccount.disabled}`);
         } catch (error: any) {
           console.log(`- Error fetching vault info: ${error.message}`);
@@ -125,21 +110,6 @@ async function main() {
     } else {
       console.log();
     }
-
-    // Fetch whitelist state
-    const whitelistAccount = await program.account.addressWhitelist.fetch(
-      whitelist
-    );
-
-    console.log("Whitelist State:");
-    console.log("- Enabled:", whitelistAccount.enabled);
-    console.log("- Addresses Count:", whitelistAccount.addresses.length);
-    if (whitelistAccount.addresses.length > 0) {
-      whitelistAccount.addresses.forEach((addr, index) => {
-        console.log(`  ${index + 1}. ${addr.toString()}`);
-      });
-    }
-    console.log();
 
     console.log("=".repeat(60));
     console.log("✅ Pool verification complete!");

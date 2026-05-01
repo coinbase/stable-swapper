@@ -1,5 +1,5 @@
-use anchor_lang::prelude::*;
 use crate::errors::LiquidityError;
+use anchor_lang::prelude::*;
 
 /// Normalizes an amount from source decimals to destination decimals.
 /// Uses round-down (floor) strategy to favor the protocol.
@@ -48,17 +48,20 @@ pub fn normalize_decimals(amount: u64, from_decimals: u8, to_decimals: u8) -> Re
         // Scaling up (e.g., 6 decimals -> 9 decimals)
         // Multiply by 10^(to_decimals - from_decimals)
         let decimal_diff = to_decimals - from_decimals;
-        let multiplier = 10u64.checked_pow(decimal_diff as u32)
+        let multiplier = 10u64
+            .checked_pow(decimal_diff as u32)
             .ok_or(LiquidityError::DecimalNormalizationOverflow)?;
 
-        amount.checked_mul(multiplier)
+        amount
+            .checked_mul(multiplier)
             .ok_or(LiquidityError::DecimalNormalizationOverflow.into())
     } else {
         // Scaling down (e.g., 9 decimals -> 6 decimals)
         // Divide by 10^(from_decimals - to_decimals)
         // Division automatically rounds down (floor)
         let decimal_diff = from_decimals - to_decimals;
-        let divisor = 10u64.checked_pow(decimal_diff as u32)
+        let divisor = 10u64
+            .checked_pow(decimal_diff as u32)
             .ok_or(LiquidityError::DecimalNormalizationOverflow)?;
 
         Ok(amount / divisor) // Integer division rounds down

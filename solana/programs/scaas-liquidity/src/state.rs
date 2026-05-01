@@ -1,5 +1,5 @@
+use crate::constants::MAX_SUPPORTED_TOKENS;
 use anchor_lang::prelude::*;
-use crate::constants::{MAX_SUPPORTED_TOKENS, MAX_WHITELISTED_ADDRESSES};
 
 #[account]
 pub struct LiquidityPool {
@@ -9,8 +9,8 @@ pub struct LiquidityPool {
     pub supported_tokens: Vec<Pubkey>,
     pub fee_rate: u64, // in basis points
     pub swaps_paused: bool,
-    /// Controls deposit_liquidity and withdraw_liquidity instructions only.
-    /// Note: Direct SPL Token transfers to vault accounts bypass this check.
+    /// Controls the withdraw_liquidity instruction only.
+    /// Note: Deposits go directly to vault_token_account via SPL Token transfers and are not gated.
     pub liquidity_paused: bool,
     pub bump: u8,
 }
@@ -22,36 +22,15 @@ impl LiquidityPool {
 #[account]
 pub struct TokenVault {
     pub mint: Pubkey,
+    /// Deprecated: liquidity reservation was removed in STBLE-2811.
+    #[deprecated(
+        note = "Liquidity reservation was removed in STBLE-2811; field retained for layout compatibility and is always zero on new vaults."
+    )]
     pub reserved_amount: u64,
     pub disabled: bool, // If true, this token cannot be used in swaps
     pub bump: u8,
 }
 
 impl TokenVault {
-    pub const INIT_SPACE: usize = 32 + 8 + 1 + 1; // mint + reserved_amount + disabled + bump
-}
-
-/// Address whitelist for controlling swap access.
-///
-/// WHITELIST SEMANTICS: This whitelist validates TRANSACTION SIGNERS, not token ownership.
-///
-/// When enabled, only addresses in this list can sign swap transactions. However:
-/// - Whitelisted signers can swap tokens they don't own (via delegation)
-/// - Outputs can be routed to any address (not restricted to the signer)
-///
-/// Managed exclusively by pool.pause_authority via add_to_whitelist, remove_from_whitelist,
-/// and toggle_whitelist instructions.
-#[account]
-pub struct AddressWhitelist {
-    pub addresses: Vec<Pubkey>,
-    pub enabled: bool,
-    pub bump: u8,
-}
-
-impl AddressWhitelist {
-    pub const INIT_SPACE: usize = (4 + 32 * MAX_WHITELISTED_ADDRESSES) + 1 + 1; // addresses + enabled + bump
-
-    pub fn is_whitelisted(&self, address: &Pubkey) -> bool {
-        self.addresses.contains(address)
-    }
+    pub const INIT_SPACE: usize = 32 + 8 + 1 + 1; // mint + reserved_amount (layout-only) + disabled + bump
 }

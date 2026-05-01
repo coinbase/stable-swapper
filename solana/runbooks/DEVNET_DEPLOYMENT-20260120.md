@@ -40,7 +40,6 @@ This runbook guides you through deploying the liquidity pool program to Solana *
 - **USDF Mint (Devnet):** `Ejgz8rRPySWomDUnsYr1gNpHYm6ZBQnjqbAPfi1dbbwQ` (Devnet USDF - USD stablecoin for testing)
 - **SFTUSD25 Mint (Devnet):** `AreQsswF44khJHLjsuWzgboJcG31JvALcWMkMcsVs2uC` (Devnet SFTUSD25 - stablecoin variant for testing)
 - **Pool PDA:** `68xwTJYRyUdULbb5ve4JMWTc2xvw9wQmtEj9GRoHSenF`
-- **Whitelist PDA:** `8zVAo6z2juAcVMkn3booA4yMGym5BPUJey2iN1Nq7Hvr`
 - **USDC Vault:** `DHCU6cSXeEwk5GUhGVw7XkNfcWF6bY2gsUbtUEUitHhY`
 - **USDC Vault Token Account:** `7hktVUoYS9q1c6iq5cnNVmKths3kJ1fJQkozvo4vpHR9`
 - **USDF Vault:** `3g3UUaL6y6AjrQuc2cmJHbJmi1XWhEK7VqGrY4CL2Lgn`
@@ -357,7 +356,6 @@ yarn ts-node scripts/01-initialize-pool.ts 100
 - Fee Rate Used: `0` bps
 - Transaction Signature: `43RNFGxYpLSQ2iUHWxQLA1HZfW6AiE3Y44hTemHwTWnZgDPqxLmutRZEaGc9ajZQhRnNym1n5wBb28gfvS4BDczL`
 - Pool PDA: `68xwTJYRyUdULbb5ve4JMWTc2xvw9wQmtEj9GRoHSenF`
-- Whitelist PDA: `8zVAo6z2juAcVMkn3booA4yMGym5BPUJey2iN1Nq7Hvr`
 - Timestamp: `2026-01-20`
 - Explorer URL: `https://solscan.io/tx/43RNFGxYpLSQ2iUHWxQLA1HZfW6AiE3Y44hTemHwTWnZgDPqxLmutRZEaGc9ajZQhRnNym1n5wBb28gfvS4BDczL?cluster=devnet`
 - Notes: Pool initialized successfully with 0% fee
@@ -379,7 +377,6 @@ yarn ts-node scripts/verify-pool.ts
 - Swaps Paused: `___________________`
 - Liquidity Paused: `___________________`
 - Supported Tokens Count: `___________________`
-- Whitelist Enabled: `___________________`
 - Notes: `___________________`
 
 ---
@@ -786,41 +783,9 @@ yarn ts-node scripts/verify-pool.ts
 
 ---
 
-## PHASE 10: Optional - Whitelist Testing
+## PHASE 10: Optional - Publish IDL to Devnet
 
-### ✅ Step 10.1: Enable Whitelist (Optional)
-
-**Command:**
-```bash
-yarn ts-node scripts/enable-whitelist.ts
-```
-
-**Result:**
-- [ ] Completed
-- Transaction Signature: `___________________`
-- Whitelist Enabled: `___________________`
-- Notes: `___________________`
-
----
-
-### ✅ Step 10.2: Add Address to Whitelist (Optional)
-
-**Command:**
-```bash
-yarn ts-node scripts/add-to-whitelist.ts <ADDRESS_TO_WHITELIST>
-```
-
-**Result:**
-- [ ] Completed
-- Transaction Signature: `___________________`
-- Address Added: `___________________`
-- Notes: `___________________`
-
----
-
-## PHASE 11: Optional - Publish IDL to Devnet
-
-### ✅ Step 11.1: Publish IDL
+### ✅ Step 10.1: Publish IDL
 
 **Command:**
 ```bash
@@ -836,7 +801,7 @@ anchor idl init 9vDwZVJXw5nxymWmUcgmNpemDH5EBcJwLNhtsznrgJDH --filepath target/i
 
 ---
 
-### ✅ Step 11.2: Verify IDL Published
+### ✅ Step 10.2: Verify IDL Published
 
 **Command:**
 ```bash
@@ -870,7 +835,6 @@ anchor idl fetch 9vDwZVJXw5nxymWmUcgmNpemDH5EBcJwLNhtsznrgJDH --provider.cluster
 Network: Devnet
 Program ID: 9vDwZVJXw5nxymWmUcgmNpemDH5EBcJwLNhtsznrgJDH
 Pool PDA: 68xwTJYRyUdULbb5ve4JMWTc2xvw9wQmtEj9GRoHSenF
-Whitelist PDA: 8zVAo6z2juAcVMkn3booA4yMGym5BPUJey2iN1Nq7Hvr
 IDL Account: A86H6NXnycB7WPRtPFc9yL5pQJNFdtKSziGMNkNHorH1
 
 Operations Authority: 2yRhUBaydvJzkyVYpFtMBrWZWCnxdYRQtJmqtH2ugtzS
@@ -909,7 +873,6 @@ IDL: https://solscan.io/account/A86H6NXnycB7WPRtPFc9yL5pQJNFdtKSziGMNkNHorH1?clu
 ### Next Steps (Optional)
 - [ ] Test additional swap scenarios
 - [ ] Test pause/unpause functionality with new authorities
-- [ ] Test whitelist functionality if needed
 - [ ] Add more liquidity if needed
 - [ ] Monitor pool performance
 - [ ] Prepare for mainnet deployment when ready
@@ -948,7 +911,6 @@ IDL: https://solscan.io/account/A86H6NXnycB7WPRtPFc9yL5pQJNFdtKSziGMNkNHorH1?clu
 ### Edge Cases
 - [ ] Insufficient liquidity error
 - [ ] Slippage exceeded error
-- [ ] Whitelist restrictions (if enabled)
 - [ ] Maximum swap amount
 - [ ] Minimum swap amount
 

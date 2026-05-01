@@ -18,8 +18,8 @@ pub enum LiquidityError {
     InsufficientLiquidity,
     #[msg("Invalid fee rate")]
     InvalidFeeRate,
-    #[msg("Invalid reserved amount")]
-    InvalidReservedAmount,
+    #[msg("Deprecated: previously InvalidReservedAmount")]
+    DeprecatedInvalidReservedAmount,
     #[msg("Maximum number of supported tokens reached (50)")]
     MaxTokensReached,
     #[msg("Output amount below minimum acceptable (slippage exceeded)")]
@@ -32,16 +32,16 @@ pub enum LiquidityError {
     DecimalNormalizationOverflow,
     #[msg("Token is disabled and cannot be used in swaps")]
     TokenDisabled,
-    #[msg("User address is not whitelisted")]
-    NotWhitelisted,
-    #[msg("Maximum number of whitelisted addresses reached")]
-    MaxWhitelistedAddressesReached,
-    #[msg("Address is already whitelisted")]
-    AddressAlreadyWhitelisted,
-    #[msg("Address not found in whitelist")]
-    AddressNotInWhitelist,
-    #[msg("Invalid whitelist account provided")]
-    InvalidWhitelistAccount,
+    #[msg("Deprecated: previously NotWhitelisted")]
+    DeprecatedNotWhitelisted,
+    #[msg("Deprecated: previously MaxWhitelistedAddressesReached")]
+    DeprecatedMaxWhitelistedAddressesReached,
+    #[msg("Deprecated: previously AddressAlreadyWhitelisted")]
+    DeprecatedAddressAlreadyWhitelisted,
+    #[msg("Deprecated: previously AddressNotInWhitelist")]
+    DeprecatedAddressNotInWhitelist,
+    #[msg("Deprecated: previously InvalidWhitelistAccount")]
+    DeprecatedInvalidWhitelistAccount,
     #[msg("Token not found in supported tokens list")]
     TokenNotFound,
     #[msg("Token must be disabled before removal")]

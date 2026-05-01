@@ -10,7 +10,6 @@ A production-ready Solana-based liquidity management system designed for secure,
 - ✅ **Granular Pause Controls**: Independent pause flags for swaps and liquidity management
 - ✅ **Configurable Fees**: Admin-controlled fee rates (0-10% max) with separate fee recipient
 - ✅ **Multi-token Support**: Dynamic token addition with vault creation (up to 50 tokens)
-- ✅ **Liquidity Reservation**: Reserved amounts respected in withdrawals and swaps
 - ✅ **Access Controls**: Comprehensive authority validation and security measures
 
 ## 📁 Project Structure
@@ -140,18 +139,23 @@ The system is configured for **Solana Devnet** by default. To change networks:
   - Fee recipient receives: 1 USDC (protocol fee)
   - User receives: 99 AppStable (1:1 with net amount)
 
+**Swap Account Model**:
+- Swaps are permissionless when `swaps_paused` is false and both tokens are enabled
+- `user_from_token_account` does not need to be owned by `user`; the SPL Token program enforces that `user` is either the owner or a valid delegate
+- `to_token_account` may be any valid token account for the output mint, so delegated swaps can route output to a recipient chosen by the delegate
+
 ### Core Instructions
 
 - **`initialize_pool`**: Creates pool with operations & pause authorities, fee configuration
 - **`add_supported_token`**: Adds token with dedicated vault (operations authority)
 - **`swap`**: Executes 1:1 swaps with slippage protection (`min_amount_out`)
-- **`deposit_liquidity`**: Adds liquidity to vaults (operations authority, checks `liquidity_paused`)
-- **`withdraw_liquidity`**: Removes liquidity respecting reserved amounts (operations authority)
+- **`withdraw_liquidity`**: Removes liquidity from a vault (operations authority, checks `liquidity_paused`)
 - **`update_fee_config`**: Updates fee rate and recipient (operations authority)
 - **`update_pause_config`**: Controls `swaps_paused` and `liquidity_paused` (pause authority)
 - **`update_operations_authority`**: Self-updates operations authority (operations authority only)
 - **`update_pause_authority`**: Self-updates pause authority (pause authority only)
-- **`update_reserved_amount`**: Sets reserved liquidity per vault (operations authority)
+
+Liquidity is seeded by sending tokens directly to the vault token account via an SPL Token transfer; there is no dedicated deposit instruction.
 
 ## 🔐 Security Features
 
@@ -164,9 +168,8 @@ The system is configured for **Solana Devnet** by default. To change networks:
 
 ### Liquidity Safety
 - **Slippage protection**: Users specify `min_amount_out` to prevent TOCTOU attacks
-- **Reserved amount enforcement**: Withdrawals and swaps respect reserved liquidity
 - **PDA-based validation**: Accounts validated using program-derived addresses
-- **Balance validation**: Ensures sufficient liquidity (total - reserved) before operations
+- **Balance validation**: Ensures sufficient vault balance before swaps and withdrawals
 - **Overflow protection**: Checked arithmetic throughout
 
 ### Error Handling

@@ -22,7 +22,6 @@ This runbook guides you through deploying the liquidity pool program to Solana m
 - **Custom Token Decimals:** `___`
 - **USDC Mint:** `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
 - **Pool PDA:** `___________________`
-- **Whitelist PDA:** `___________________`
 - **Custom Token Vault:** `___________________`
 - **Custom Token Vault Token Account:** `___________________`
 - **USDC Vault:** `___________________`
@@ -271,7 +270,6 @@ yarn ts-node scripts/01-initialize-pool.ts 100
 - Fee Rate Used: `___________________` bps
 - Transaction Signature: `___________________`
 - Pool PDA: `___________________`
-- Whitelist PDA: `___________________`
 - Timestamp: `___________________`
 - Notes: `___________________`
 
@@ -292,7 +290,6 @@ ts-node scripts/verify-pool.ts
 - Swaps Paused: `___________________`
 - Liquidity Paused: `___________________`
 - Supported Tokens Count: `___________________`
-- Whitelist Enabled: `___________________`
 - Notes: `___________________`
 
 ---
@@ -383,38 +380,42 @@ Fund your wallet with your custom token and USDC, e.g. 10 of each.
 
 ---
 
-### ✅ Step 6.2: Deposit Custom Token Liquidity
+### ✅ Step 6.2: Seed Custom Token Liquidity
 **Planned Amount:** `___________________` tokens
 
-**Note:** We use a universal `03-deposit-liquidity.ts` script for all tokens.
+**Note:** Liquidity is seeded by sending tokens directly to the vault token account with a standard SPL Token transfer. The vault token account address for each mint is printed by `scripts/verify-pool.ts`.
 
 **Command:**
 ```bash
-yarn ts-node scripts/03-deposit-liquidity.ts <YOUR_CUSTOM_TOKEN_MINT> <AMOUNT>
+# Look up the vault token account address
+yarn ts-node scripts/verify-pool.ts
+
+# Transfer liquidity to it
+spl-token transfer <YOUR_CUSTOM_TOKEN_MINT> <AMOUNT> <VAULT_TOKEN_ACCOUNT> --fund-recipient --allow-unfunded-recipient
 ```
 
 **Result:**
 - [ ] Completed
 - Transaction Signature: `___________________`
-- Amount Deposited: `___________________` tokens
+- Amount Transferred: `___________________` tokens
 - Vault Balance After: `___________________`
 - Timestamp: `___________________`
 - Notes: `___________________`
 
 ---
 
-### ✅ Step 6.3: Deposit USDC Liquidity
+### ✅ Step 6.3: Seed USDC Liquidity
 **Planned Amount:** `___________________` USDC
 
 **Command:**
 ```bash
-yarn ts-node scripts/03-deposit-liquidity.ts EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v <AMOUNT>
+spl-token transfer EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v <AMOUNT> <USDC_VAULT_TOKEN_ACCOUNT> --fund-recipient --allow-unfunded-recipient
 ```
 
 **Result:**
 - [ ] Completed
 - Transaction Signature: `___________________`
-- Amount Deposited: `___________________` USDC
+- Amount Transferred: `___________________` USDC
 - Vault Balance After: `___________________`
 - Timestamp: `___________________`
 - Notes: `___________________`
@@ -494,7 +495,6 @@ yarn ts-node scripts/04-test-swap.ts <YOUR_CUSTOM_TOKEN_MINT> EPjFWdd5AufqSSqeM2
 ```
 Program ID: GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
 Pool: ___________________
-Whitelist: ___________________
 Custom Token Mint: ___________________
 Custom Token Vault: ___________________
 Custom Token Vault Token Account: ___________________
@@ -504,7 +504,6 @@ USDC Vault Token Account: ___________________
 ```
 
 ### Next Steps
-- [ ] Configure whitelist if needed
 - [ ] Set up monitoring
 - [ ] Update frontend with new addresses
 - [ ] Communicate pool address to users
