@@ -713,3 +713,101 @@ yarn ts-node scripts/04-test-swap.ts <FROM_MINT> <TO_MINT> <AMOUNT>
 **Deployed By:** `___________________`
 
 **Verified By:** `___________________`
+
+---
+
+## APPENDIX: Migrating an Existing Pool to the Role-Based Authority Layout
+
+After upgrading a legacy pool (which only stores `operations_authority` + `pause_authority`)
+to a build that contains `migrate_authorities`, run these steps to split roles across the
+new SCM cold keys and CCS hot keys.
+
+### Pre-stage cold keys
+
+- [ ] `unpause_authority` (SCM cold): `___________________`
+- [ ] `configure_authority` (SCM cold): `___________________`
+- [ ] `withdraw_recipient` (SCM cold treasury wallet): `___________________`
+- [ ] (Optional) New `pause_authority` (CCS hot): `___________________`
+- [ ] (Optional) New `treasury_authority` (CCS hot): `___________________`
+
+### Step M1: Pause swaps and withdraws
+
+Run with the existing pause authority (CCS hot):
+
+```bash
+yarn ts-node scripts/emergency-pause-swaps.ts true
+yarn ts-node scripts/emergency-pause-liquidity.ts true
+```
+
+### Step M2: Build the migration tx (offline-signable)
+
+```bash
+yarn ts-node scripts/migrate-authorities.ts \
+  --pause      <CCS_HOT_PAUSE> \
+  --unpause    <SCM_COLD_UNPAUSE> \
+  --treasury   <CCS_HOT_TREASURY> \
+  --configure  <SCM_COLD_CONFIGURE> \
+  --withdraw-recipient <SCM_COLD_TREASURY_WALLET> \
+  --legacy-pause       <CURRENT_PAUSE_AUTHORITY> \
+  --build-only
+```
+
+This prints an unsigned base64 transaction. Co-sign with the legacy pause authority
+(SCM/CCS multisig) and the legacy operations authority, then submit.
+
+### Step M3: Submit the migration tx
+
+For a single-sig dev environment you can drop `--build-only` and let the script send
+directly with the wallet running it (must be the legacy operations authority).
+
+### Step M4: Verify the new layout
+
+```bash
+yarn ts-node scripts/verify-pool.ts
+```
+
+Confirm all 6 fields: `pause_authority`, `unpause_authority`, `treasury_authority`,
+`configure_authority`, `fee_recipient`, `withdraw_recipient`.
+
+### Step M5: Smoke-test each role
+
+- [ ] Pause hot signs `emergency-pause-swaps.ts true` → swaps_paused becomes true
+- [ ] Unpause cold signs `emergency-pause-swaps.ts false` → swaps_paused becomes false
+- [ ] Treasury hot signs `emergency-withdraw.ts <MINT> 1` → withdraws 1 unit to the locked recipient
+- [ ] Treasury hot signs `emergency-withdraw.ts <MINT> 1` against a different recipient → fails with constraint error
+- [ ] Configure cold signs `update-withdraw-recipient.ts` → rotation succeeds
+- [ ] Configure cold signs `update-fee-config.ts` (or equivalent) → fee update succeeds
+
+### Step M6: Hand off the BPF loader upgrade authority to the SCM cold key
+
+The on-chain program upgrade authority is held by the BPF loader, not by the program.
+Rotate it separately:
+
+```bash
+solana program set-upgrade-authority \
+  GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv \
+  --new-upgrade-authority <SCM_COLD_PUBKEY>
+```
+
+Verify:
+
+```bash
+solana program show GadmXgM1J4NhkbqbpnAbEQxHssZAavWxG5uV6AHiLMHv
+# Authority: <SCM_COLD_PUBKEY>
+```
+
+### Step M7: Resume normal operations
+
+After all role checks pass and the upgrade authority is on the cold key:
+
+```bash
+yarn ts-node scripts/emergency-pause-swaps.ts false      # signed by unpause cold
+yarn ts-node scripts/emergency-pause-liquidity.ts false  # signed by unpause cold
+```
+
+### Migration Summary
+
+**Migration Date:** `___________________`
+**Migrated By:** `___________________`
+**Migration Tx:** `___________________`
+**Set-Upgrade-Authority Tx:** `___________________`

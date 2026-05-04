@@ -5,12 +5,12 @@ A production-ready Solana-based liquidity management system designed for secure,
 ## 🏗️ Key Features
 
 - ✅ **1:1 Token Swaps**: Guaranteed parity swapping between supported stablecoins
-- ✅ **Dual Authority Model**: Separate operations and pause authorities with multisig support
+- ✅ **Role-Based Authority Model**: Four in-program roles split between SCM cold and CCS hot keys (Pause, Unpause, Treasury, Configure)
+- ✅ **Locked Withdraw Destination**: `withdraw_liquidity` can only target a `withdraw_recipient` set by the cold-key Configure Authority
 - ✅ **Slippage Protection**: User-defined minimum output amounts prevent unexpected losses
-- ✅ **Granular Pause Controls**: Independent pause flags for swaps and liquidity management
-- ✅ **Configurable Fees**: Admin-controlled fee rates (0-10% max) with separate fee recipient
+- ✅ **Granular Pause Controls**: Independent pause flags for swaps, withdraws, and per-token; pausing is hot, unpausing is cold
+- ✅ **Configurable Fees**: Cold-key controlled fee rates (0-10% max) with separate fee recipient
 - ✅ **Multi-token Support**: Dynamic token addition with vault creation (up to 50 tokens)
-- ✅ **Access Controls**: Comprehensive authority validation and security measures
 
 ## 📁 Project Structure
 
@@ -144,26 +144,41 @@ The system is configured for **Solana Devnet** by default. To change networks:
 - `user_from_token_account` does not need to be owned by `user`; the SPL Token program enforces that `user` is either the owner or a valid delegate
 - `to_token_account` may be any valid token account for the output mint, so delegated swaps can route output to a recipient chosen by the delegate
 
+### Roles
+
+| Role | Key class | Permissions |
+| --- | --- | --- |
+| Pause Authority | CCS hot | `pause_swaps`, `pause_withdraws`, `pause_token` |
+| Unpause Authority | SCM cold | `unpause_swaps`, `unpause_withdraws`, `unpause_token` |
+| Treasury Authority | CCS hot | `withdraw_liquidity` (recipient locked to `withdraw_recipient`) |
+| Configure Authority | SCM cold | `add_supported_token`, `remove_supported_token`, `update_fee_config`, `update_withdraw_recipient` |
+| Each role | (self) | `update_<role>_authority` (strict self-rotation) |
+
+The on-chain program upgrade authority is held by the BPF loader (rotate via `solana program set-upgrade-authority`) and is independent from the in-program roles above.
+
 ### Core Instructions
 
-- **`initialize_pool`**: Creates pool with operations & pause authorities, fee configuration
-- **`add_supported_token`**: Adds token with dedicated vault (operations authority)
+- **`initialize`**: Creates pool with the four role authorities, fee recipient, and withdraw recipient
+- **`migrate_authorities`**: One-shot migration of an existing legacy pool to the role-based layout (co-signed by current `operations_authority` + `pause_authority`)
+- **`add_supported_token` / `remove_supported_token`**: Configure Authority manages supported tokens
 - **`swap`**: Executes 1:1 swaps with slippage protection (`min_amount_out`)
-- **`withdraw_liquidity`**: Removes liquidity from a vault (operations authority, checks `liquidity_paused`)
-- **`update_fee_config`**: Updates fee rate and recipient (operations authority)
-- **`update_pause_config`**: Controls `swaps_paused` and `liquidity_paused` (pause authority)
-- **`update_operations_authority`**: Self-updates operations authority (operations authority only)
-- **`update_pause_authority`**: Self-updates pause authority (pause authority only)
+- **`withdraw_liquidity`**: Treasury Authority withdraws to the `withdraw_recipient`-owned token account only
+- **`update_fee_config`**: Configure Authority updates fee rate and recipient
+- **`update_withdraw_recipient`**: Configure Authority rotates the locked withdraw destination
+- **`pause_swaps` / `pause_withdraws` / `pause_token`**: Pause Authority puts the corresponding flag in the paused state
+- **`unpause_swaps` / `unpause_withdraws` / `unpause_token`**: Unpause Authority clears the flag
+- **`update_<role>_authority`**: Each role self-rotates (no cross-role rotation)
 
 Liquidity is seeded by sending tokens directly to the vault token account via an SPL Token transfer; there is no dedicated deposit instruction.
 
 ## 🔐 Security Features
 
 ### Access Controls
-- **Dual authority model**: Separate operations and pause authorities (multisig-ready)
-- **Self-updating authorities**: Each authority can only update itself
-- **Authority validation**: Operations enforce constraints via PDAs
-- **Granular pause controls**: Independent `swaps_paused` and `liquidity_paused` flags
+- **Four-role model**: Pause/Unpause/Treasury/Configure split across SCM cold and CCS hot keys
+- **Strict self-rotation**: Each role rotates only itself; no role can take over another
+- **Locked withdraw destination**: `withdraw_liquidity` recipient must be a token account owned by `pool.withdraw_recipient`, which only the cold-key Configure Authority can change
+- **Pausing is hot, unpausing is cold**: A compromised hot key can pause but cannot resume operations
+- **Granular pause controls**: Independent `swaps_paused`, `liquidity_paused`, and per-token `disabled` flags
 - **Fee rate cap**: Maximum 10% (1000 basis points) enforced at program level
 
 ### Liquidity Safety

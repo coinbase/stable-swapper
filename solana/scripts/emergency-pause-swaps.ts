@@ -72,11 +72,17 @@ async function main() {
   console.log("- Your Wallet:", payer.publicKey.toString());
   console.log();
 
-  // Verify you are the pause authority
-  if (!poolAccount.pauseAuthority.equals(payer.publicKey)) {
-    console.error("❌ Error: You are not the pause authority");
+  // Verify you hold the right authority for the requested direction.
+  const requiredAuthority = paused
+    ? poolAccount.pauseAuthority
+    : poolAccount.unpauseAuthority;
+  const requiredAuthorityName = paused
+    ? "pause authority"
+    : "unpause authority";
+  if (!requiredAuthority.equals(payer.publicKey)) {
+    console.error(`❌ Error: You are not the ${requiredAuthorityName}`);
     console.error(
-      `   Pause authority is: ${poolAccount.pauseAuthority.toString()}`
+      `   ${requiredAuthorityName} is: ${requiredAuthority.toString()}`
     );
     console.error(`   Your wallet is: ${payer.publicKey.toString()}`);
     process.exit(1);
@@ -97,13 +103,21 @@ async function main() {
   console.log();
 
   try {
-    const tx = await program.methods
-      .updatePauseConfig(paused, null)
-      .accounts({
-        pool: pool,
-        pauseAuthority: payer.publicKey,
-      } as any)
-      .rpc();
+    const tx = paused
+      ? await program.methods
+          .pauseSwaps()
+          .accounts({
+            pool: pool,
+            pauseAuthority: payer.publicKey,
+          } as any)
+          .rpc()
+      : await program.methods
+          .unpauseSwaps()
+          .accounts({
+            pool: pool,
+            unpauseAuthority: payer.publicKey,
+          } as any)
+          .rpc();
 
     console.log(
       `${paused ? "🛑" : "✅"} Swaps ${

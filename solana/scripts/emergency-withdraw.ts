@@ -84,12 +84,6 @@ async function main() {
     program.programId
   );
 
-  const operationsAuthorityTokenAccount = await getAssociatedTokenAddress(
-    mint,
-    payer.publicKey,
-    false
-  );
-
   // Fetch accounts
   const poolAccount = await program.account.liquidityPool.fetch(pool);
   const vaultAccount = await program.account.tokenVault.fetch(vault);
@@ -99,6 +93,14 @@ async function main() {
     console.error("❌ Error: Mint account not found");
     process.exit(1);
   }
+
+  // Recipient is locked on-chain to the ATA owned by `pool.withdraw_recipient`.
+  // The treasury authority cannot redirect funds elsewhere.
+  const withdrawRecipientTokenAccount = await getAssociatedTokenAddress(
+    mint,
+    poolAccount.withdrawRecipient,
+    false
+  );
 
   const mintData = await provider.connection.getParsedAccountInfo(mint);
   const decimals = (mintData.value?.data as any).parsed.info.decimals;
@@ -111,21 +113,25 @@ async function main() {
   console.log("- Vault PDA:", vault.toString());
   console.log("- Vault Token Account:", vaultTokenAccount.toString());
   console.log(
-    "- Operations Authority:",
-    poolAccount.operationsAuthority.toString()
+    "- Treasury Authority:",
+    poolAccount.treasuryAuthority.toString()
   );
   console.log(
-    "- Operations Authority Token Account:",
-    operationsAuthorityTokenAccount.toString()
+    "- Withdraw Recipient (owner):",
+    poolAccount.withdrawRecipient.toString()
+  );
+  console.log(
+    "- Withdraw Recipient ATA:",
+    withdrawRecipientTokenAccount.toString()
   );
   console.log("- Your Wallet:", payer.publicKey.toString());
   console.log();
 
-  // Verify you are the operations authority
-  if (!poolAccount.operationsAuthority.equals(payer.publicKey)) {
-    console.error("❌ Error: You are not the operations authority");
+  // Verify you are the treasury authority.
+  if (!poolAccount.treasuryAuthority.equals(payer.publicKey)) {
+    console.error("❌ Error: You are not the treasury authority");
     console.error(
-      `   Operations authority is: ${poolAccount.operationsAuthority.toString()}`
+      `   Treasury authority is: ${poolAccount.treasuryAuthority.toString()}`
     );
     console.error(`   Your wallet is: ${payer.publicKey.toString()}`);
     process.exit(1);
@@ -196,9 +202,9 @@ async function main() {
         pool: pool,
         vault: vault,
         vaultTokenAccount: vaultTokenAccount,
-        recipientTokenAccount: operationsAuthorityTokenAccount,
+        recipientTokenAccount: withdrawRecipientTokenAccount,
         mint: mint,
-        operationsAuthority: payer.publicKey,
+        treasuryAuthority: payer.publicKey,
         tokenProgram: anchor.utils.token.TOKEN_PROGRAM_ID,
       } as any)
       .rpc();

@@ -97,7 +97,7 @@ async function main() {
     "- Fee Recipient Token Account:",
     feeRecipientTokenAccount.toString()
   );
-  console.log("- Operations Authority:", payer.publicKey.toString());
+  console.log("- Configure Authority:", payer.publicKey.toString());
   console.log();
 
   // Check if token already exists
@@ -136,7 +136,7 @@ async function main() {
         feeRecipientTokenAccount: feeRecipientTokenAccount,
         feeRecipient: payer.publicKey,
         mint: mint,
-        operationsAuthority: payer.publicKey,
+        configureAuthority: payer.publicKey,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,

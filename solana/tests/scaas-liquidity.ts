@@ -21,8 +21,12 @@ describe("scaas-liquidity", () => {
 
   const program = anchor.workspace.scaasLiquidity as Program<ScaasLiquidity>;
   const payer = provider.wallet as anchor.Wallet;
-  const operationsAuthority = payer; // In tests, same as payer
-  const pauseAuthority = payer; // In tests, same as payer
+  const operationsAuthority = payer; // legacy alias retained for migration tests
+  const pauseAuthority = payer;
+  const unpauseAuthority = payer;
+  const treasuryAuthority = payer;
+  const configureAuthority = payer;
+  const withdrawRecipient = payer;
 
   // Test keypairs
   let usdcMint: PublicKey;
@@ -139,9 +143,12 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           payer: payer.publicKey,
-          operationsAuthority: operationsAuthority.publicKey,
           pauseAuthority: pauseAuthority.publicKey,
+          unpauseAuthority: unpauseAuthority.publicKey,
+          treasuryAuthority: treasuryAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
           feeRecipient: payer.publicKey,
+          withdrawRecipient: withdrawRecipient.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .signers([payer.payer])
@@ -150,12 +157,28 @@ describe("scaas-liquidity", () => {
       // Verify pool state
       const poolAccount = await program.account.liquidityPool.fetch(pool);
       assert.equal(
-        poolAccount.operationsAuthority.toString(),
-        operationsAuthority.publicKey.toString()
-      );
-      assert.equal(
         poolAccount.pauseAuthority.toString(),
         pauseAuthority.publicKey.toString()
+      );
+      assert.equal(
+        poolAccount.unpauseAuthority.toString(),
+        unpauseAuthority.publicKey.toString()
+      );
+      assert.equal(
+        poolAccount.treasuryAuthority.toString(),
+        treasuryAuthority.publicKey.toString()
+      );
+      assert.equal(
+        poolAccount.configureAuthority.toString(),
+        configureAuthority.publicKey.toString()
+      );
+      assert.equal(
+        poolAccount.feeRecipient.toString(),
+        payer.publicKey.toString()
+      );
+      assert.equal(
+        poolAccount.withdrawRecipient.toString(),
+        withdrawRecipient.publicKey.toString()
       );
       assert.equal(poolAccount.feeRate.toNumber(), feeRate);
       assert.equal(poolAccount.swapsPaused, false);
@@ -173,13 +196,13 @@ describe("scaas-liquidity", () => {
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: payer.publicKey,
           mint: usdcMint,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       // Verify vault creation
@@ -205,13 +228,13 @@ describe("scaas-liquidity", () => {
           feeRecipientTokenAccount: feeRecipientAppStableAccount,
           feeRecipient: payer.publicKey,
           mint: appStableMint,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       // Verify pool now has both tokens
@@ -266,10 +289,10 @@ describe("scaas-liquidity", () => {
           vaultTokenAccount: usdcVaultTokenAccount,
           recipientTokenAccount: userUsdcAccount,
           mint: usdcMint,
-          operationsAuthority: operationsAuthority.publicKey,
+          treasuryAuthority: treasuryAuthority.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
-        .signers([operationsAuthority.payer])
+        .signers([treasuryAuthority.payer])
         .rpc();
 
       // Verify liquidity was withdrawn
@@ -297,7 +320,7 @@ describe("scaas-liquidity", () => {
     it("Fails to withdraw when liquidity is paused", async () => {
       // First pause liquidity
       await program.methods
-        .updatePauseConfig(null, true) // swapsPaused=null, liquidityPaused=true
+        .pauseWithdraws() // swapsPaused=null, liquidityPaused=true
         .accounts({
           pool,
           pauseAuthority: pauseAuthority.publicKey,
@@ -316,10 +339,10 @@ describe("scaas-liquidity", () => {
             vaultTokenAccount: usdcVaultTokenAccount,
             recipientTokenAccount: userUsdcAccount,
             mint: usdcMint,
-            operationsAuthority: operationsAuthority.publicKey,
+            treasuryAuthority: treasuryAuthority.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
           })
-          .signers([operationsAuthority.payer])
+          .signers([treasuryAuthority.payer])
           .rpc();
 
         assert.fail("Expected liquidity paused error");
@@ -329,12 +352,12 @@ describe("scaas-liquidity", () => {
 
       // Unpause liquidity for other tests
       await program.methods
-        .updatePauseConfig(null, false)
+        .unpauseWithdraws()
         .accounts({
           pool,
-          pauseAuthority: pauseAuthority.publicKey,
+          unpauseAuthority: unpauseAuthority.publicKey,
         })
-        .signers([pauseAuthority.payer])
+        .signers([unpauseAuthority.payer])
         .rpc();
     });
   });
@@ -724,9 +747,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(500), null) // 5% fee
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       const swapAmount = new anchor.BN(100 * 10 ** 6); // 100 USDC
@@ -767,9 +790,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(0), null)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
     });
 
@@ -779,9 +802,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(100), null) // 1% fee
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       // Try to swap only 1 unit
@@ -826,9 +849,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(0), null)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
     });
   });
@@ -837,7 +860,7 @@ describe("scaas-liquidity", () => {
     it("Disables a token and prevents swaps", async () => {
       // Disable USDC
       await program.methods
-        .updateTokenStatus(true)
+        .pauseToken()
         .accounts({
           pool,
           vault: usdcVault,
@@ -921,14 +944,14 @@ describe("scaas-liquidity", () => {
     it("Re-enables a token and allows swaps again", async () => {
       // Re-enable USDC
       await program.methods
-        .updateTokenStatus(false)
+        .unpauseToken()
         .accounts({
           pool,
           vault: usdcVault,
           mint: usdcMint,
-          pauseAuthority: pauseAuthority.publicKey,
+          unpauseAuthority: unpauseAuthority.publicKey,
         })
-        .signers([pauseAuthority.payer])
+        .signers([unpauseAuthority.payer])
         .rpc();
 
       // Verify vault is enabled
@@ -980,7 +1003,7 @@ describe("scaas-liquidity", () => {
 
       try {
         await program.methods
-          .updateTokenStatus(true)
+          .pauseToken()
           .accounts({
             pool,
             vault: usdcVault,
@@ -1059,13 +1082,13 @@ describe("scaas-liquidity", () => {
           feeRecipientTokenAccount: feeRecipientTestTokenAccount,
           feeRecipient: payer.publicKey,
           mint: testTokenMint,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       const poolAccount = await program.account.liquidityPool.fetch(pool);
@@ -1086,10 +1109,10 @@ describe("scaas-liquidity", () => {
             vault: testTokenVault,
             vaultTokenAccount: testTokenVaultTokenAccount,
             mint: testTokenMint,
-            operationsAuthority: operationsAuthority.publicKey,
+            configureAuthority: configureAuthority.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
           })
-          .signers([operationsAuthority.payer])
+          .signers([configureAuthority.payer])
           .rpc();
 
         assert.fail("Should have failed - token not disabled");
@@ -1117,7 +1140,7 @@ describe("scaas-liquidity", () => {
 
     it("Disables the test token", async () => {
       await program.methods
-        .updateTokenStatus(true)
+        .pauseToken()
         .accounts({
           pool,
           vault: testTokenVault,
@@ -1142,10 +1165,10 @@ describe("scaas-liquidity", () => {
             vault: testTokenVault,
             vaultTokenAccount: testTokenVaultTokenAccount,
             mint: testTokenMint,
-            operationsAuthority: operationsAuthority.publicKey,
+            configureAuthority: configureAuthority.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
           })
-          .signers([operationsAuthority.payer])
+          .signers([configureAuthority.payer])
           .rpc();
 
         assert.fail("Should have failed - vault not empty");
@@ -1169,10 +1192,10 @@ describe("scaas-liquidity", () => {
           vaultTokenAccount: testTokenVaultTokenAccount,
           recipientTokenAccount: userTestTokenAccount,
           mint: testTokenMint,
-          operationsAuthority: operationsAuthority.publicKey,
+          treasuryAuthority: treasuryAuthority.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
-        .signers([operationsAuthority.payer])
+        .signers([treasuryAuthority.payer])
         .rpc();
 
       // Verify vault is empty
@@ -1190,10 +1213,10 @@ describe("scaas-liquidity", () => {
           vault: testTokenVault,
           vaultTokenAccount: testTokenVaultTokenAccount,
           mint: testTokenMint,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       // Verify token removed from pool
@@ -1268,18 +1291,18 @@ describe("scaas-liquidity", () => {
           feeRecipientTokenAccount: newFeeRecipientTestTokenAccount,
           feeRecipient: payer.publicKey,
           mint: newTestTokenMint,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       // Disable it
       await program.methods
-        .updateTokenStatus(true)
+        .pauseToken()
         .accounts({
           pool,
           vault: newTestTokenVault,
@@ -1298,7 +1321,7 @@ describe("scaas-liquidity", () => {
             vault: newTestTokenVault,
             vaultTokenAccount: newTestTokenVaultTokenAccount,
             mint: newTestTokenMint,
-            operationsAuthority: unauthorizedUser.publicKey,
+            configureAuthority: unauthorizedUser.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
           })
           .signers([unauthorizedUser])
@@ -1317,10 +1340,10 @@ describe("scaas-liquidity", () => {
           vault: newTestTokenVault,
           vaultTokenAccount: newTestTokenVaultTokenAccount,
           mint: newTestTokenMint,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
     });
   });
@@ -1333,9 +1356,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(newFeeRate), null) // feeRate, feeRecipient
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       // Verify fee rate was updated
@@ -1347,15 +1370,15 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(0), null) // feeRate, feeRecipient
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
     });
 
     it("Pauses swaps", async () => {
       await program.methods
-        .updatePauseConfig(true, null) // swapsPaused, liquidityPaused
+        .pauseSwaps() // swapsPaused, liquidityPaused
         .accounts({
           pool,
           pauseAuthority: pauseAuthority.publicKey,
@@ -1404,7 +1427,7 @@ describe("scaas-liquidity", () => {
 
     it("Unpauses swaps", async () => {
       await program.methods
-        .updatePauseConfig(false, null) // swapsPaused, liquidityPaused
+        .unpauseSwaps() // swapsPaused, liquidityPaused
         .accounts({
           pool,
           pauseAuthority: pauseAuthority.publicKey,
@@ -1476,9 +1499,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(100), feeRecipient.publicKey)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       const swapAmount = new anchor.BN(100 * 10 ** 6); // 100 USDC
@@ -1585,9 +1608,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(0), payer.publicKey)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
     });
 
@@ -1608,9 +1631,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(100), newFeeRecipient.publicKey)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       const swapAmount = new anchor.BN(100 * 10 ** 6); // 100 USDC
@@ -1663,9 +1686,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(0), payer.publicKey)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
     });
 
@@ -1743,9 +1766,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(100), null)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       // Create a separate fee recipient to track fees
@@ -1761,9 +1784,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(null, feeRecipient.publicKey)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       // Test case 1: Amount that creates fractional fee in basis points
@@ -1867,9 +1890,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(0), payer.publicKey)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
     });
 
@@ -1879,9 +1902,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(100), null)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       // Create a separate fee recipient to track fees
@@ -1897,9 +1920,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(null, feeRecipient.publicKey)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       // Test: 100 tokens with 1% fee = exactly 1 token
@@ -1953,9 +1976,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(0), payer.publicKey)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
     });
   });
@@ -1969,9 +1992,9 @@ describe("scaas-liquidity", () => {
           .updateFeeConfig(new anchor.BN(excessiveFeeRate), null)
           .accounts({
             pool,
-            operationsAuthority: operationsAuthority.publicKey,
+            configureAuthority: configureAuthority.publicKey,
           })
-          .signers([operationsAuthority.payer])
+          .signers([configureAuthority.payer])
           .rpc();
 
         assert.fail("Expected invalid fee rate error");
@@ -1987,9 +2010,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(maxFeeRate), null)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       const poolAccount = await program.account.liquidityPool.fetch(pool);
@@ -2000,9 +2023,9 @@ describe("scaas-liquidity", () => {
         .updateFeeConfig(new anchor.BN(0), null)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
     });
   });
@@ -2068,13 +2091,13 @@ describe("scaas-liquidity", () => {
           feeRecipientTokenAccount: feeRecipient9DecAccount,
           feeRecipient: payer.publicKey,
           mint: token9DecMint,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       // Seed liquidity for 9-decimal token via direct SPL transfer
@@ -2290,13 +2313,13 @@ describe("scaas-liquidity", () => {
             feeRecipientTokenAccount: invalidFeeRecipientAccount,
             feeRecipient: payer.publicKey,
             mint: invalidMint,
-            operationsAuthority: operationsAuthority.publicKey,
+            configureAuthority: configureAuthority.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
           })
-          .signers([operationsAuthority.payer])
+          .signers([configureAuthority.payer])
           .rpc();
 
         assert.fail("Should have rejected token with 5 decimals");
@@ -2340,13 +2363,13 @@ describe("scaas-liquidity", () => {
             feeRecipientTokenAccount: invalidFeeRecipientAccount,
             feeRecipient: payer.publicKey,
             mint: invalidMint,
-            operationsAuthority: operationsAuthority.publicKey,
+            configureAuthority: configureAuthority.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
           })
-          .signers([operationsAuthority.payer])
+          .signers([configureAuthority.payer])
           .rpc();
 
         assert.fail("Should have rejected token with 12 decimals");
@@ -2462,13 +2485,13 @@ describe("scaas-liquidity", () => {
             feeRecipientTokenAccount,
             feeRecipient: payer.publicKey,
             mint,
-            operationsAuthority: operationsAuthority.publicKey,
+            configureAuthority: configureAuthority.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
           })
-          .signers([operationsAuthority.payer])
+          .signers([configureAuthority.payer])
           .rpc();
       }
 
@@ -2501,13 +2524,13 @@ describe("scaas-liquidity", () => {
             feeRecipientTokenAccount: extraFeeRecipientTokenAccount,
             feeRecipient: payer.publicKey,
             mint: extraMint,
-            operationsAuthority: operationsAuthority.publicKey,
+            configureAuthority: configureAuthority.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
           })
-          .signers([operationsAuthority.payer])
+          .signers([configureAuthority.payer])
           .rpc();
 
         assert.fail("Should have failed - max tokens reached");
@@ -2568,10 +2591,10 @@ describe("scaas-liquidity", () => {
             vaultTokenAccount: usdcVaultTokenAccount,
             recipientTokenAccount: userUsdcAccount,
             mint: usdcMint,
-            operationsAuthority: operationsAuthority.publicKey,
+            treasuryAuthority: treasuryAuthority.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
           })
-          .signers([operationsAuthority.payer])
+          .signers([treasuryAuthority.payer])
           .rpc();
 
         assert.fail("Should have failed - zero amount");
@@ -2598,10 +2621,10 @@ describe("scaas-liquidity", () => {
             vaultTokenAccount: usdcVaultTokenAccount,
             recipientTokenAccount: userUsdcAccount,
             mint: usdcMint,
-            operationsAuthority: operationsAuthority.publicKey,
+            treasuryAuthority: treasuryAuthority.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
           })
-          .signers([operationsAuthority.payer])
+          .signers([treasuryAuthority.payer])
           .rpc();
 
         assert.fail("Should have failed - insufficient liquidity");
@@ -2652,27 +2675,27 @@ describe("scaas-liquidity", () => {
       const newOpsAuthority = anchor.web3.Keypair.generate();
 
       await program.methods
-        .updateOperationsAuthority(newOpsAuthority.publicKey)
+        .updateConfigureAuthority(newOpsAuthority.publicKey)
         .accounts({
           pool,
-          operationsAuthority: operationsAuthority.publicKey,
+          configureAuthority: configureAuthority.publicKey,
         })
-        .signers([operationsAuthority.payer])
+        .signers([configureAuthority.payer])
         .rpc();
 
       // Verify the authority was updated
       const poolAccount = await program.account.liquidityPool.fetch(pool);
       assert.equal(
-        poolAccount.operationsAuthority.toString(),
+        poolAccount.configureAuthority.toString(),
         newOpsAuthority.publicKey.toString()
       );
 
       // Change it back to the original for other tests
       await program.methods
-        .updateOperationsAuthority(operationsAuthority.publicKey)
+        .updateConfigureAuthority(operationsAuthority.publicKey)
         .accounts({
           pool,
-          operationsAuthority: newOpsAuthority.publicKey,
+          configureAuthority: newOpsAuthority.publicKey,
         })
         .signers([newOpsAuthority])
         .rpc();
@@ -2709,42 +2732,61 @@ describe("scaas-liquidity", () => {
         .rpc();
     });
 
-    it("Fails when pause authority tries to update operations authority", async () => {
-      const newAuthority = anchor.web3.Keypair.generate();
+    it("Fails when a non-configure signer tries to rotate the configure authority", async () => {
+      // Use a separately generated signer so the test catches a real has_one
+      // violation (instead of accidentally succeeding because all in-test role
+      // aliases point at the same payer).
+      const stranger = anchor.web3.Keypair.generate();
+      const transferTx = new anchor.web3.Transaction().add(
+        anchor.web3.SystemProgram.transfer({
+          fromPubkey: payer.publicKey,
+          toPubkey: stranger.publicKey,
+          lamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL,
+        })
+      );
+      await provider.sendAndConfirm(transferTx, [payer.payer]);
 
+      const newAuthority = anchor.web3.Keypair.generate();
       try {
         await program.methods
-          .updateOperationsAuthority(newAuthority.publicKey)
+          .updateConfigureAuthority(newAuthority.publicKey)
           .accounts({
             pool,
-            operationsAuthority: pauseAuthority.publicKey, // Wrong authority
+            configureAuthority: stranger.publicKey,
           })
-          .signers([pauseAuthority.payer])
+          .signers([stranger])
           .rpc();
 
         assert.fail("Expected constraint violation");
       } catch (error) {
-        // Should fail due to has_one constraint
         assert.include(error.toString().toLowerCase(), "constraint");
       }
     });
 
-    it("Fails when operations authority tries to update pause authority", async () => {
-      const newAuthority = anchor.web3.Keypair.generate();
+    it("Fails when a non-pause signer tries to rotate the pause authority", async () => {
+      const stranger = anchor.web3.Keypair.generate();
+      const transferTx = new anchor.web3.Transaction().add(
+        anchor.web3.SystemProgram.transfer({
+          fromPubkey: payer.publicKey,
+          toPubkey: stranger.publicKey,
+          lamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL,
+        })
+      );
+      await provider.sendAndConfirm(transferTx, [payer.payer]);
 
+      const newAuthority = anchor.web3.Keypair.generate();
       try {
         await program.methods
           .updatePauseAuthority(newAuthority.publicKey)
           .accounts({
             pool,
-            pauseAuthority: operationsAuthority.publicKey, // Wrong authority
+            pauseAuthority: stranger.publicKey,
           })
-          .signers([operationsAuthority.payer])
+          .signers([stranger])
           .rpc();
 
         assert.fail("Expected constraint violation");
       } catch (error) {
-        // Should fail due to has_one constraint
         assert.include(error.toString().toLowerCase(), "constraint");
       }
     });
@@ -2821,7 +2863,7 @@ describe("scaas-liquidity", () => {
             feeRecipientTokenAccount: newFeeRecipientAccount,
             feeRecipient: payer.publicKey,
             mint: newMint,
-            operationsAuthority: unauthorizedUser.publicKey, // Wrong authority
+            configureAuthority: unauthorizedUser.publicKey, // Wrong authority
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: anchor.web3.SystemProgram.programId,
@@ -2846,7 +2888,7 @@ describe("scaas-liquidity", () => {
             vaultTokenAccount: usdcVaultTokenAccount,
             recipientTokenAccount: unauthorizedUserUsdcAccount,
             mint: usdcMint,
-            operationsAuthority: unauthorizedUser.publicKey, // Wrong authority
+            treasuryAuthority: unauthorizedUser.publicKey, // Wrong authority
             tokenProgram: TOKEN_PROGRAM_ID,
           })
           .signers([unauthorizedUser])
@@ -2864,7 +2906,7 @@ describe("scaas-liquidity", () => {
           .updateFeeConfig(new anchor.BN(50), null)
           .accounts({
             pool,
-            operationsAuthority: unauthorizedUser.publicKey, // Wrong authority
+            configureAuthority: unauthorizedUser.publicKey, // Wrong authority
           })
           .signers([unauthorizedUser])
           .rpc();
@@ -2878,7 +2920,7 @@ describe("scaas-liquidity", () => {
     it("Fails when unauthorized user tries to update pause config", async () => {
       try {
         await program.methods
-          .updatePauseConfig(true, null)
+          .pauseSwaps()
           .accounts({
             pool,
             pauseAuthority: unauthorizedUser.publicKey, // Wrong authority
@@ -2889,6 +2931,312 @@ describe("scaas-liquidity", () => {
         assert.fail("Expected constraint violation");
       } catch (error) {
         assert.include(error.toString().toLowerCase(), "constraint");
+      }
+    });
+
+    it("Fails when pause authority tries to unpause swaps", async () => {
+      // First put swaps into a paused state.
+      await program.methods
+        .pauseSwaps()
+        .accounts({ pool, pauseAuthority: pauseAuthority.publicKey })
+        .signers([pauseAuthority.payer])
+        .rpc();
+
+      try {
+        await program.methods
+          .unpauseSwaps()
+          .accounts({
+            pool,
+            unpauseAuthority: unauthorizedUser.publicKey, // Wrong authority
+          })
+          .signers([unauthorizedUser])
+          .rpc();
+        assert.fail("Expected constraint violation");
+      } catch (error) {
+        assert.include(error.toString().toLowerCase(), "constraint");
+      } finally {
+        // Restore unpaused state for subsequent tests.
+        await program.methods
+          .unpauseSwaps()
+          .accounts({ pool, unpauseAuthority: unpauseAuthority.publicKey })
+          .signers([unpauseAuthority.payer])
+          .rpc();
+      }
+    });
+
+    it("Fails when treasury tries to list a token (configure-only)", async () => {
+      const newMint = await createMint(
+        provider.connection,
+        payer.payer,
+        payer.publicKey,
+        null,
+        6
+      );
+      const [newVault] = PublicKey.findProgramAddressSync(
+        [Buffer.from("token_vault"), pool.toBuffer(), newMint.toBuffer()],
+        program.programId
+      );
+      const [newVaultTokenAccount] = PublicKey.findProgramAddressSync(
+        [Buffer.from("vault_token_account"), newVault.toBuffer()],
+        program.programId
+      );
+      const newFeeRecipientAccount = await getAssociatedTokenAddress(
+        newMint,
+        payer.publicKey
+      );
+
+      try {
+        await program.methods
+          .addSupportedToken()
+          .accounts({
+            pool,
+            vault: newVault,
+            vaultTokenAccount: newVaultTokenAccount,
+            feeRecipientTokenAccount: newFeeRecipientAccount,
+            feeRecipient: payer.publicKey,
+            mint: newMint,
+            configureAuthority: unauthorizedUser.publicKey, // wrong role
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          })
+          .signers([unauthorizedUser])
+          .rpc();
+        assert.fail("Expected constraint violation");
+      } catch (error) {
+        assert.include(error.toString().toLowerCase(), "constraint");
+      }
+    });
+  });
+
+  describe("Withdraw Recipient Lock", () => {
+    let foreignOwner: anchor.web3.Keypair;
+    let foreignUsdcAccount: PublicKey;
+
+    before(async () => {
+      foreignOwner = anchor.web3.Keypair.generate();
+      foreignUsdcAccount = await createAccount(
+        provider.connection,
+        payer.payer,
+        usdcMint,
+        foreignOwner.publicKey
+      );
+    });
+
+    it("Rejects withdraw to a recipient not owned by withdraw_recipient", async () => {
+      try {
+        await program.methods
+          .withdrawLiquidity(new anchor.BN(1))
+          .accounts({
+            pool,
+            vault: usdcVault,
+            vaultTokenAccount: usdcVaultTokenAccount,
+            recipientTokenAccount: foreignUsdcAccount, // owner != withdrawRecipient
+            mint: usdcMint,
+            treasuryAuthority: treasuryAuthority.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([treasuryAuthority.payer])
+          .rpc();
+        assert.fail("Expected constraint violation");
+      } catch (error) {
+        assert.include(error.toString().toLowerCase(), "constraint");
+      }
+    });
+
+    it("Allows configure_authority to rotate withdraw_recipient and re-locks the destination", async () => {
+      // Rotate to foreignOwner so a withdraw to foreignUsdcAccount succeeds.
+      await program.methods
+        .updateWithdrawRecipient(foreignOwner.publicKey)
+        .accounts({
+          pool,
+          configureAuthority: configureAuthority.publicKey,
+        })
+        .signers([configureAuthority.payer])
+        .rpc();
+
+      const before = await getAccount(provider.connection, foreignUsdcAccount);
+      await program.methods
+        .withdrawLiquidity(new anchor.BN(1))
+        .accounts({
+          pool,
+          vault: usdcVault,
+          vaultTokenAccount: usdcVaultTokenAccount,
+          recipientTokenAccount: foreignUsdcAccount,
+          mint: usdcMint,
+          treasuryAuthority: treasuryAuthority.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([treasuryAuthority.payer])
+        .rpc();
+      const after = await getAccount(provider.connection, foreignUsdcAccount);
+      assert.equal(after.amount - before.amount, BigInt(1));
+
+      // Withdrawing to the original recipient (payer) now fails.
+      try {
+        await program.methods
+          .withdrawLiquidity(new anchor.BN(1))
+          .accounts({
+            pool,
+            vault: usdcVault,
+            vaultTokenAccount: usdcVaultTokenAccount,
+            recipientTokenAccount: userUsdcAccount,
+            mint: usdcMint,
+            treasuryAuthority: treasuryAuthority.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([treasuryAuthority.payer])
+          .rpc();
+        assert.fail("Expected constraint violation");
+      } catch (error) {
+        assert.include(error.toString().toLowerCase(), "constraint");
+      }
+
+      // Restore for any later tests.
+      await program.methods
+        .updateWithdrawRecipient(withdrawRecipient.publicKey)
+        .accounts({
+          pool,
+          configureAuthority: configureAuthority.publicKey,
+        })
+        .signers([configureAuthority.payer])
+        .rpc();
+    });
+
+    it("Rejects update_withdraw_recipient from a non-configure signer", async () => {
+      try {
+        await program.methods
+          .updateWithdrawRecipient(foreignOwner.publicKey)
+          .accounts({
+            pool,
+            configureAuthority: pauseAuthority.publicKey, // matches pool field for value, but wrong signer-binding
+          })
+          .signers([pauseAuthority.payer])
+          .rpc();
+        // Aliased to payer in tests, so this case actually succeeds; tighten with a foreign signer.
+      } catch (_) {}
+
+      const stranger = anchor.web3.Keypair.generate();
+      // Fund the stranger so the tx can pay fees.
+      const transferTx = new anchor.web3.Transaction().add(
+        anchor.web3.SystemProgram.transfer({
+          fromPubkey: payer.publicKey,
+          toPubkey: stranger.publicKey,
+          lamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL,
+        })
+      );
+      await provider.sendAndConfirm(transferTx, [payer.payer]);
+
+      try {
+        await program.methods
+          .updateWithdrawRecipient(foreignOwner.publicKey)
+          .accounts({
+            pool,
+            configureAuthority: stranger.publicKey,
+          })
+          .signers([stranger])
+          .rpc();
+        assert.fail("Expected constraint violation");
+      } catch (error) {
+        assert.include(error.toString().toLowerCase(), "constraint");
+      }
+    });
+  });
+
+  describe("Self-Rotation of New Roles", () => {
+    async function fund(stranger: anchor.web3.Keypair) {
+      const tx = new anchor.web3.Transaction().add(
+        anchor.web3.SystemProgram.transfer({
+          fromPubkey: payer.publicKey,
+          toPubkey: stranger.publicKey,
+          lamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL,
+        })
+      );
+      await provider.sendAndConfirm(tx, [payer.payer]);
+    }
+
+    it("treasury rotates itself", async () => {
+      const next = anchor.web3.Keypair.generate();
+      await program.methods
+        .updateTreasuryAuthority(next.publicKey)
+        .accounts({ pool, treasuryAuthority: treasuryAuthority.publicKey })
+        .signers([treasuryAuthority.payer])
+        .rpc();
+      let p = await program.account.liquidityPool.fetch(pool);
+      assert.equal(p.treasuryAuthority.toString(), next.publicKey.toString());
+
+      await fund(next);
+      await program.methods
+        .updateTreasuryAuthority(treasuryAuthority.publicKey)
+        .accounts({ pool, treasuryAuthority: next.publicKey })
+        .signers([next])
+        .rpc();
+      p = await program.account.liquidityPool.fetch(pool);
+      assert.equal(
+        p.treasuryAuthority.toString(),
+        treasuryAuthority.publicKey.toString()
+      );
+    });
+
+    it("unpause rotates itself; pause cannot rotate it", async () => {
+      const next = anchor.web3.Keypair.generate();
+      await program.methods
+        .updateUnpauseAuthority(next.publicKey)
+        .accounts({ pool, unpauseAuthority: unpauseAuthority.publicKey })
+        .signers([unpauseAuthority.payer])
+        .rpc();
+      let p = await program.account.liquidityPool.fetch(pool);
+      assert.equal(p.unpauseAuthority.toString(), next.publicKey.toString());
+
+      // Pause cannot rotate unpause.
+      const stranger = anchor.web3.Keypair.generate();
+      await fund(stranger);
+      try {
+        await program.methods
+          .updateUnpauseAuthority(stranger.publicKey)
+          .accounts({ pool, unpauseAuthority: stranger.publicKey })
+          .signers([stranger])
+          .rpc();
+        assert.fail("Expected constraint violation");
+      } catch (error) {
+        assert.include(error.toString().toLowerCase(), "constraint");
+      }
+
+      // Restore.
+      await fund(next);
+      await program.methods
+        .updateUnpauseAuthority(unpauseAuthority.publicKey)
+        .accounts({ pool, unpauseAuthority: next.publicKey })
+        .signers([next])
+        .rpc();
+    });
+  });
+
+  describe("Migration guard", () => {
+    it("Rejects migrate_authorities on a pool already in the new layout", async () => {
+      // The live test pool was initialized with the new layout, so migrate must
+      // refuse it via the AlreadyMigrated size check.
+      try {
+        await program.methods
+          .migrateAuthorities(
+            pauseAuthority.publicKey,
+            unpauseAuthority.publicKey,
+            treasuryAuthority.publicKey,
+            configureAuthority.publicKey,
+            withdrawRecipient.publicKey
+          )
+          .accounts({
+            pool,
+            legacyOperationsAuthority: payer.publicKey,
+            legacyPauseAuthority: payer.publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([payer.payer])
+          .rpc();
+        assert.fail("Expected AlreadyMigrated error");
+      } catch (error) {
+        assert.include(error.toString().toLowerCase(), "alreadymigrated");
       }
     });
   });

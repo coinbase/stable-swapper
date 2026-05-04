@@ -41,12 +41,24 @@ async function main() {
     const poolAccount = await program.account.liquidityPool.fetch(pool);
 
     console.log("Pool Configuration:");
-    console.log(
-      "- Operations Authority:",
-      poolAccount.operationsAuthority.toString()
-    );
     console.log("- Pause Authority:", poolAccount.pauseAuthority.toString());
+    console.log(
+      "- Unpause Authority:",
+      poolAccount.unpauseAuthority.toString()
+    );
+    console.log(
+      "- Treasury Authority:",
+      poolAccount.treasuryAuthority.toString()
+    );
+    console.log(
+      "- Configure Authority:",
+      poolAccount.configureAuthority.toString()
+    );
     console.log("- Fee Recipient:", poolAccount.feeRecipient.toString());
+    console.log(
+      "- Withdraw Recipient:",
+      poolAccount.withdrawRecipient.toString()
+    );
     console.log(
       "- Fee Rate:",
       poolAccount.feeRate.toNumber(),

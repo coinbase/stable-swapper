@@ -84,14 +84,22 @@ async function main() {
   console.log("- Token Mint:", mint.toString());
   console.log("- Vault PDA:", vault.toString());
   console.log("- Pause Authority:", poolAccount.pauseAuthority.toString());
+  console.log("- Unpause Authority:", poolAccount.unpauseAuthority.toString());
   console.log("- Your Wallet:", payer.publicKey.toString());
   console.log();
 
-  // Verify you are the pause authority
-  if (!poolAccount.pauseAuthority.equals(payer.publicKey)) {
-    console.error("❌ Error: You are not the pause authority");
+  // Per-token disable goes through the pause authority (hot key). Re-enabling goes
+  // through the unpause authority (cold key).
+  const requiredAuthority = disabled
+    ? poolAccount.pauseAuthority
+    : poolAccount.unpauseAuthority;
+  const requiredAuthorityName = disabled
+    ? "pause authority"
+    : "unpause authority";
+  if (!requiredAuthority.equals(payer.publicKey)) {
+    console.error(`❌ Error: You are not the ${requiredAuthorityName}`);
     console.error(
-      `   Pause authority is: ${poolAccount.pauseAuthority.toString()}`
+      `   ${requiredAuthorityName} is: ${requiredAuthority.toString()}`
     );
     console.error(`   Your wallet is: ${payer.publicKey.toString()}`);
     process.exit(1);
@@ -114,15 +122,25 @@ async function main() {
   console.log();
 
   try {
-    const tx = await program.methods
-      .updateTokenStatus(disabled)
-      .accounts({
-        pool: pool,
-        vault: vault,
-        mint: mint,
-        pauseAuthority: payer.publicKey,
-      } as any)
-      .rpc();
+    const tx = disabled
+      ? await program.methods
+          .pauseToken()
+          .accounts({
+            pool: pool,
+            vault: vault,
+            mint: mint,
+            pauseAuthority: payer.publicKey,
+          } as any)
+          .rpc()
+      : await program.methods
+          .unpauseToken()
+          .accounts({
+            pool: pool,
+            vault: vault,
+            mint: mint,
+            unpauseAuthority: payer.publicKey,
+          } as any)
+          .rpc();
 
     console.log(`${disabled ? "🛑" : "✅"} Token status updated successfully!`);
     console.log();

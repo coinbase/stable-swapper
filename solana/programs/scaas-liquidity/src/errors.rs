@@ -48,4 +48,8 @@ pub enum LiquidityError {
     TokenMustBeDisabled,
     #[msg("Vault must be empty before removing token")]
     VaultNotEmpty,
+    #[msg("Pool has already been migrated to the role-based authority layout")]
+    AlreadyMigrated,
+    #[msg("Withdraw recipient is not configured")]
+    WithdrawRecipientNotSet,
 }

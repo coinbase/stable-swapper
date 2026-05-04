@@ -1,10 +1,10 @@
 import { rotateRole } from "./_role-rotation";
 
 rotateRole({
-  scriptName: "update-pause-authority.ts",
-  roleLabel: "Pause Authority",
-  field: "pauseAuthority",
-  method: "updatePauseAuthority",
+  scriptName: "update-treasury-authority.ts",
+  roleLabel: "Treasury Authority",
+  field: "treasuryAuthority",
+  method: "updateTreasuryAuthority",
 })
   .then(() => process.exit(0))
   .catch((error) => {

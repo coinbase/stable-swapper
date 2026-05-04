@@ -77,12 +77,24 @@ async function main() {
     const poolAccount = await program.account.liquidityPool.fetch(pool);
     console.log("❌ Pool already initialized!");
     console.log("Pool state:");
-    console.log(
-      "- Operations Authority:",
-      poolAccount.operationsAuthority.toString()
-    );
     console.log("- Pause Authority:", poolAccount.pauseAuthority.toString());
+    console.log(
+      "- Unpause Authority:",
+      poolAccount.unpauseAuthority.toString()
+    );
+    console.log(
+      "- Treasury Authority:",
+      poolAccount.treasuryAuthority.toString()
+    );
+    console.log(
+      "- Configure Authority:",
+      poolAccount.configureAuthority.toString()
+    );
     console.log("- Fee Recipient:", poolAccount.feeRecipient.toString());
+    console.log(
+      "- Withdraw Recipient:",
+      poolAccount.withdrawRecipient.toString()
+    );
     console.log("- Fee Rate:", poolAccount.feeRate.toNumber(), "bps");
     console.log("- Supported Tokens:", poolAccount.supportedTokens.length);
     process.exit(0);
@@ -101,9 +113,20 @@ async function main() {
     feeRate.toNumber(),
     `basis points (${feeRate.toNumber() / 100}%)`
   );
-  console.log("- Operations Authority:", payer.publicKey.toString());
   console.log("- Pause Authority:", payer.publicKey.toString());
+  console.log("- Unpause Authority:", payer.publicKey.toString());
+  console.log("- Treasury Authority:", payer.publicKey.toString());
+  console.log("- Configure Authority:", payer.publicKey.toString());
   console.log("- Fee Recipient:", payer.publicKey.toString());
+  console.log("- Withdraw Recipient:", payer.publicKey.toString());
+  console.log();
+  console.log(
+    "NOTE: All roles default to the deployer. Rotate them post-init using"
+  );
+  console.log(
+    "scripts/update-{pause,unpause,treasury,configure}-authority.ts and"
+  );
+  console.log("scripts/update-withdraw-recipient.ts.");
   console.log();
 
   console.log("Sending transaction...");
@@ -114,9 +137,12 @@ async function main() {
       .accounts({
         pool: pool,
         payer: payer.publicKey,
-        operationsAuthority: payer.publicKey,
         pauseAuthority: payer.publicKey,
+        unpauseAuthority: payer.publicKey,
+        treasuryAuthority: payer.publicKey,
+        configureAuthority: payer.publicKey,
         feeRecipient: payer.publicKey,
+        withdrawRecipient: payer.publicKey,
         systemProgram: SystemProgram.programId,
       } as any)
       .rpc();
@@ -132,12 +158,24 @@ async function main() {
     const poolAccount = await program.account.liquidityPool.fetch(pool);
 
     console.log("Pool State:");
-    console.log(
-      "- Operations Authority:",
-      poolAccount.operationsAuthority.toString()
-    );
     console.log("- Pause Authority:", poolAccount.pauseAuthority.toString());
+    console.log(
+      "- Unpause Authority:",
+      poolAccount.unpauseAuthority.toString()
+    );
+    console.log(
+      "- Treasury Authority:",
+      poolAccount.treasuryAuthority.toString()
+    );
+    console.log(
+      "- Configure Authority:",
+      poolAccount.configureAuthority.toString()
+    );
     console.log("- Fee Recipient:", poolAccount.feeRecipient.toString());
+    console.log(
+      "- Withdraw Recipient:",
+      poolAccount.withdrawRecipient.toString()
+    );
     console.log("- Fee Rate:", poolAccount.feeRate.toNumber(), "bps");
     console.log("- Swaps Paused:", poolAccount.swapsPaused);
     console.log("- Liquidity Paused:", poolAccount.liquidityPaused);

@@ -3,9 +3,19 @@ use anchor_lang::prelude::*;
 
 #[account]
 pub struct LiquidityPool {
-    pub operations_authority: Pubkey,
+    /// Hot key allowed to pause swaps, withdraws, and individual tokens.
     pub pause_authority: Pubkey,
+    /// Cold key allowed to unpause swaps, withdraws, and individual tokens.
+    pub unpause_authority: Pubkey,
+    /// Hot key allowed to withdraw liquidity (only to `withdraw_recipient`).
+    pub treasury_authority: Pubkey,
+    /// Cold key allowed to list/unlist tokens, update fee config, and rotate the withdraw recipient.
+    pub configure_authority: Pubkey,
+    /// Recipient of swap fees (token transfers go to its ATA per mint).
     pub fee_recipient: Pubkey,
+    /// Owner of the only token-account address allowed to receive `withdraw_liquidity` outputs.
+    /// Set/rotated by `configure_authority`.
+    pub withdraw_recipient: Pubkey,
     pub supported_tokens: Vec<Pubkey>,
     pub fee_rate: u64, // in basis points
     pub swaps_paused: bool,
@@ -16,7 +26,14 @@ pub struct LiquidityPool {
 }
 
 impl LiquidityPool {
-    pub const INIT_SPACE: usize = 32 + 32 + 32 + (4 + 32 * MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1; // operations_authority + pause_authority + fee_recipient + supported_tokens + fee_rate + swaps_paused + liquidity_paused + bump
+    // 6 Pubkeys + supported_tokens vec header + cap + fee_rate + 2 bools + bump
+    pub const INIT_SPACE: usize =
+        32 * 6 + (4 + 32 * MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1;
+
+    /// Pre-migration on-chain layout: ops + pause + fee_recipient + supported_tokens + fee_rate + 2 bools + bump.
+    /// Used by `migrate_authorities` to size the pre-realloc account before expanding to `INIT_SPACE`.
+    pub const LEGACY_INIT_SPACE: usize =
+        32 * 3 + (4 + 32 * MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1;
 }
 
 #[account]

@@ -26,9 +26,12 @@ pub mod scaas_liquidity {
         require!(fee_rate <= MAX_FEE_RATE, LiquidityError::InvalidFeeRate);
 
         let pool = &mut ctx.accounts.pool;
-        pool.operations_authority = ctx.accounts.operations_authority.key();
         pool.pause_authority = ctx.accounts.pause_authority.key();
+        pool.unpause_authority = ctx.accounts.unpause_authority.key();
+        pool.treasury_authority = ctx.accounts.treasury_authority.key();
+        pool.configure_authority = ctx.accounts.configure_authority.key();
         pool.fee_recipient = ctx.accounts.fee_recipient.key();
+        pool.withdraw_recipient = ctx.accounts.withdraw_recipient.key();
         pool.supported_tokens = Vec::new();
         pool.fee_rate = fee_rate;
         pool.swaps_paused = false;
@@ -36,6 +39,155 @@ pub mod scaas_liquidity {
         pool.bump = ctx.bumps.pool;
 
         msg!("Liquidity pool initialized with fee rate: {}", fee_rate);
+        Ok(())
+    }
+
+    /// One-shot migration from the legacy `(operations_authority, pause_authority)` layout
+    /// to the new role-based layout. Co-signed by both legacy authorities so neither key alone
+    /// can unilaterally redistribute roles.
+    ///
+    /// The pool grows by 96 bytes (3 extra `Pubkey`s). The legacy account is opened as
+    /// `UncheckedAccount` because the on-chain bytes don't deserialize into the new
+    /// `LiquidityPool` struct; we parse the legacy fields manually, realloc, then serialize
+    /// the new layout. Re-runs are rejected by checking the on-chain data length.
+    pub fn migrate_authorities(
+        ctx: Context<MigrateAuthorities>,
+        new_pause_authority: Pubkey,
+        new_unpause_authority: Pubkey,
+        new_treasury_authority: Pubkey,
+        new_configure_authority: Pubkey,
+        new_withdraw_recipient: Pubkey,
+    ) -> Result<()> {
+        require!(
+            new_withdraw_recipient != Pubkey::default(),
+            LiquidityError::WithdrawRecipientNotSet
+        );
+
+        let pool_ai = ctx.accounts.pool.to_account_info();
+        let legacy_total = 8 + LiquidityPool::LEGACY_INIT_SPACE;
+        let new_total = 8 + LiquidityPool::INIT_SPACE;
+
+        // Re-run guard: only legacy-sized accounts are migratable.
+        require!(
+            pool_ai.data_len() == legacy_total,
+            LiquidityError::AlreadyMigrated
+        );
+
+        // Snapshot legacy fields with a scoped borrow so we can drop it before realloc.
+        let (
+            legacy_ops,
+            legacy_pause,
+            legacy_fee_recipient,
+            supported_tokens,
+            fee_rate,
+            swaps_paused,
+            liquidity_paused,
+            bump,
+        ) = {
+            let data = pool_ai.try_borrow_data()?;
+            require!(
+                &data[..8] == LiquidityPool::DISCRIMINATOR,
+                LiquidityError::AlreadyMigrated
+            );
+
+            let legacy_ops = Pubkey::try_from(&data[8..40])
+                .map_err(|_| error!(LiquidityError::AlreadyMigrated))?;
+            let legacy_pause = Pubkey::try_from(&data[40..72])
+                .map_err(|_| error!(LiquidityError::AlreadyMigrated))?;
+            let legacy_fee_recipient = Pubkey::try_from(&data[72..104])
+                .map_err(|_| error!(LiquidityError::AlreadyMigrated))?;
+
+            // supported_tokens vec: 4-byte length + 32-byte pubkeys, max-allocated to MAX_SUPPORTED_TOKENS
+            let len = u32::from_le_bytes(data[104..108].try_into().unwrap()) as usize;
+            require!(
+                len <= MAX_SUPPORTED_TOKENS,
+                LiquidityError::AlreadyMigrated
+            );
+            let mut tokens = Vec::with_capacity(len);
+            for i in 0..len {
+                let off = 108 + i * 32;
+                tokens.push(
+                    Pubkey::try_from(&data[off..off + 32])
+                        .map_err(|_| error!(LiquidityError::AlreadyMigrated))?,
+                );
+            }
+
+            // Trailing fixed-size fields sit after the max-sized vec slot.
+            let trailing = 108 + MAX_SUPPORTED_TOKENS * 32;
+            let fee_rate = u64::from_le_bytes(data[trailing..trailing + 8].try_into().unwrap());
+            let swaps_paused = data[trailing + 8] != 0;
+            let liquidity_paused = data[trailing + 9] != 0;
+            let bump = data[trailing + 10];
+
+            (
+                legacy_ops,
+                legacy_pause,
+                legacy_fee_recipient,
+                tokens,
+                fee_rate,
+                swaps_paused,
+                liquidity_paused,
+                bump,
+            )
+        };
+
+        // Verify both legacy signers match the on-chain values.
+        require_keys_eq!(
+            ctx.accounts.legacy_operations_authority.key(),
+            legacy_ops,
+            LiquidityError::AlreadyMigrated
+        );
+        require_keys_eq!(
+            ctx.accounts.legacy_pause_authority.key(),
+            legacy_pause,
+            LiquidityError::AlreadyMigrated
+        );
+
+        // Top up rent for the additional 96 bytes, then grow the account.
+        let rent = Rent::get()?;
+        let new_min_balance = rent.minimum_balance(new_total);
+        let lamports_diff = new_min_balance.saturating_sub(pool_ai.lamports());
+        if lamports_diff > 0 {
+            anchor_lang::system_program::transfer(
+                CpiContext::new(
+                    ctx.accounts.system_program.to_account_info(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.legacy_operations_authority.to_account_info(),
+                        to: pool_ai.clone(),
+                    },
+                ),
+                lamports_diff,
+            )?;
+        }
+        pool_ai.resize(new_total)?;
+
+        // Serialize the new layout over the entire account.
+        let new_pool = LiquidityPool {
+            pause_authority: new_pause_authority,
+            unpause_authority: new_unpause_authority,
+            treasury_authority: new_treasury_authority,
+            configure_authority: new_configure_authority,
+            fee_recipient: legacy_fee_recipient,
+            withdraw_recipient: new_withdraw_recipient,
+            supported_tokens,
+            fee_rate,
+            swaps_paused,
+            liquidity_paused,
+            bump,
+        };
+
+        {
+            let mut data = pool_ai.try_borrow_mut_data()?;
+            // Discriminator is the same before and after migration; rewrite it explicitly
+            // and then borsh-serialize the struct body.
+            data[..8].copy_from_slice(LiquidityPool::DISCRIMINATOR);
+            let mut writer: &mut [u8] = &mut data[8..];
+            new_pool
+                .serialize(&mut writer)
+                .map_err(|_| error!(LiquidityError::AlreadyMigrated))?;
+        }
+
+        msg!("Migrated pool authorities to role-based layout");
         Ok(())
     }
 
@@ -79,12 +231,12 @@ pub mod scaas_liquidity {
     ///
     /// This instruction will:
     /// 1. Verify vault is empty
-    /// 2. Close vault_token_account and reclaim rent to operations_authority
-    /// 3. Close vault account and reclaim rent to operations_authority
+    /// 2. Close vault_token_account and reclaim rent to configure_authority
+    /// 3. Close vault account and reclaim rent to configure_authority
     /// 4. Remove token from supported_tokens vector
     ///
     /// Note: Anyone can send tokens directly to vault_token_account via SPL transfers.
-    /// To prevent griefing, operations_authority can always withdraw() any balance first.
+    /// To prevent griefing, treasury_authority can always withdraw() any balance first.
     pub fn remove_supported_token(ctx: Context<RemoveSupportedToken>) -> Result<()> {
         let pool = &mut ctx.accounts.pool;
         let vault = &ctx.accounts.vault;
@@ -111,7 +263,7 @@ pub mod scaas_liquidity {
             ctx.accounts.token_program.to_account_info(),
             anchor_spl::token::CloseAccount {
                 account: ctx.accounts.vault_token_account.to_account_info(),
-                destination: ctx.accounts.operations_authority.to_account_info(),
+                destination: ctx.accounts.configure_authority.to_account_info(),
                 authority: pool.to_account_info(),
             },
             &[&[LIQUIDITY_POOL_SEED, &[pool.bump]]],
@@ -262,7 +414,13 @@ pub mod scaas_liquidity {
         require!(!pool.liquidity_paused, LiquidityError::LiquidityPaused);
         require!(amount > 0, LiquidityError::InvalidAmount);
 
-        // Ensure the operations authority does not overdraw the vault balance.
+        // Defensive: refuse to release funds before configure_authority has set a recipient.
+        require!(
+            pool.withdraw_recipient != Pubkey::default(),
+            LiquidityError::WithdrawRecipientNotSet
+        );
+
+        // Ensure the treasury authority does not overdraw the vault balance.
         require!(
             amount <= ctx.accounts.vault_token_account.amount,
             LiquidityError::InsufficientLiquidity
@@ -311,36 +469,53 @@ pub mod scaas_liquidity {
         Ok(())
     }
 
-    pub fn update_pause_config(
-        ctx: Context<UpdatePauseConfig>,
-        swaps_paused: Option<bool>,
-        liquidity_paused: Option<bool>,
+    pub fn update_withdraw_recipient(
+        ctx: Context<UpdateWithdrawRecipient>,
+        new_withdraw_recipient: Pubkey,
     ) -> Result<()> {
+        require!(
+            new_withdraw_recipient != Pubkey::default(),
+            LiquidityError::WithdrawRecipientNotSet
+        );
         let pool = &mut ctx.accounts.pool;
-
-        if let Some(new_swaps_paused) = swaps_paused {
-            pool.swaps_paused = new_swaps_paused;
-            msg!("Updated swaps_paused to: {}", new_swaps_paused);
-        }
-
-        if let Some(new_liquidity_paused) = liquidity_paused {
-            pool.liquidity_paused = new_liquidity_paused;
-            msg!("Updated liquidity_paused to: {}", new_liquidity_paused);
-        }
-
+        pool.withdraw_recipient = new_withdraw_recipient;
+        msg!("Updated withdraw recipient to: {}", new_withdraw_recipient);
         Ok(())
     }
 
-    pub fn update_operations_authority(
-        ctx: Context<UpdateOperationsAuthority>,
-        new_operations_authority: Pubkey,
-    ) -> Result<()> {
-        let pool = &mut ctx.accounts.pool;
-        pool.operations_authority = new_operations_authority;
-        msg!(
-            "Updated operations_authority to: {}",
-            new_operations_authority
-        );
+    pub fn pause_swaps(ctx: Context<PauseAction>) -> Result<()> {
+        ctx.accounts.pool.swaps_paused = true;
+        msg!("Swaps paused");
+        Ok(())
+    }
+
+    pub fn unpause_swaps(ctx: Context<UnpauseAction>) -> Result<()> {
+        ctx.accounts.pool.swaps_paused = false;
+        msg!("Swaps unpaused");
+        Ok(())
+    }
+
+    pub fn pause_withdraws(ctx: Context<PauseAction>) -> Result<()> {
+        ctx.accounts.pool.liquidity_paused = true;
+        msg!("Withdraws paused");
+        Ok(())
+    }
+
+    pub fn unpause_withdraws(ctx: Context<UnpauseAction>) -> Result<()> {
+        ctx.accounts.pool.liquidity_paused = false;
+        msg!("Withdraws unpaused");
+        Ok(())
+    }
+
+    pub fn pause_token(ctx: Context<PauseToken>) -> Result<()> {
+        ctx.accounts.vault.disabled = true;
+        msg!("Token {} paused", ctx.accounts.mint.key());
+        Ok(())
+    }
+
+    pub fn unpause_token(ctx: Context<UnpauseToken>) -> Result<()> {
+        ctx.accounts.vault.disabled = false;
+        msg!("Token {} unpaused", ctx.accounts.mint.key());
         Ok(())
     }
 
@@ -354,17 +529,33 @@ pub mod scaas_liquidity {
         Ok(())
     }
 
-    /// Disables or enables a token for swaps.
-    /// Useful for emergency response or to deprecate tokens for operational reasons.
-    pub fn update_token_status(ctx: Context<UpdateTokenStatus>, disabled: bool) -> Result<()> {
-        let vault = &mut ctx.accounts.vault;
-        vault.disabled = disabled;
+    pub fn update_unpause_authority(
+        ctx: Context<UpdateUnpauseAuthority>,
+        new_unpause_authority: Pubkey,
+    ) -> Result<()> {
+        let pool = &mut ctx.accounts.pool;
+        pool.unpause_authority = new_unpause_authority;
+        msg!("Updated unpause_authority to: {}", new_unpause_authority);
+        Ok(())
+    }
 
-        msg!(
-            "Updated token {} status to disabled: {}",
-            ctx.accounts.mint.key(),
-            disabled
-        );
+    pub fn update_treasury_authority(
+        ctx: Context<UpdateTreasuryAuthority>,
+        new_treasury_authority: Pubkey,
+    ) -> Result<()> {
+        let pool = &mut ctx.accounts.pool;
+        pool.treasury_authority = new_treasury_authority;
+        msg!("Updated treasury_authority to: {}", new_treasury_authority);
+        Ok(())
+    }
+
+    pub fn update_configure_authority(
+        ctx: Context<UpdateConfigureAuthority>,
+        new_configure_authority: Pubkey,
+    ) -> Result<()> {
+        let pool = &mut ctx.accounts.pool;
+        pool.configure_authority = new_configure_authority;
+        msg!("Updated configure_authority to: {}", new_configure_authority);
         Ok(())
     }
 }
@@ -384,14 +575,48 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
 
-    /// CHECK: Operations authority can be any account
-    pub operations_authority: UncheckedAccount<'info>,
-
     /// CHECK: Pause authority can be any account
     pub pause_authority: UncheckedAccount<'info>,
 
+    /// CHECK: Unpause authority can be any account
+    pub unpause_authority: UncheckedAccount<'info>,
+
+    /// CHECK: Treasury authority can be any account
+    pub treasury_authority: UncheckedAccount<'info>,
+
+    /// CHECK: Configure authority can be any account
+    pub configure_authority: UncheckedAccount<'info>,
+
     /// CHECK: Fee recipient can be any account
     pub fee_recipient: UncheckedAccount<'info>,
+
+    /// CHECK: Withdraw recipient can be any account; only its key matters and only `configure_authority`
+    /// can change it after initialization.
+    pub withdraw_recipient: UncheckedAccount<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct MigrateAuthorities<'info> {
+    /// Pool is opened as `UncheckedAccount` because the on-chain legacy bytes don't fit the
+    /// new `LiquidityPool` struct. The instruction body verifies the discriminator + PDA
+    /// derivation, parses the legacy fields, reallocates, and rewrites the new layout.
+    /// CHECK: PDA + discriminator + legacy size verified inside `migrate_authorities`.
+    #[account(
+        mut,
+        seeds = [LIQUIDITY_POOL_SEED],
+        bump,
+    )]
+    pub pool: UncheckedAccount<'info>,
+
+    /// Legacy operations authority. Verified inside the instruction against the legacy on-chain
+    /// bytes; pays the additional rent for the 96-byte realloc.
+    #[account(mut)]
+    pub legacy_operations_authority: Signer<'info>,
+
+    /// Legacy pause authority. Verified inside the instruction against the legacy on-chain bytes.
+    pub legacy_pause_authority: Signer<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -400,7 +625,7 @@ pub struct Initialize<'info> {
 pub struct AddSupportedToken<'info> {
     #[account(
         mut,
-        has_one = operations_authority,
+        has_one = configure_authority,
         seeds = [LIQUIDITY_POOL_SEED],
         bump = pool.bump
     )]
@@ -408,7 +633,7 @@ pub struct AddSupportedToken<'info> {
 
     #[account(
         init,
-        payer = operations_authority,
+        payer = configure_authority,
         space = 8 + TokenVault::INIT_SPACE,
         seeds = [TOKEN_VAULT_SEED, pool.key().as_ref(), mint.key().as_ref()],
         bump
@@ -417,7 +642,7 @@ pub struct AddSupportedToken<'info> {
 
     #[account(
         init,
-        payer = operations_authority,
+        payer = configure_authority,
         token::mint = mint,
         token::authority = pool,
         seeds = [VAULT_TOKEN_ACCOUNT_SEED, vault.key().as_ref()],
@@ -427,7 +652,7 @@ pub struct AddSupportedToken<'info> {
 
     #[account(
         init_if_needed,
-        payer = operations_authority,
+        payer = configure_authority,
         associated_token::mint = mint,
         associated_token::authority = fee_recipient
     )]
@@ -440,7 +665,7 @@ pub struct AddSupportedToken<'info> {
     pub mint: Account<'info, Mint>,
 
     #[account(mut)]
-    pub operations_authority: Signer<'info>,
+    pub configure_authority: Signer<'info>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -452,7 +677,7 @@ pub struct AddSupportedToken<'info> {
 pub struct RemoveSupportedToken<'info> {
     #[account(
         mut,
-        has_one = operations_authority,
+        has_one = configure_authority,
         seeds = [LIQUIDITY_POOL_SEED],
         bump = pool.bump
     )]
@@ -460,7 +685,7 @@ pub struct RemoveSupportedToken<'info> {
 
     #[account(
         mut,
-        close = operations_authority,
+        close = configure_authority,
         seeds = [TOKEN_VAULT_SEED, pool.key().as_ref(), mint.key().as_ref()],
         bump = vault.bump
     )]
@@ -476,7 +701,7 @@ pub struct RemoveSupportedToken<'info> {
     pub mint: Account<'info, Mint>,
 
     #[account(mut)]
-    pub operations_authority: Signer<'info>,
+    pub configure_authority: Signer<'info>,
 
     pub token_program: Program<'info, Token>,
 }
@@ -568,7 +793,7 @@ pub struct Swap<'info> {
 #[derive(Accounts)]
 pub struct WithdrawLiquidity<'info> {
     #[account(
-        has_one = operations_authority,
+        has_one = treasury_authority,
         seeds = [LIQUIDITY_POOL_SEED],
         bump = pool.bump
     )]
@@ -587,15 +812,19 @@ pub struct WithdrawLiquidity<'info> {
     )]
     pub vault_token_account: Account<'info, TokenAccount>,
 
+    /// Recipient token account is locked to the address whose owner equals
+    /// `pool.withdraw_recipient`. This prevents the treasury (hot) key from
+    /// redirecting funds to an attacker-controlled wallet on its own.
     #[account(
         mut,
         token::mint = mint,
+        token::authority = pool.withdraw_recipient,
     )]
     pub recipient_token_account: Account<'info, TokenAccount>,
 
     pub mint: Account<'info, Mint>,
 
-    pub operations_authority: Signer<'info>,
+    pub treasury_authority: Signer<'info>,
 
     pub token_program: Program<'info, Token>,
 }
@@ -604,17 +833,30 @@ pub struct WithdrawLiquidity<'info> {
 pub struct UpdateFeeConfig<'info> {
     #[account(
         mut,
-        has_one = operations_authority,
+        has_one = configure_authority,
         seeds = [LIQUIDITY_POOL_SEED],
         bump = pool.bump
     )]
     pub pool: Account<'info, LiquidityPool>,
 
-    pub operations_authority: Signer<'info>,
+    pub configure_authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
-pub struct UpdatePauseConfig<'info> {
+pub struct UpdateWithdrawRecipient<'info> {
+    #[account(
+        mut,
+        has_one = configure_authority,
+        seeds = [LIQUIDITY_POOL_SEED],
+        bump = pool.bump
+    )]
+    pub pool: Account<'info, LiquidityPool>,
+
+    pub configure_authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct PauseAction<'info> {
     #[account(
         mut,
         has_one = pause_authority,
@@ -627,33 +869,20 @@ pub struct UpdatePauseConfig<'info> {
 }
 
 #[derive(Accounts)]
-pub struct UpdateOperationsAuthority<'info> {
+pub struct UnpauseAction<'info> {
     #[account(
         mut,
-        has_one = operations_authority,
+        has_one = unpause_authority,
         seeds = [LIQUIDITY_POOL_SEED],
         bump = pool.bump
     )]
     pub pool: Account<'info, LiquidityPool>,
 
-    pub operations_authority: Signer<'info>,
+    pub unpause_authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
-pub struct UpdatePauseAuthority<'info> {
-    #[account(
-        mut,
-        has_one = pause_authority,
-        seeds = [LIQUIDITY_POOL_SEED],
-        bump = pool.bump
-    )]
-    pub pool: Account<'info, LiquidityPool>,
-
-    pub pause_authority: Signer<'info>,
-}
-
-#[derive(Accounts)]
-pub struct UpdateTokenStatus<'info> {
+pub struct PauseToken<'info> {
     #[account(
         has_one = pause_authority,
         seeds = [LIQUIDITY_POOL_SEED],
@@ -671,4 +900,77 @@ pub struct UpdateTokenStatus<'info> {
     pub mint: Account<'info, Mint>,
 
     pub pause_authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct UnpauseToken<'info> {
+    #[account(
+        has_one = unpause_authority,
+        seeds = [LIQUIDITY_POOL_SEED],
+        bump = pool.bump
+    )]
+    pub pool: Account<'info, LiquidityPool>,
+
+    #[account(
+        mut,
+        seeds = [TOKEN_VAULT_SEED, pool.key().as_ref(), mint.key().as_ref()],
+        bump = vault.bump
+    )]
+    pub vault: Account<'info, TokenVault>,
+
+    pub mint: Account<'info, Mint>,
+
+    pub unpause_authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct UpdatePauseAuthority<'info> {
+    #[account(
+        mut,
+        has_one = pause_authority,
+        seeds = [LIQUIDITY_POOL_SEED],
+        bump = pool.bump
+    )]
+    pub pool: Account<'info, LiquidityPool>,
+
+    pub pause_authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateUnpauseAuthority<'info> {
+    #[account(
+        mut,
+        has_one = unpause_authority,
+        seeds = [LIQUIDITY_POOL_SEED],
+        bump = pool.bump
+    )]
+    pub pool: Account<'info, LiquidityPool>,
+
+    pub unpause_authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateTreasuryAuthority<'info> {
+    #[account(
+        mut,
+        has_one = treasury_authority,
+        seeds = [LIQUIDITY_POOL_SEED],
+        bump = pool.bump
+    )]
+    pub pool: Account<'info, LiquidityPool>,
+
+    pub treasury_authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateConfigureAuthority<'info> {
+    #[account(
+        mut,
+        has_one = configure_authority,
+        seeds = [LIQUIDITY_POOL_SEED],
+        bump = pool.bump
+    )]
+    pub pool: Account<'info, LiquidityPool>,
+
+    pub configure_authority: Signer<'info>,
 }
