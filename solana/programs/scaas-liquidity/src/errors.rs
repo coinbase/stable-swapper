@@ -52,4 +52,12 @@ pub enum LiquidityError {
     AlreadyMigrated,
     #[msg("Withdraw recipient is not configured")]
     WithdrawRecipientNotSet,
+    #[msg("Legacy pool data length does not match the expected pre-migration size")]
+    LegacySizeMismatch,
+    #[msg("Legacy pool discriminator does not match LiquidityPool")]
+    LegacyDiscriminatorMismatch,
+    #[msg("Legacy supported_tokens length is invalid")]
+    LegacyVecLengthInvalid,
+    #[msg("Failed to serialize the new LiquidityPool layout during migration")]
+    MigrationSerializeFailed,
 }

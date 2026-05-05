@@ -15,6 +15,9 @@ no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+# Enables `init_legacy_for_test` + `migrate_authorities_for_test` instructions that build
+# parametric-PDA legacy pools for the migration happy-path test. Never enable in production.
+test-helpers = []
 
 
 [dependencies]

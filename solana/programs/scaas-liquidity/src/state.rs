@@ -1,6 +1,11 @@
 use crate::constants::MAX_SUPPORTED_TOKENS;
 use anchor_lang::prelude::*;
 
+// Discriminator-stability invariant: Anchor derives the 8-byte account discriminator from
+// the struct *name*, not its field layout. The `migrate_authorities` instruction relies on
+// the discriminator being identical before and after migration, which means this struct
+// MUST stay named `LiquidityPool`. Renaming it would break re-deserialization of every
+// existing pool on devnet/mainnet and break the migration's discriminator check.
 #[account]
 pub struct LiquidityPool {
     /// Hot key allowed to pause swaps, withdraws, and individual tokens.

@@ -24,6 +24,12 @@ pub mod scaas_liquidity {
 
     pub fn initialize(ctx: Context<Initialize>, fee_rate: u64) -> Result<()> {
         require!(fee_rate <= MAX_FEE_RATE, LiquidityError::InvalidFeeRate);
+        // Refuse to stand up a pool whose withdraws would be unconditionally blocked by
+        // `withdraw_liquidity`'s zero-key guard. Mirrors `update_withdraw_recipient`.
+        require!(
+            ctx.accounts.withdraw_recipient.key() != Pubkey::default(),
+            LiquidityError::WithdrawRecipientNotSet
+        );
 
         let pool = &mut ctx.accounts.pool;
         pool.pause_authority = ctx.accounts.pause_authority.key();
@@ -58,137 +64,87 @@ pub mod scaas_liquidity {
         new_configure_authority: Pubkey,
         new_withdraw_recipient: Pubkey,
     ) -> Result<()> {
+        do_migrate_authorities(
+            &ctx.accounts.pool.to_account_info(),
+            &ctx.accounts.legacy_operations_authority.to_account_info(),
+            &ctx.accounts.legacy_pause_authority.to_account_info(),
+            &ctx.accounts.system_program.to_account_info(),
+            new_pause_authority,
+            new_unpause_authority,
+            new_treasury_authority,
+            new_configure_authority,
+            new_withdraw_recipient,
+        )
+    }
+
+    /// Test-only entrypoint: creates a synthetic legacy-shaped pool at a parametric PDA
+    /// `[b"liquidity_pool_legacy_test", payer.key()]`, populates the legacy fields from the
+    /// instruction args, and returns. Compiled only when the `test-helpers` feature is on
+    /// so production builds never carry this surface.
+    #[cfg(feature = "test-helpers")]
+    pub fn init_legacy_for_test(
+        ctx: Context<InitLegacyForTest>,
+        legacy_ops: Pubkey,
+        legacy_pause: Pubkey,
+        legacy_fee_recipient: Pubkey,
+        supported_tokens: Vec<Pubkey>,
+        fee_rate: u64,
+        swaps_paused: bool,
+        liquidity_paused: bool,
+    ) -> Result<()> {
         require!(
-            new_withdraw_recipient != Pubkey::default(),
-            LiquidityError::WithdrawRecipientNotSet
+            supported_tokens.len() <= MAX_SUPPORTED_TOKENS,
+            LiquidityError::LegacyVecLengthInvalid
         );
 
         let pool_ai = ctx.accounts.pool.to_account_info();
-        let legacy_total = 8 + LiquidityPool::LEGACY_INIT_SPACE;
-        let new_total = 8 + LiquidityPool::INIT_SPACE;
+        let bump = ctx.bumps.pool;
+        let mut data = pool_ai.try_borrow_mut_data()?;
 
-        // Re-run guard: only legacy-sized accounts are migratable.
-        require!(
-            pool_ai.data_len() == legacy_total,
-            LiquidityError::AlreadyMigrated
-        );
+        data[..8].copy_from_slice(LiquidityPool::DISCRIMINATOR);
+        data[8..40].copy_from_slice(legacy_ops.as_ref());
+        data[40..72].copy_from_slice(legacy_pause.as_ref());
+        data[72..104].copy_from_slice(legacy_fee_recipient.as_ref());
 
-        // Snapshot legacy fields with a scoped borrow so we can drop it before realloc.
-        let (
-            legacy_ops,
-            legacy_pause,
-            legacy_fee_recipient,
-            supported_tokens,
-            fee_rate,
-            swaps_paused,
-            liquidity_paused,
-            bump,
-        ) = {
-            let data = pool_ai.try_borrow_data()?;
-            require!(
-                &data[..8] == LiquidityPool::DISCRIMINATOR,
-                LiquidityError::AlreadyMigrated
-            );
-
-            let legacy_ops = Pubkey::try_from(&data[8..40])
-                .map_err(|_| error!(LiquidityError::AlreadyMigrated))?;
-            let legacy_pause = Pubkey::try_from(&data[40..72])
-                .map_err(|_| error!(LiquidityError::AlreadyMigrated))?;
-            let legacy_fee_recipient = Pubkey::try_from(&data[72..104])
-                .map_err(|_| error!(LiquidityError::AlreadyMigrated))?;
-
-            // supported_tokens vec: 4-byte length + 32-byte pubkeys, max-allocated to MAX_SUPPORTED_TOKENS
-            let len = u32::from_le_bytes(data[104..108].try_into().unwrap()) as usize;
-            require!(
-                len <= MAX_SUPPORTED_TOKENS,
-                LiquidityError::AlreadyMigrated
-            );
-            let mut tokens = Vec::with_capacity(len);
-            for i in 0..len {
-                let off = 108 + i * 32;
-                tokens.push(
-                    Pubkey::try_from(&data[off..off + 32])
-                        .map_err(|_| error!(LiquidityError::AlreadyMigrated))?,
-                );
-            }
-
-            // Trailing fixed-size fields sit after the max-sized vec slot.
-            let trailing = 108 + MAX_SUPPORTED_TOKENS * 32;
-            let fee_rate = u64::from_le_bytes(data[trailing..trailing + 8].try_into().unwrap());
-            let swaps_paused = data[trailing + 8] != 0;
-            let liquidity_paused = data[trailing + 9] != 0;
-            let bump = data[trailing + 10];
-
-            (
-                legacy_ops,
-                legacy_pause,
-                legacy_fee_recipient,
-                tokens,
-                fee_rate,
-                swaps_paused,
-                liquidity_paused,
-                bump,
-            )
-        };
-
-        // Verify both legacy signers match the on-chain values.
-        require_keys_eq!(
-            ctx.accounts.legacy_operations_authority.key(),
-            legacy_ops,
-            LiquidityError::AlreadyMigrated
-        );
-        require_keys_eq!(
-            ctx.accounts.legacy_pause_authority.key(),
-            legacy_pause,
-            LiquidityError::AlreadyMigrated
-        );
-
-        // Top up rent for the additional 96 bytes, then grow the account.
-        let rent = Rent::get()?;
-        let new_min_balance = rent.minimum_balance(new_total);
-        let lamports_diff = new_min_balance.saturating_sub(pool_ai.lamports());
-        if lamports_diff > 0 {
-            anchor_lang::system_program::transfer(
-                CpiContext::new(
-                    ctx.accounts.system_program.to_account_info(),
-                    anchor_lang::system_program::Transfer {
-                        from: ctx.accounts.legacy_operations_authority.to_account_info(),
-                        to: pool_ai.clone(),
-                    },
-                ),
-                lamports_diff,
-            )?;
-        }
-        pool_ai.resize(new_total)?;
-
-        // Serialize the new layout over the entire account.
-        let new_pool = LiquidityPool {
-            pause_authority: new_pause_authority,
-            unpause_authority: new_unpause_authority,
-            treasury_authority: new_treasury_authority,
-            configure_authority: new_configure_authority,
-            fee_recipient: legacy_fee_recipient,
-            withdraw_recipient: new_withdraw_recipient,
-            supported_tokens,
-            fee_rate,
-            swaps_paused,
-            liquidity_paused,
-            bump,
-        };
-
-        {
-            let mut data = pool_ai.try_borrow_mut_data()?;
-            // Discriminator is the same before and after migration; rewrite it explicitly
-            // and then borsh-serialize the struct body.
-            data[..8].copy_from_slice(LiquidityPool::DISCRIMINATOR);
-            let mut writer: &mut [u8] = &mut data[8..];
-            new_pool
-                .serialize(&mut writer)
-                .map_err(|_| error!(LiquidityError::AlreadyMigrated))?;
+        let len = supported_tokens.len() as u32;
+        data[104..108].copy_from_slice(&len.to_le_bytes());
+        for (i, mint) in supported_tokens.iter().enumerate() {
+            let off = 108 + i * 32;
+            data[off..off + 32].copy_from_slice(mint.as_ref());
         }
 
-        msg!("Migrated pool authorities to role-based layout");
+        let trailing = 108 + MAX_SUPPORTED_TOKENS * 32;
+        data[trailing..trailing + 8].copy_from_slice(&fee_rate.to_le_bytes());
+        data[trailing + 8] = swaps_paused as u8;
+        data[trailing + 9] = liquidity_paused as u8;
+        data[trailing + 10] = bump;
+
         Ok(())
+    }
+
+    /// Test-only entrypoint: same migration logic as `migrate_authorities`, but operates on the
+    /// parametric test pool at `[b"liquidity_pool_legacy_test", payer.key()]`. Compiled only
+    /// when the `test-helpers` feature is on.
+    #[cfg(feature = "test-helpers")]
+    pub fn migrate_authorities_for_test(
+        ctx: Context<MigrateAuthoritiesForTest>,
+        new_pause_authority: Pubkey,
+        new_unpause_authority: Pubkey,
+        new_treasury_authority: Pubkey,
+        new_configure_authority: Pubkey,
+        new_withdraw_recipient: Pubkey,
+    ) -> Result<()> {
+        do_migrate_authorities(
+            &ctx.accounts.pool.to_account_info(),
+            &ctx.accounts.legacy_operations_authority.to_account_info(),
+            &ctx.accounts.legacy_pause_authority.to_account_info(),
+            &ctx.accounts.system_program.to_account_info(),
+            new_pause_authority,
+            new_unpause_authority,
+            new_treasury_authority,
+            new_configure_authority,
+            new_withdraw_recipient,
+        )
     }
 
     pub fn add_supported_token(ctx: Context<AddSupportedToken>) -> Result<()> {
@@ -558,6 +514,158 @@ pub mod scaas_liquidity {
         msg!("Updated configure_authority to: {}", new_configure_authority);
         Ok(())
     }
+}
+
+/// Shared body for `migrate_authorities` and (when the `test-helpers` feature is on)
+/// `migrate_authorities_for_test`. Performs the legacy parse, signer match, realloc, rent
+/// top-up, and re-serialize. The Accounts struct on the calling instruction is responsible
+/// for verifying the pool address (canonical PDA in production, parametric PDA in tests).
+fn do_migrate_authorities<'info>(
+    pool_ai: &AccountInfo<'info>,
+    legacy_operations_authority_ai: &AccountInfo<'info>,
+    legacy_pause_authority_ai: &AccountInfo<'info>,
+    system_program_ai: &AccountInfo<'info>,
+    new_pause_authority: Pubkey,
+    new_unpause_authority: Pubkey,
+    new_treasury_authority: Pubkey,
+    new_configure_authority: Pubkey,
+    new_withdraw_recipient: Pubkey,
+) -> Result<()> {
+    require!(
+        new_withdraw_recipient != Pubkey::default(),
+        LiquidityError::WithdrawRecipientNotSet
+    );
+
+    let legacy_total = 8 + LiquidityPool::LEGACY_INIT_SPACE;
+    let new_total = 8 + LiquidityPool::INIT_SPACE;
+
+    // Defense-in-depth: `UncheckedAccount` does not enforce ownership. Reject any account not
+    // owned by this program before we start parsing its bytes.
+    require_keys_eq!(
+        *pool_ai.owner,
+        crate::ID,
+        LiquidityError::LegacyDiscriminatorMismatch
+    );
+
+    // Re-run guard: only legacy-sized accounts are migratable. After a successful migration
+    // the account is `new_total` bytes, so a second invocation lands here.
+    require!(
+        pool_ai.data_len() == legacy_total,
+        LiquidityError::AlreadyMigrated
+    );
+
+    // Snapshot legacy fields with a scoped borrow so we can drop it before realloc.
+    let (
+        legacy_ops,
+        legacy_pause,
+        legacy_fee_recipient,
+        supported_tokens,
+        fee_rate,
+        swaps_paused,
+        liquidity_paused,
+        bump,
+    ) = {
+        let data = pool_ai.try_borrow_data()?;
+        require!(
+            &data[..8] == LiquidityPool::DISCRIMINATOR,
+            LiquidityError::LegacyDiscriminatorMismatch
+        );
+
+        // `Pubkey::try_from` on a 32-byte slice is infallible; the slice length is fixed
+        // here by construction, so unwrap is safe.
+        let legacy_ops = Pubkey::try_from(&data[8..40]).unwrap();
+        let legacy_pause = Pubkey::try_from(&data[40..72]).unwrap();
+        let legacy_fee_recipient = Pubkey::try_from(&data[72..104]).unwrap();
+
+        // supported_tokens vec: 4-byte length + 32-byte pubkeys, max-allocated to MAX_SUPPORTED_TOKENS
+        let len = u32::from_le_bytes(data[104..108].try_into().unwrap()) as usize;
+        require!(
+            len <= MAX_SUPPORTED_TOKENS,
+            LiquidityError::LegacyVecLengthInvalid
+        );
+        let mut tokens = Vec::with_capacity(len);
+        for i in 0..len {
+            let off = 108 + i * 32;
+            tokens.push(Pubkey::try_from(&data[off..off + 32]).unwrap());
+        }
+
+        // Trailing fixed-size fields sit after the max-sized vec slot.
+        let trailing = 108 + MAX_SUPPORTED_TOKENS * 32;
+        let fee_rate = u64::from_le_bytes(data[trailing..trailing + 8].try_into().unwrap());
+        let swaps_paused = data[trailing + 8] != 0;
+        let liquidity_paused = data[trailing + 9] != 0;
+        let bump = data[trailing + 10];
+
+        (
+            legacy_ops,
+            legacy_pause,
+            legacy_fee_recipient,
+            tokens,
+            fee_rate,
+            swaps_paused,
+            liquidity_paused,
+            bump,
+        )
+    };
+
+    // Verify both legacy signers match the on-chain values.
+    require_keys_eq!(
+        *legacy_operations_authority_ai.key,
+        legacy_ops,
+        LiquidityError::LegacyDiscriminatorMismatch
+    );
+    require_keys_eq!(
+        *legacy_pause_authority_ai.key,
+        legacy_pause,
+        LiquidityError::LegacyDiscriminatorMismatch
+    );
+
+    // Top up rent for the additional 96 bytes, then grow the account.
+    let rent = Rent::get()?;
+    let new_min_balance = rent.minimum_balance(new_total);
+    let lamports_diff = new_min_balance.saturating_sub(pool_ai.lamports());
+    if lamports_diff > 0 {
+        anchor_lang::system_program::transfer(
+            CpiContext::new(
+                system_program_ai.clone(),
+                anchor_lang::system_program::Transfer {
+                    from: legacy_operations_authority_ai.clone(),
+                    to: pool_ai.clone(),
+                },
+            ),
+            lamports_diff,
+        )?;
+    }
+    pool_ai.resize(new_total)?;
+
+    // Serialize the new layout over the entire account.
+    let new_pool = LiquidityPool {
+        pause_authority: new_pause_authority,
+        unpause_authority: new_unpause_authority,
+        treasury_authority: new_treasury_authority,
+        configure_authority: new_configure_authority,
+        fee_recipient: legacy_fee_recipient,
+        withdraw_recipient: new_withdraw_recipient,
+        supported_tokens,
+        fee_rate,
+        swaps_paused,
+        liquidity_paused,
+        bump,
+    };
+
+    {
+        let mut data = pool_ai.try_borrow_mut_data()?;
+        // Discriminator is the same before and after migration; rewrite it explicitly
+        // and then borsh-serialize the struct body.
+        data[..8].copy_from_slice(LiquidityPool::DISCRIMINATOR);
+        let mut writer: &mut [u8] = &mut data[8..];
+        new_pool
+            .serialize(&mut writer)
+            .map_err(|_| error!(LiquidityError::MigrationSerializeFailed))?;
+    }
+
+    msg!("Migrated pool authorities to role-based layout");
+    Ok(())
 }
 
 // Instruction contexts
@@ -973,4 +1081,48 @@ pub struct UpdateConfigureAuthority<'info> {
     pub pool: Account<'info, LiquidityPool>,
 
     pub configure_authority: Signer<'info>,
+}
+
+/// Test-only accounts: creates a synthetic legacy pool at a parametric PDA so test fixtures
+/// don't collide with the canonical pool used by the rest of the suite. Compiled only when
+/// the `test-helpers` feature is on.
+#[cfg(feature = "test-helpers")]
+#[derive(Accounts)]
+pub struct InitLegacyForTest<'info> {
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + LiquidityPool::LEGACY_INIT_SPACE,
+        seeds = [b"liquidity_pool_legacy_test", payer.key().as_ref()],
+        bump
+    )]
+    /// CHECK: opened as raw bytes; we manually write the legacy layout in the body.
+    pub pool: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+/// Test-only accounts mirror of `MigrateAuthorities` but rooted at the parametric test PDA.
+/// Compiled only when the `test-helpers` feature is on.
+#[cfg(feature = "test-helpers")]
+#[derive(Accounts)]
+pub struct MigrateAuthoritiesForTest<'info> {
+    /// CHECK: PDA + discriminator + legacy size + co-signers verified inside the shared
+    /// `do_migrate_authorities` helper.
+    #[account(
+        mut,
+        seeds = [b"liquidity_pool_legacy_test", legacy_operations_authority.key().as_ref()],
+        bump,
+    )]
+    pub pool: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    pub legacy_operations_authority: Signer<'info>,
+
+    pub legacy_pause_authority: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }
