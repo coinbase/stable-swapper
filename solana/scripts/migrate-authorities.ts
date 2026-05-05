@@ -3,6 +3,13 @@ import { Program } from "@coral-xyz/anchor";
 import { ScaasLiquidity } from "../target/types/scaas_liquidity";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 
+// On-chain layout sizes (must stay in sync with `LiquidityPool::LEGACY_INIT_SPACE` and
+// `LiquidityPool::INIT_SPACE` in `programs/scaas-liquidity/src/state.rs`):
+//   pre-migration : 8 disc + 32*3 + (4 + 32*MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1 = 1719
+//   post-migration: 8 disc + 32*6 + (4 + 32*MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1 = 1815
+const LEGACY_POOL_SIZE = 1719;
+const NEW_POOL_SIZE = 1815;
+
 /**
  * One-shot migration of an existing legacy pool (operations + pause authority
  * layout) to the new role-based layout. Co-signed by the legacy operations
@@ -12,6 +19,10 @@ import { PublicKey, SystemProgram } from "@solana/web3.js";
  *
  * The script prints the unsigned transaction in base64 if --build-only is
  * passed so it can be co-signed offline by a cold wallet.
+ *
+ * Pre-flight: asserts the on-chain pool data length is exactly LEGACY_POOL_SIZE
+ * before submitting. Post-submit: asserts the new size matches NEW_POOL_SIZE
+ * and all six pubkey fields equal the args.
  */
 async function main() {
   const args = process.argv.slice(2);
@@ -89,6 +100,36 @@ async function main() {
   console.log("- withdraw_recipient =", newWithdrawRecipient.toString());
   console.log();
 
+  // Pre-flight: ensure the on-chain pool is exactly the legacy size. If it isn't, the
+  // on-chain `migrate_authorities` will return AlreadyMigrated, but bailing here gives a
+  // much clearer signal to the operator (and avoids burning a co-signing round-trip).
+  const preInfo = await provider.connection.getAccountInfo(pool);
+  if (!preInfo) {
+    console.error(`❌ Error: pool account ${pool.toString()} does not exist`);
+    process.exit(1);
+  }
+  if (!preInfo.owner.equals(program.programId)) {
+    console.error(
+      `❌ Error: pool account is owned by ${preInfo.owner.toString()}, ` +
+        `expected ${program.programId.toString()}`
+    );
+    process.exit(1);
+  }
+  if (preInfo.data.length !== LEGACY_POOL_SIZE) {
+    console.error(
+      `❌ Error: pool account size is ${preInfo.data.length} bytes, ` +
+        `expected ${LEGACY_POOL_SIZE} (legacy layout). ` +
+        (preInfo.data.length === NEW_POOL_SIZE
+          ? "Pool appears to already be migrated."
+          : "Pool layout does not match the migration assumptions; abort.")
+    );
+    process.exit(1);
+  }
+  console.log(
+    `✓ Pre-flight: pool is ${preInfo.data.length} bytes (legacy layout).`
+  );
+  console.log();
+
   const ix = await program.methods
     .migrateAuthorities(
       newPause,
@@ -125,9 +166,47 @@ async function main() {
 
   console.log("Sending transaction...");
   const sig = await provider.sendAndConfirm(tx, [payer.payer]);
-  console.log("✅ Migration complete.");
+  console.log("✅ Migration submitted.");
   console.log("- Signature:", sig);
   console.log("- Explorer:", `https://solscan.io/tx/${sig}`);
+  console.log();
+
+  // Post-submit: confirm on-chain state matches what we asked for.
+  const postInfo = await provider.connection.getAccountInfo(pool);
+  if (!postInfo) {
+    console.error("❌ Post-check failed: pool account no longer exists");
+    process.exit(1);
+  }
+  if (postInfo.data.length !== NEW_POOL_SIZE) {
+    console.error(
+      `❌ Post-check failed: pool size is ${postInfo.data.length}, ` +
+        `expected ${NEW_POOL_SIZE}`
+    );
+    process.exit(1);
+  }
+  const poolAccount = await program.account.liquidityPool.fetch(pool);
+  const expected: [string, PublicKey, PublicKey][] = [
+    ["pause_authority", poolAccount.pauseAuthority, newPause],
+    ["unpause_authority", poolAccount.unpauseAuthority, newUnpause],
+    ["treasury_authority", poolAccount.treasuryAuthority, newTreasury],
+    ["configure_authority", poolAccount.configureAuthority, newConfigure],
+    ["withdraw_recipient", poolAccount.withdrawRecipient, newWithdrawRecipient],
+  ];
+  let mismatch = false;
+  for (const [name, actual, want] of expected) {
+    if (!actual.equals(want)) {
+      console.error(
+        `❌ Post-check: ${name} = ${actual.toString()}, expected ${want.toString()}`
+      );
+      mismatch = true;
+    }
+  }
+  if (mismatch) {
+    process.exit(1);
+  }
+  console.log(
+    `✓ Post-check: pool is ${postInfo.data.length} bytes and all six fields match args.`
+  );
 }
 
 function printUsage() {

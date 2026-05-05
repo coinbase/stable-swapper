@@ -29,9 +29,16 @@ This runbook guides you through deploying the liquidity pool program to Solana m
 
 ### Configuration
 - **Fee Rate:** 0 basis points (0% - for 1:1 swaps)
-- **Operations Authority:** Deployer wallet
-- **Pause Authority:** Deployer wallet
+- **Pause Authority** (CCS hot, can `pause_*`): Deployer wallet
+- **Unpause Authority** (SCM cold, can `unpause_*`): Deployer wallet
+- **Treasury Authority** (CCS hot, can `withdraw_liquidity` to `withdraw_recipient` only): Deployer wallet
+- **Configure Authority** (SCM cold, can list/unlist tokens, update fees, rotate `withdraw_recipient`): Deployer wallet
 - **Fee Recipient:** Deployer wallet
+- **Withdraw Recipient** (the only owner whose token account can receive `withdraw_liquidity` outputs): Deployer wallet
+
+> All four authority defaults point at the deployer for the initial bring-up. Rotate each
+> role to its production custodian post-init via the role-rotation scripts; see the
+> "Migrating an Existing Pool" appendix for the SCM cold + CCS hot split.
 
 ---
 
@@ -278,14 +285,17 @@ yarn ts-node scripts/01-initialize-pool.ts 100
 ### ✅ Step 3.5: Verify Pool State
 **Command:**
 ```bash
-ts-node scripts/verify-pool.ts
+yarn ts-node scripts/verify-pool.ts
 ```
 
 **Result:**
 - [ ] Completed
-- Operations Authority: `___________________`
 - Pause Authority: `___________________`
+- Unpause Authority: `___________________`
+- Treasury Authority: `___________________`
+- Configure Authority: `___________________`
 - Fee Recipient: `___________________`
+- Withdraw Recipient: `___________________`
 - Fee Rate: `___________________` bps
 - Swaps Paused: `___________________`
 - Liquidity Paused: `___________________`
@@ -515,17 +525,17 @@ USDC Vault Token Account: ___________________
 
 ### Pause Swaps
 ```bash
-ts-node scripts/emergency-pause-swaps.ts
+yarn ts-node scripts/emergency-pause-swaps.ts
 ```
 
 ### Pause Liquidity Operations
 ```bash
-ts-node scripts/emergency-pause-liquidity.ts
+yarn ts-node scripts/emergency-pause-liquidity.ts
 ```
 
 ### Withdraw Emergency Liquidity
 ```bash
-ts-node scripts/emergency-withdraw.ts
+yarn ts-node scripts/emergency-withdraw.ts
 ```
 
 ---
@@ -722,6 +732,11 @@ After upgrading a legacy pool (which only stores `operations_authority` + `pause
 to a build that contains `migrate_authorities`, run these steps to split roles across the
 new SCM cold keys and CCS hot keys.
 
+> **Prerequisite:** complete the program upgrade in the previous appendix (steps U1–U8,
+> including the IDL upgrade in U7) **before** starting M1. The on-chain program must
+> contain the `migrate_authorities` instruction, and clients must be reading the new IDL,
+> or any post-migration `verify-pool.ts` call will fail to deserialize.
+
 ### Pre-stage cold keys
 
 - [ ] `unpause_authority` (SCM cold): `___________________`
@@ -738,6 +753,27 @@ Run with the existing pause authority (CCS hot):
 yarn ts-node scripts/emergency-pause-swaps.ts true
 yarn ts-node scripts/emergency-pause-liquidity.ts true
 ```
+
+### Step M1.5: Verify legacy data length (pre-flight)
+
+Confirm the on-chain pool is exactly the legacy pre-migration size before submitting any
+migration tx. The expected value is `1719` bytes (`8` discriminator + `LEGACY_INIT_SPACE`).
+Anything else (commonly `1815` after migration, or a different size if the legacy layout
+has drifted) means do **not** proceed.
+
+```bash
+solana account <POOL_PDA> --output json --output-file /tmp/pool.json
+jq -r '.account.data[0]' /tmp/pool.json | base64 -d | wc -c
+# expected output: 1719
+```
+
+`scripts/migrate-authorities.ts` performs the same assertion automatically and aborts
+before sending if the size doesn't match. This step is for the operator's offline
+verification before they kick off the (potentially multi-sig) co-signing round-trip.
+
+**Result:**
+- [ ] Completed
+- Pool data length: `___________________` (must be `1719`)
 
 ### Step M2: Build the migration tx (offline-signable)
 
@@ -759,6 +795,32 @@ This prints an unsigned base64 transaction. Co-sign with the legacy pause author
 
 For a single-sig dev environment you can drop `--build-only` and let the script send
 directly with the wallet running it (must be the legacy operations authority).
+
+### Step M3.5: Verify migrated layout (post-submit)
+
+`scripts/migrate-authorities.ts` automatically asserts the post-migration state when run
+without `--build-only`:
+
+- pool data length is exactly `1815` bytes (`8` disc + `INIT_SPACE`)
+- `pause_authority`, `unpause_authority`, `treasury_authority`, `configure_authority`, and
+  `withdraw_recipient` all equal the args that were submitted
+
+If you used `--build-only` and submitted the tx through a separate signer flow, run the
+same assertions out-of-band:
+
+```bash
+solana account <POOL_PDA> --output json --output-file /tmp/pool.json
+jq -r '.account.data[0]' /tmp/pool.json | base64 -d | wc -c
+# expected output: 1815
+
+yarn ts-node scripts/verify-pool.ts
+# confirm all six fields match the values passed to migrate_authorities
+```
+
+**Result:**
+- [ ] Completed
+- Pool data length: `___________________` (must be `1815`)
+- All six fields verified: `___________________`
 
 ### Step M4: Verify the new layout
 
