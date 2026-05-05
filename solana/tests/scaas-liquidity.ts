@@ -2670,12 +2670,11 @@ describe("scaas-liquidity", () => {
   });
 
   describe("Authority Management", () => {
-    it("Updates operations authority successfully", async () => {
-      // Create a new operations authority
-      const newOpsAuthority = anchor.web3.Keypair.generate();
+    it("Updates configure authority successfully", async () => {
+      const newConfigure = anchor.web3.Keypair.generate();
 
       await program.methods
-        .updateConfigureAuthority(newOpsAuthority.publicKey)
+        .updateConfigureAuthority(newConfigure.publicKey)
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
@@ -2683,21 +2682,20 @@ describe("scaas-liquidity", () => {
         .signers([configureAuthority.payer])
         .rpc();
 
-      // Verify the authority was updated
       const poolAccount = await program.account.liquidityPool.fetch(pool);
       assert.equal(
         poolAccount.configureAuthority.toString(),
-        newOpsAuthority.publicKey.toString()
+        newConfigure.publicKey.toString()
       );
 
-      // Change it back to the original for other tests
+      // Change it back to the original for other tests.
       await program.methods
-        .updateConfigureAuthority(operationsAuthority.publicKey)
+        .updateConfigureAuthority(configureAuthority.publicKey)
         .accounts({
           pool,
-          configureAuthority: newOpsAuthority.publicKey,
+          configureAuthority: newConfigure.publicKey,
         })
-        .signers([newOpsAuthority])
+        .signers([newConfigure])
         .rpc();
     });
 
@@ -2732,64 +2730,77 @@ describe("scaas-liquidity", () => {
         .rpc();
     });
 
-    it("Fails when a non-configure signer tries to rotate the configure authority", async () => {
-      // Use a separately generated signer so the test catches a real has_one
-      // violation (instead of accidentally succeeding because all in-test role
-      // aliases point at the same payer).
-      const stranger = anchor.web3.Keypair.generate();
-      const transferTx = new anchor.web3.Transaction().add(
-        anchor.web3.SystemProgram.transfer({
-          fromPubkey: payer.publicKey,
-          toPubkey: stranger.publicKey,
-          lamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL,
-        })
-      );
-      await provider.sendAndConfirm(transferTx, [payer.payer]);
+    // Parameterized cross-role rotation matrix: every `update_<role>_authority` call must
+    // reject any signer that does not currently hold that exact role. The test fixture sets
+    // all four roles to the same payer at init, so a `has_one` violation can only be
+    // surfaced by signing with a foreign keypair (not the payer). We exercise all four
+    // target roles; the "wrong signer" stands in for any of the other three roles
+    // (functionally equivalent because `has_one` reduces to a pubkey equality check).
+    type RoleSpec = {
+      label: string;
+      method:
+        | "updatePauseAuthority"
+        | "updateUnpauseAuthority"
+        | "updateTreasuryAuthority"
+        | "updateConfigureAuthority";
+      accountField:
+        | "pauseAuthority"
+        | "unpauseAuthority"
+        | "treasuryAuthority"
+        | "configureAuthority";
+    };
 
-      const newAuthority = anchor.web3.Keypair.generate();
-      try {
-        await program.methods
-          .updateConfigureAuthority(newAuthority.publicKey)
-          .accounts({
-            pool,
-            configureAuthority: stranger.publicKey,
+    const roles: RoleSpec[] = [
+      {
+        label: "pause",
+        method: "updatePauseAuthority",
+        accountField: "pauseAuthority",
+      },
+      {
+        label: "unpause",
+        method: "updateUnpauseAuthority",
+        accountField: "unpauseAuthority",
+      },
+      {
+        label: "treasury",
+        method: "updateTreasuryAuthority",
+        accountField: "treasuryAuthority",
+      },
+      {
+        label: "configure",
+        method: "updateConfigureAuthority",
+        accountField: "configureAuthority",
+      },
+    ];
+
+    for (const role of roles) {
+      it(`Fails when a non-${role.label} signer tries to rotate the ${role.label} authority`, async () => {
+        const stranger = anchor.web3.Keypair.generate();
+        const transferTx = new anchor.web3.Transaction().add(
+          anchor.web3.SystemProgram.transfer({
+            fromPubkey: payer.publicKey,
+            toPubkey: stranger.publicKey,
+            lamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL,
           })
-          .signers([stranger])
-          .rpc();
+        );
+        await provider.sendAndConfirm(transferTx, [payer.payer]);
 
-        assert.fail("Expected constraint violation");
-      } catch (error) {
-        assert.include(error.toString().toLowerCase(), "constraint");
-      }
-    });
-
-    it("Fails when a non-pause signer tries to rotate the pause authority", async () => {
-      const stranger = anchor.web3.Keypair.generate();
-      const transferTx = new anchor.web3.Transaction().add(
-        anchor.web3.SystemProgram.transfer({
-          fromPubkey: payer.publicKey,
-          toPubkey: stranger.publicKey,
-          lamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL,
-        })
-      );
-      await provider.sendAndConfirm(transferTx, [payer.payer]);
-
-      const newAuthority = anchor.web3.Keypair.generate();
-      try {
-        await program.methods
-          .updatePauseAuthority(newAuthority.publicKey)
-          .accounts({
-            pool,
-            pauseAuthority: stranger.publicKey,
-          })
-          .signers([stranger])
-          .rpc();
-
-        assert.fail("Expected constraint violation");
-      } catch (error) {
-        assert.include(error.toString().toLowerCase(), "constraint");
-      }
-    });
+        const newAuthority = anchor.web3.Keypair.generate();
+        try {
+          await (program.methods as any)
+            [role.method](newAuthority.publicKey)
+            .accounts({
+              pool,
+              [role.accountField]: stranger.publicKey,
+            })
+            .signers([stranger])
+            .rpc();
+          assert.fail(`Expected constraint violation rotating ${role.label}`);
+        } catch (error) {
+          assert.include(error.toString().toLowerCase(), "constraint");
+        }
+      });
+    }
   });
 
   describe("Authority Access Control", () => {
@@ -3105,20 +3116,7 @@ describe("scaas-liquidity", () => {
     });
 
     it("Rejects update_withdraw_recipient from a non-configure signer", async () => {
-      try {
-        await program.methods
-          .updateWithdrawRecipient(foreignOwner.publicKey)
-          .accounts({
-            pool,
-            configureAuthority: pauseAuthority.publicKey, // matches pool field for value, but wrong signer-binding
-          })
-          .signers([pauseAuthority.payer])
-          .rpc();
-        // Aliased to payer in tests, so this case actually succeeds; tighten with a foreign signer.
-      } catch (_) {}
-
       const stranger = anchor.web3.Keypair.generate();
-      // Fund the stranger so the tx can pay fees.
       const transferTx = new anchor.web3.Transaction().add(
         anchor.web3.SystemProgram.transfer({
           fromPubkey: payer.publicKey,
@@ -3237,6 +3235,302 @@ describe("scaas-liquidity", () => {
         assert.fail("Expected AlreadyMigrated error");
       } catch (error) {
         assert.include(error.toString().toLowerCase(), "alreadymigrated");
+      }
+    });
+  });
+
+  // The migration happy path needs a synthetic legacy-shaped pool. The two test-only
+  // instructions (`initLegacyForTest` + `migrateAuthoritiesForTest`) are gated behind the
+  // `test-helpers` cargo feature; build the program with that feature to enable this
+  // describe block. Without it, the IDL won't carry the helpers and the suite skips.
+  describe("Migration Happy Path (test-helpers only)", () => {
+    // The Anchor IDL stores instruction names in snake_case; TS bindings expose them as
+    // camelCase via `program.methods`. We probe the IDL directly to decide whether the
+    // build was done with `--features test-helpers`.
+    const hasTestHelpers = (program.idl.instructions ?? []).some(
+      (ix: any) =>
+        ix.name === "init_legacy_for_test" || ix.name === "initLegacyForTest"
+    );
+
+    before(function () {
+      if (!hasTestHelpers) {
+        console.log(
+          "      [skip] program built without --features test-helpers; " +
+            "skipping migration happy-path coverage."
+        );
+        this.skip();
+      }
+    });
+
+    async function fund(target: PublicKey, sol: number) {
+      const tx = new anchor.web3.Transaction().add(
+        anchor.web3.SystemProgram.transfer({
+          fromPubkey: payer.publicKey,
+          toPubkey: target,
+          lamports: sol * anchor.web3.LAMPORTS_PER_SOL,
+        })
+      );
+      await provider.sendAndConfirm(tx, [payer.payer]);
+    }
+
+    function legacyPda(legacyOps: PublicKey): PublicKey {
+      return PublicKey.findProgramAddressSync(
+        [Buffer.from("liquidity_pool_legacy_test"), legacyOps.toBuffer()],
+        program.programId
+      )[0];
+    }
+
+    async function runMigrationCase(opts: {
+      supportedTokens: PublicKey[];
+      feeRate: number;
+      swapsPaused: boolean;
+      liquidityPaused: boolean;
+    }) {
+      const legacyOps = anchor.web3.Keypair.generate();
+      const legacyPause = anchor.web3.Keypair.generate();
+      const legacyFeeRecipient = anchor.web3.Keypair.generate().publicKey;
+      await fund(legacyOps.publicKey, 1);
+
+      const testPool = legacyPda(legacyOps.publicKey);
+
+      await (program.methods as any)
+        .initLegacyForTest(
+          legacyOps.publicKey,
+          legacyPause.publicKey,
+          legacyFeeRecipient,
+          opts.supportedTokens,
+          new anchor.BN(opts.feeRate),
+          opts.swapsPaused,
+          opts.liquidityPaused
+        )
+        .accounts({
+          pool: testPool,
+          payer: legacyOps.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([legacyOps])
+        .rpc();
+
+      const beforeInfo = await provider.connection.getAccountInfo(testPool);
+      assert.equal(
+        beforeInfo!.data.length,
+        1719,
+        "Legacy pool should be exactly 1719 bytes (8 disc + LEGACY_INIT_SPACE)"
+      );
+
+      const newPause = anchor.web3.Keypair.generate().publicKey;
+      const newUnpause = anchor.web3.Keypair.generate().publicKey;
+      const newTreasury = anchor.web3.Keypair.generate().publicKey;
+      const newConfigure = anchor.web3.Keypair.generate().publicKey;
+      const newRecipient = anchor.web3.Keypair.generate().publicKey;
+
+      await (program.methods as any)
+        .migrateAuthoritiesForTest(
+          newPause,
+          newUnpause,
+          newTreasury,
+          newConfigure,
+          newRecipient
+        )
+        .accounts({
+          pool: testPool,
+          legacyOperationsAuthority: legacyOps.publicKey,
+          legacyPauseAuthority: legacyPause.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([legacyOps, legacyPause])
+        .rpc();
+
+      const afterInfo = await provider.connection.getAccountInfo(testPool);
+      assert.equal(
+        afterInfo!.data.length,
+        1815,
+        "Migrated pool should be exactly 1815 bytes (8 disc + INIT_SPACE)"
+      );
+
+      const poolAccount = await program.account.liquidityPool.fetch(testPool);
+      assert.equal(poolAccount.pauseAuthority.toString(), newPause.toString());
+      assert.equal(
+        poolAccount.unpauseAuthority.toString(),
+        newUnpause.toString()
+      );
+      assert.equal(
+        poolAccount.treasuryAuthority.toString(),
+        newTreasury.toString()
+      );
+      assert.equal(
+        poolAccount.configureAuthority.toString(),
+        newConfigure.toString()
+      );
+      assert.equal(
+        poolAccount.feeRecipient.toString(),
+        legacyFeeRecipient.toString(),
+        "fee_recipient must be carried over from the legacy bytes"
+      );
+      assert.equal(
+        poolAccount.withdrawRecipient.toString(),
+        newRecipient.toString()
+      );
+      assert.equal(poolAccount.feeRate.toNumber(), opts.feeRate);
+      assert.equal(poolAccount.swapsPaused, opts.swapsPaused);
+      assert.equal(poolAccount.liquidityPaused, opts.liquidityPaused);
+      assert.equal(
+        poolAccount.supportedTokens.length,
+        opts.supportedTokens.length
+      );
+      for (let i = 0; i < opts.supportedTokens.length; i++) {
+        assert.equal(
+          poolAccount.supportedTokens[i].toString(),
+          opts.supportedTokens[i].toString(),
+          `supported_tokens[${i}] must be preserved`
+        );
+      }
+
+      // Re-running migration on a fully migrated pool is rejected by the size guard.
+      try {
+        await (program.methods as any)
+          .migrateAuthoritiesForTest(
+            newPause,
+            newUnpause,
+            newTreasury,
+            newConfigure,
+            newRecipient
+          )
+          .accounts({
+            pool: testPool,
+            legacyOperationsAuthority: legacyOps.publicKey,
+            legacyPauseAuthority: legacyPause.publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([legacyOps, legacyPause])
+          .rpc();
+        assert.fail("Expected AlreadyMigrated error on re-run");
+      } catch (error) {
+        assert.include(error.toString().toLowerCase(), "alreadymigrated");
+      }
+    }
+
+    it("migrates a legacy pool with empty supported_tokens and unpaused flags", async () => {
+      await runMigrationCase({
+        supportedTokens: [],
+        feeRate: 0,
+        swapsPaused: false,
+        liquidityPaused: false,
+      });
+    });
+
+    it("migrates a legacy pool with two supported tokens, non-zero fee, and both pause flags set", async () => {
+      const mintA = anchor.web3.Keypair.generate().publicKey;
+      const mintB = anchor.web3.Keypair.generate().publicKey;
+      await runMigrationCase({
+        supportedTokens: [mintA, mintB],
+        feeRate: 250,
+        swapsPaused: true,
+        liquidityPaused: true,
+      });
+    });
+
+    it("rejects migration when the legacy pause authority signer doesn't match on-chain bytes", async () => {
+      const legacyOps = anchor.web3.Keypair.generate();
+      const legacyPause = anchor.web3.Keypair.generate();
+      const wrongPause = anchor.web3.Keypair.generate();
+      await fund(legacyOps.publicKey, 1);
+      await fund(wrongPause.publicKey, 0.05);
+
+      const testPool = legacyPda(legacyOps.publicKey);
+
+      await (program.methods as any)
+        .initLegacyForTest(
+          legacyOps.publicKey,
+          legacyPause.publicKey,
+          anchor.web3.Keypair.generate().publicKey,
+          [],
+          new anchor.BN(0),
+          false,
+          false
+        )
+        .accounts({
+          pool: testPool,
+          payer: legacyOps.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([legacyOps])
+        .rpc();
+
+      try {
+        await (program.methods as any)
+          .migrateAuthoritiesForTest(
+            anchor.web3.Keypair.generate().publicKey,
+            anchor.web3.Keypair.generate().publicKey,
+            anchor.web3.Keypair.generate().publicKey,
+            anchor.web3.Keypair.generate().publicKey,
+            anchor.web3.Keypair.generate().publicKey
+          )
+          .accounts({
+            pool: testPool,
+            legacyOperationsAuthority: legacyOps.publicKey,
+            legacyPauseAuthority: wrongPause.publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([legacyOps, wrongPause])
+          .rpc();
+        assert.fail("Expected LegacyDiscriminatorMismatch");
+      } catch (error) {
+        assert.include(
+          error.toString().toLowerCase(),
+          "legacydiscriminatormismatch"
+        );
+      }
+    });
+
+    it("rejects migration when withdraw_recipient is the zero pubkey", async () => {
+      const legacyOps = anchor.web3.Keypair.generate();
+      const legacyPause = anchor.web3.Keypair.generate();
+      await fund(legacyOps.publicKey, 1);
+
+      const testPool = legacyPda(legacyOps.publicKey);
+
+      await (program.methods as any)
+        .initLegacyForTest(
+          legacyOps.publicKey,
+          legacyPause.publicKey,
+          anchor.web3.Keypair.generate().publicKey,
+          [],
+          new anchor.BN(0),
+          false,
+          false
+        )
+        .accounts({
+          pool: testPool,
+          payer: legacyOps.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([legacyOps])
+        .rpc();
+
+      try {
+        await (program.methods as any)
+          .migrateAuthoritiesForTest(
+            anchor.web3.Keypair.generate().publicKey,
+            anchor.web3.Keypair.generate().publicKey,
+            anchor.web3.Keypair.generate().publicKey,
+            anchor.web3.Keypair.generate().publicKey,
+            PublicKey.default
+          )
+          .accounts({
+            pool: testPool,
+            legacyOperationsAuthority: legacyOps.publicKey,
+            legacyPauseAuthority: legacyPause.publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([legacyOps, legacyPause])
+          .rpc();
+        assert.fail("Expected WithdrawRecipientNotSet");
+      } catch (error) {
+        assert.include(
+          error.toString().toLowerCase(),
+          "withdrawrecipientnotset"
+        );
       }
     });
   });
