@@ -34,11 +34,6 @@ impl LiquidityPool {
     // 6 Pubkeys + supported_tokens vec header + cap + fee_rate + 2 bools + bump
     pub const INIT_SPACE: usize =
         32 * 6 + (4 + 32 * MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1;
-
-    /// Pre-migration on-chain layout: ops + pause + fee_recipient + supported_tokens + fee_rate + 2 bools + bump.
-    /// Used by `migrate_authorities` to size the pre-realloc account before expanding to `INIT_SPACE`.
-    pub const LEGACY_INIT_SPACE: usize =
-        32 * 3 + (4 + 32 * MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1;
 }
 
 #[account]

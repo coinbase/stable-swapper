@@ -465,7 +465,13 @@ fn do_migrate_authorities<'info>(
         LiquidityError::WithdrawRecipientNotSet
     );
 
-    let legacy_total = 8 + LiquidityPool::LEGACY_INIT_SPACE;
+    // Pre-migration on-chain layout: ops + pause + fee_recipient + supported_tokens + fee_rate + 2 bools + bump.
+    // Lives here (rather than on `LiquidityPool`) because it only sizes the pre-realloc account
+    // for this one-shot migration; the post-migration struct uses `LiquidityPool::INIT_SPACE`.
+    const LEGACY_INIT_SPACE: usize =
+        32 * 3 + (4 + 32 * MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1;
+
+    let legacy_total = 8 + LEGACY_INIT_SPACE;
     let new_total = 8 + LiquidityPool::INIT_SPACE;
 
     // Defense-in-depth: `UncheckedAccount` does not enforce ownership. Reject any account not

@@ -3,8 +3,9 @@ import { Program } from "@coral-xyz/anchor";
 import { ScaasLiquidity } from "../target/types/scaas_liquidity";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 
-// On-chain layout sizes (must stay in sync with `LiquidityPool::LEGACY_INIT_SPACE` and
-// `LiquidityPool::INIT_SPACE` in `programs/scaas-liquidity/src/state.rs`):
+// On-chain layout sizes (must stay in sync with the local `LEGACY_INIT_SPACE` in
+// `do_migrate_authorities` and `LiquidityPool::INIT_SPACE` in
+// `programs/scaas-liquidity/src/{lib,state}.rs`):
 //   pre-migration : 8 disc + 32*3 + (4 + 32*MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1 = 1719
 //   post-migration: 8 disc + 32*6 + (4 + 32*MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1 = 1815
 const LEGACY_POOL_SIZE = 1719;
