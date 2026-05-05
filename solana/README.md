@@ -107,19 +107,6 @@ anchor test --provider.cluster localnet --skip-build
 git checkout -- programs/scaas-liquidity/src/lib.rs Anchor.toml
 ```
 
-To exercise the `migrate_authorities` happy-path tests, build with the `test-helpers`
-cargo feature so the IDL carries the `init_legacy_for_test` and
-`migrate_authorities_for_test` instructions. Without the feature, the migration suite
-self-skips:
-
-```bash
-anchor build -- --features test-helpers
-anchor test --provider.cluster localnet --skip-build
-```
-
-`test-helpers` is never enabled in production builds (it gates a synthetic legacy-pool
-factory that exists purely to set up test fixtures).
-
 CI runs the equivalent of these steps in `.github/workflows/test.yml`.
 
 ### Network Configuration
