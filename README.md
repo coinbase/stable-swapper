@@ -30,19 +30,17 @@ See each implementation's README for chain-specific quickstart, build, test, and
 stable-swapper/
 ├── evm/                       # EVM (Solidity) implementation
 │   ├── src/                   # Production contracts
-│   ├── script/                # Deployment and utility scripts
 │   ├── test/                  # Unit and integration tests
 │   └── README.md
 ├── solana/                    # SVM (Rust / Anchor) implementation
 │   ├── programs/              # On-chain Anchor program
 │   ├── tests/                 # Anchor / Mocha integration tests
-│   ├── scripts/               # Admin and emergency scripts
-│   ├── runbooks/              # Deployment runbooks
 │   └── README.md
 ├── LICENSE
 ├── SECURITY.md
 ├── CONTRIBUTING.md
 └── .github/
+    ├── workflows/             # CI workflows
     └── PULL_REQUEST_TEMPLATE.md
 ```
 

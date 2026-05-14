@@ -76,7 +76,7 @@ contract UpdateTokenStatusTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(appStable), swapAmount, minAmountOut, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, minAmountOut, wallet0);
         vm.stopPrank();
     }
 }

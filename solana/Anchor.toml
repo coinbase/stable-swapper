@@ -6,13 +6,13 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-scaas_liquidity = "pqgqKahpG1y2wsgxFhzaAnkV1cL9vk8MSg9qm4q646F"
+stable_swapper = "pqgqKahpG1y2wsgxFhzaAnkV1cL9vk8MSg9qm4q646F"
 
 [programs.devnet]
-scaas_liquidity = "9vDwZVJXw5nxymWmUcgmNpemDH5EBcJwLNhtsznrgJDH"
+stable_swapper = "9vDwZVJXw5nxymWmUcgmNpemDH5EBcJwLNhtsznrgJDH"
 
 [programs.mainnet]
-scaas_liquidity = "pqgqKahpG1y2wsgxFhzaAnkV1cL9vk8MSg9qm4q646F"
+stable_swapper = "pqgqKahpG1y2wsgxFhzaAnkV1cL9vk8MSg9qm4q646F"
 
 [registry]
 url = "https://api.apr.dev"

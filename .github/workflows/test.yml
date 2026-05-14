@@ -5,16 +5,12 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  FOUNDRY_PROFILE: ci
-
 jobs:
-  check:
-    strategy:
-      fail-fast: true
-
-    name: Foundry project
+  evm:
+    name: EVM (Foundry)
     runs-on: ubuntu-latest
+    env:
+      FOUNDRY_PROFILE: ci
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
@@ -29,23 +25,80 @@ jobs:
         uses: foundry-rs/foundry-toolchain@8b0419c685ef46cb79ec93fbdc131174afceb730 # v1.6.0
 
       - name: Show Forge version
-        run: |
-          forge --version
+        run: forge --version
 
       - name: Run Forge fmt
-        run: |
-          forge fmt --check
-        id: fmt
+        run: forge fmt --check
         working-directory: evm
 
       - name: Run Forge build
-        run: |
-          forge build --sizes
-        id: build
+        run: forge build --sizes
         working-directory: evm
 
       - name: Run Forge tests
-        run: |
-          forge test -vvv
-        id: test
+        run: forge test -vvv
         working-directory: evm
+
+  solana:
+    name: Solana (Anchor)
+    runs-on: ubuntu-latest
+    env:
+      SOLANA_VERSION: 2.2.21
+      ANCHOR_VERSION: 0.31.1
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Show Rust version
+        run: rustc --version
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Solana toolchain
+        run: |
+          solana --version
+          solana-keygen --version
+
+      - name: Install Anchor CLI
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor \
+            --tag "v${ANCHOR_VERSION}" anchor-cli --locked
+
+      - name: Verify Anchor CLI
+        run: anchor --version
+
+      - name: Install JS dependencies
+        run: yarn install --frozen-lockfile
+        working-directory: solana
+
+      - name: Generate ephemeral program keypair and align IDs
+        working-directory: solana
+        run: |
+          mkdir -p target/deploy
+          solana-keygen new --no-bip39-passphrase --silent --force \
+            --outfile target/deploy/stable_swapper-keypair.json
+          TEST_ID=$(solana address -k target/deploy/stable_swapper-keypair.json)
+          perl -pi -e "s/declare_id!\\(\"[^\"]+\"\\)/declare_id!(\"$TEST_ID\")/" \
+            programs/stable-swapper/src/lib.rs
+          awk -v id="$TEST_ID" '
+            /^\[/  { in_localnet = ($0 ~ /^\[programs\.localnet\]$/) }
+            in_localnet && /^stable_swapper[[:space:]]*=/ {
+              print "stable_swapper = \"" id "\""; next
+            }
+            { print }
+          ' Anchor.toml > Anchor.toml.tmp && mv Anchor.toml.tmp Anchor.toml
+
+      - name: Build Anchor program
+        working-directory: solana
+        run: anchor build
+
+      - name: Run Anchor tests
+        working-directory: solana
+        run: anchor test --provider.cluster localnet --skip-build

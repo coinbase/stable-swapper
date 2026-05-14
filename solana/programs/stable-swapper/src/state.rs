@@ -22,9 +22,9 @@ impl LiquidityPool {
 #[account]
 pub struct TokenVault {
     pub mint: Pubkey,
-    /// Deprecated: liquidity reservation was removed in STBLE-2811.
+    /// Deprecated: liquidity reservation was removed.
     #[deprecated(
-        note = "Liquidity reservation was removed in STBLE-2811; field retained for layout compatibility and is always zero on new vaults."
+        note = "Liquidity reservation was removed; field retained for layout compatibility and is always zero on new vaults."
     )]
     pub reserved_amount: u64,
     pub disabled: bool, // If true, this token cannot be used in swaps

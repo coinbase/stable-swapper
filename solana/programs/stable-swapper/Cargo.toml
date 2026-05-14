@@ -1,12 +1,12 @@
 [package]
-name = "scaas-liquidity"
+name = "stable-swapper"
 version = "0.1.0"
-description = "Created with Anchor"
+description = "StableSwapper liquidity pool program"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "scaas_liquidity"
+name = "stable_swapper"
 
 [features]
 default = []
