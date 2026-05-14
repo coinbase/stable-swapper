@@ -8,12 +8,15 @@ StableSwapper enables swapping between stablecoins at a 1:1 ratio, automatically
 
 ### Features
 
+Shared across both implementations:
+
 - **1:1 Stablecoin Swaps** -- Swap between any listed stablecoins with automatic decimal normalization
 - **Fee Collection** -- Configurable fee in basis points, charged on the input token
-- **Role-Based Access Control** -- Distinct roles with separated concerns for administration, treasury, configuration, and pausing
-- **Feature Flags** -- Independent toggles for swaps, withdrawals, and allowlist enforcement
-- **Reserved Amounts** -- Reserve token balances from being consumed by swaps
+- **Role-Based Access Control** -- Distinct authorities with separated concerns
+- **Pause Controls** -- Independent toggles for swap and liquidity operations
 - **Slippage Protection** -- Users specify a minimum output amount per swap
+
+Implementation-specific features (see each README for details):
 
 ## Implementations
 

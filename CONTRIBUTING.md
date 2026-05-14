@@ -40,7 +40,7 @@ stable-swapper/
     └── PULL_REQUEST_TEMPLATE.md
 ```
 
-Each implementation directory is self-contained with its own source, tests, scripts, and README.
+Each implementation directory is self-contained with its own source, tests, and README.
 
 ## Development Workflow
 

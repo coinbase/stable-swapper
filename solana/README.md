@@ -4,13 +4,13 @@ Solana / Anchor implementation of StableSwapper: a 1:1 stablecoin swap program t
 
 ## Features
 
-- **1:1 Token Swaps** -- Fixed-rate swapping between any listed stablecoins
+- **1:1 Token Swaps** -- Fixed-rate swapping between any listed stablecoins, with automatic decimal normalization
 - **Dual Authority Model** -- Separate operations and pause authorities, both compatible with multisigs
 - **Slippage Protection** -- User-supplied minimum output amount per swap
 - **Granular Pause Controls** -- Independent pause flags for swaps and liquidity management
-- **Configurable Fees** -- Admin-controlled fee rate (0--10%) with a dedicated fee recipient
-- **Multi-token Support** -- Add up to 50 supported tokens, each with its own vault
-- **Access Controls** -- Authority validation enforced via PDAs
+- **Configurable Fees** -- Admin-controlled fee rate (0--10%, capped at 1000 basis points) with a dedicated fee recipient
+- **Multi-token Support** -- Add up to 50 supported tokens, each with its own vault. Token mints must have between 6 and 9 decimals.
+- **Access Controls** -- Authority validation enforced via `has_one` constraints; the pool itself is a PDA
 
 ## Project Structure
 
@@ -152,14 +152,16 @@ Example: swap 100 USDC → custom stablecoin with a 1% fee:
 
 ### Core instructions
 
-- **`initialize_pool`** — Creates the pool with operations + pause authorities and fee configuration
-- **`add_supported_token`** — Adds a token with its dedicated vault (operations authority)
+- **`initialize`** — Creates the pool with operations + pause authorities and fee configuration
+- **`add_supported_token`** — Adds a token with its dedicated vault (operations authority). Mints with fewer than 6 or more than 9 decimals are rejected.
+- **`remove_supported_token`** — Removes a token from the pool, closes its vault and vault token account, and refunds rent to the operations authority. Requires the token to be disabled and the vault to be empty.
 - **`swap`** — Executes a 1:1 swap with slippage protection (`min_amount_out`)
 - **`withdraw_liquidity`** — Removes liquidity from a vault (operations authority, gated by `liquidity_paused`)
-- **`update_fee_config`** — Updates the fee rate and recipient (operations authority)
+- **`update_fee_config`** — Updates the fee rate and/or recipient (operations authority)
 - **`update_pause_config`** — Controls `swaps_paused` and `liquidity_paused` (pause authority)
-- **`update_operations_authority`** — Operations authority updates itself
-- **`update_pause_authority`** — Pause authority updates itself
+- **`update_token_status`** — Disables or enables a specific token for swaps (pause authority)
+- **`update_operations_authority`** — Operations authority rotates itself
+- **`update_pause_authority`** — Pause authority rotates itself
 
 Liquidity is seeded by sending tokens directly to the vault token account via an SPL Token transfer; there is no dedicated deposit instruction.
 

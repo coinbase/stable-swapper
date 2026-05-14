@@ -4,10 +4,17 @@ Solidity implementation of StableSwapper using the UUPS upgradeable proxy patter
 
 ## Features
 
+- **1:1 Stablecoin Swaps** -- Fixed-rate swapping between any listed stablecoins with automatic decimal normalization
+- **Configurable Fees** -- Fee in basis points charged on the input token, with a dedicated fee recipient
+- **Slippage Protection** -- Users specify a minimum output amount per swap
+- **Feature Flags** -- Independent toggles for swaps, withdrawals, and allowlist enforcement
+- **Allowlist** -- Optional caller-allowlist gating for swaps (off by default; the recipient is never gated)
+- **Reserved Amounts** -- Reserve token balances per token to protect against swap-side liquidity consumption (treasury role can still withdraw past the reserve)
+- **Per-Token Pause** -- Disable individual tokens without disabling the rest of the pool
 - **UUPS Upgradeability** -- Upgradeable via the [ERC-1967](https://eips.ethereum.org/EIPS/eip-1967) proxy pattern
 - **ERC-7201 Namespaced Storage** -- Collision-resistant storage layout
 - **Role-Based Access Control** -- Four distinct roles:
-  - `DEFAULT_ADMIN_ROLE` -- Upgrades and role management (single holder, 2-step transfer)
+  - `DEFAULT_ADMIN_ROLE` -- Upgrades and role management (single holder, 2-step transfer with configurable delay)
   - `TREASURY_ROLE` -- Liquidity withdrawals and reserved amount management
   - `CONFIGURE_ROLE` -- Token listing, fee updates, and allowlist management
   - `PAUSE_ROLE` -- Pause/unpause operations and individual token status
