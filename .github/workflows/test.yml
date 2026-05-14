@@ -81,9 +81,18 @@ jobs:
         run: yarn install --frozen-lockfile
         working-directory: solana
 
+      - name: Generate wallet keypair
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.config/solana"
+          solana-keygen new --no-bip39-passphrase --silent --force \
+            --outfile "$HOME/.config/solana/id.json"
+          solana address
+
       - name: Generate ephemeral program keypair and align IDs
         working-directory: solana
         run: |
+          set -euo pipefail
           mkdir -p target/deploy
           solana-keygen new --no-bip39-passphrase --silent --force \
             --outfile target/deploy/stable_swapper-keypair.json
