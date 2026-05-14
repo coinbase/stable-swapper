@@ -31,7 +31,7 @@ solana/
 ## Prerequisites
 
 - **Rust** 1.70+
-- **Solana CLI** 2.2.21+
+- **Solana CLI** (Agave) 3.0+
 - **Anchor CLI** 0.31.1+
 - **Node.js** 18+ with Yarn
 
