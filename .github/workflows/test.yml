@@ -56,6 +56,18 @@ jobs:
       - name: Show Rust version
         run: rustc --version
 
+      - name: Check Rust formatting
+        working-directory: solana
+        run: cargo fmt --all -- --check
+
+      - name: Install JS dependencies
+        run: yarn install --frozen-lockfile
+        working-directory: solana
+
+      - name: Check TypeScript formatting
+        working-directory: solana
+        run: yarn lint
+
       - name: Install Solana CLI
         run: |
           set -euo pipefail
@@ -76,10 +88,6 @@ jobs:
 
       - name: Verify Anchor CLI
         run: anchor --version
-
-      - name: Install JS dependencies
-        run: yarn install --frozen-lockfile
-        working-directory: solana
 
       - name: Generate wallet keypair
         run: |

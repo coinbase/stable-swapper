@@ -71,7 +71,11 @@ describe("stable-swapper", () => {
     );
 
     [customStableVault] = PublicKey.findProgramAddressSync(
-      [Buffer.from("token_vault"), pool.toBuffer(), customStableMint.toBuffer()],
+      [
+        Buffer.from("token_vault"),
+        pool.toBuffer(),
+        customStableMint.toBuffer(),
+      ],
       program.programId
     );
 
@@ -390,7 +394,8 @@ describe("stable-swapper", () => {
       const usdcDiff =
         initialUserUsdcBalance.amount - finalUserUsdcBalance.amount;
       const customStableDiff =
-        finalUserCustomStableBalance.amount - initialUserCustomStableBalance.amount;
+        finalUserCustomStableBalance.amount -
+        initialUserCustomStableBalance.amount;
 
       assert.equal(usdcDiff.toString(), swapAmount.toString());
       assert.equal(customStableDiff.toString(), swapAmount.toString()); // 1:1 with 0% fee
@@ -446,7 +451,8 @@ describe("stable-swapper", () => {
       const usdcDiff =
         finalUserUsdcBalance.amount - initialUserUsdcBalance.amount;
       const customStableDiff =
-        initialUserCustomStableBalance.amount - finalUserCustomStableBalance.amount;
+        initialUserCustomStableBalance.amount -
+        finalUserCustomStableBalance.amount;
 
       assert.equal(customStableDiff.toString(), swapAmount.toString());
       assert.equal(usdcDiff.toString(), swapAmount.toString()); // 1:1 with 0% fee
@@ -1555,7 +1561,8 @@ describe("stable-swapper", () => {
 
       // Verify user received net amount (after fee deduction)
       const userCustomStableReceived =
-        finalUserCustomStableBalance.amount - initialUserCustomStableBalance.amount;
+        finalUserCustomStableBalance.amount -
+        initialUserCustomStableBalance.amount;
       assert.equal(
         userCustomStableReceived.toString(),
         expectedNetAmount.toString(),
@@ -1721,7 +1728,8 @@ describe("stable-swapper", () => {
       const usdcSpent =
         initialUserUsdcBalance.amount - finalUserUsdcBalance.amount;
       const customStableReceived =
-        finalUserCustomStableBalance.amount - initialUserCustomStableBalance.amount;
+        finalUserCustomStableBalance.amount -
+        initialUserCustomStableBalance.amount;
 
       assert.equal(
         usdcSpent.toString(),
