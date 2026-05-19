@@ -14,3 +14,4 @@ test-ledger
 **/deploy/*.json
 **/*-keypair.json
 **/id.json
+package-lock.json
