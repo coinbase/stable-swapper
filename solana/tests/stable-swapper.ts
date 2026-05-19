@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { ScaasLiquidity } from "../target/types/scaas_liquidity";
+import { StableSwapper } from "../target/types/stable_swapper";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
@@ -15,34 +15,34 @@ import {
 } from "@solana/spl-token";
 import { assert } from "chai";
 
-describe("scaas-liquidity", () => {
+describe("stable-swapper", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.scaasLiquidity as Program<ScaasLiquidity>;
+  const program = anchor.workspace.stableSwapper as Program<StableSwapper>;
   const payer = provider.wallet as anchor.Wallet;
   const operationsAuthority = payer; // In tests, same as payer
   const pauseAuthority = payer; // In tests, same as payer
 
   // Test keypairs
   let usdcMint: PublicKey;
-  let appStableMint: PublicKey;
+  let customStableMint: PublicKey;
   let pool: PublicKey;
   let usdcVault: PublicKey;
-  let appStableVault: PublicKey;
+  let customStableVault: PublicKey;
   let usdcVaultTokenAccount: PublicKey;
-  let appStableVaultTokenAccount: PublicKey;
+  let customStableVaultTokenAccount: PublicKey;
 
   // User accounts (also used for fee collection since authority is the fee recipient in tests)
   let userUsdcAccount: PublicKey;
-  let userAppStableAccount: PublicKey;
+  let userCustomStableAccount: PublicKey;
 
   // Fee recipient token accounts (created when tokens are added)
   let feeRecipientUsdcAccount: PublicKey;
-  let feeRecipientAppStableAccount: PublicKey;
+  let feeRecipientCustomStableAccount: PublicKey;
 
   before(async () => {
-    // Create USDC and AppStable mints
+    // Create USDC and CustomStable mints
     usdcMint = await createMint(
       provider.connection,
       payer.payer,
@@ -51,12 +51,12 @@ describe("scaas-liquidity", () => {
       6 // USDC decimals
     );
 
-    appStableMint = await createMint(
+    customStableMint = await createMint(
       provider.connection,
       payer.payer,
       payer.publicKey,
       null,
-      6 // AppStable decimals
+      6 // CustomStable decimals
     );
 
     // Derive PDAs (pool is now a single centralized pool, no authority in seed)
@@ -70,8 +70,12 @@ describe("scaas-liquidity", () => {
       program.programId
     );
 
-    [appStableVault] = PublicKey.findProgramAddressSync(
-      [Buffer.from("token_vault"), pool.toBuffer(), appStableMint.toBuffer()],
+    [customStableVault] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("token_vault"),
+        pool.toBuffer(),
+        customStableMint.toBuffer(),
+      ],
       program.programId
     );
 
@@ -80,8 +84,8 @@ describe("scaas-liquidity", () => {
       program.programId
     );
 
-    [appStableVaultTokenAccount] = PublicKey.findProgramAddressSync(
-      [Buffer.from("vault_token_account"), appStableVault.toBuffer()],
+    [customStableVaultTokenAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault_token_account"), customStableVault.toBuffer()],
       program.programId
     );
 
@@ -90,8 +94,8 @@ describe("scaas-liquidity", () => {
       usdcMint,
       payer.publicKey
     );
-    feeRecipientAppStableAccount = await getAssociatedTokenAddress(
-      appStableMint,
+    feeRecipientCustomStableAccount = await getAssociatedTokenAddress(
+      customStableMint,
       payer.publicKey
     );
 
@@ -103,10 +107,10 @@ describe("scaas-liquidity", () => {
       payer.publicKey
     );
 
-    userAppStableAccount = await createAccount(
+    userCustomStableAccount = await createAccount(
       provider.connection,
       payer.payer,
-      appStableMint,
+      customStableMint,
       payer.publicKey
     );
 
@@ -123,10 +127,10 @@ describe("scaas-liquidity", () => {
     await mintTo(
       provider.connection,
       payer.payer,
-      appStableMint,
-      userAppStableAccount,
+      customStableMint,
+      userCustomStableAccount,
       payer.payer,
-      1000 * 10 ** 6 // 1000 AppStable
+      1000 * 10 ** 6 // 1000 CustomStable
     );
   });
 
@@ -195,16 +199,16 @@ describe("scaas-liquidity", () => {
       );
     });
 
-    it("Adds AppStable as supported token", async () => {
+    it("Adds CustomStable as supported token", async () => {
       await program.methods
         .addSupportedToken()
         .accounts({
           pool,
-          vault: appStableVault,
-          vaultTokenAccount: appStableVaultTokenAccount,
-          feeRecipientTokenAccount: feeRecipientAppStableAccount,
+          vault: customStableVault,
+          vaultTokenAccount: customStableVaultTokenAccount,
+          feeRecipientTokenAccount: feeRecipientCustomStableAccount,
           feeRecipient: payer.publicKey,
-          mint: appStableMint,
+          mint: customStableMint,
           operationsAuthority: operationsAuthority.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -238,8 +242,8 @@ describe("scaas-liquidity", () => {
       await transfer(
         provider.connection,
         payer.payer,
-        userAppStableAccount,
-        appStableVaultTokenAccount,
+        userCustomStableAccount,
+        customStableVaultTokenAccount,
         payer.payer,
         seedAmount
       );
@@ -340,18 +344,18 @@ describe("scaas-liquidity", () => {
   });
 
   describe("Swapping", () => {
-    it("Swaps USDC for AppStable (1:1)", async () => {
+    it("Swaps USDC for CustomStable (1:1)", async () => {
       const swapAmount = new anchor.BN(100 * 10 ** 6); // 100 USDC
-      const minAmountOut = new anchor.BN(100 * 10 ** 6); // Expect 100 AppStable (0% fee)
+      const minAmountOut = new anchor.BN(100 * 10 ** 6); // Expect 100 CustomStable (0% fee)
 
       // Get initial balances
       const initialUserUsdcBalance = await getAccount(
         provider.connection,
         userUsdcAccount
       );
-      const initialUserAppStableBalance = await getAccount(
+      const initialUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       await program.methods
@@ -359,15 +363,15 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: userUsdcAccount, // Fee collected in input token (USDC)
           feeRecipient: payer.publicKey, // Fee recipient authority
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -381,23 +385,24 @@ describe("scaas-liquidity", () => {
         provider.connection,
         userUsdcAccount
       );
-      const finalUserAppStableBalance = await getAccount(
+      const finalUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       // Verify balances changed correctly (1:1 swap, 0% fee)
       const usdcDiff =
         initialUserUsdcBalance.amount - finalUserUsdcBalance.amount;
-      const appStableDiff =
-        finalUserAppStableBalance.amount - initialUserAppStableBalance.amount;
+      const customStableDiff =
+        finalUserCustomStableBalance.amount -
+        initialUserCustomStableBalance.amount;
 
       assert.equal(usdcDiff.toString(), swapAmount.toString());
-      assert.equal(appStableDiff.toString(), swapAmount.toString()); // 1:1 with 0% fee
+      assert.equal(customStableDiff.toString(), swapAmount.toString()); // 1:1 with 0% fee
     });
 
-    it("Swaps AppStable for USDC (1:1)", async () => {
-      const swapAmount = new anchor.BN(50 * 10 ** 6); // 50 AppStable
+    it("Swaps CustomStable for USDC (1:1)", async () => {
+      const swapAmount = new anchor.BN(50 * 10 ** 6); // 50 CustomStable
       const minAmountOut = new anchor.BN(50 * 10 ** 6); // Expect 50 USDC (0% fee)
 
       // Get initial balances
@@ -405,24 +410,24 @@ describe("scaas-liquidity", () => {
         provider.connection,
         userUsdcAccount
       );
-      const initialUserAppStableBalance = await getAccount(
+      const initialUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       await program.methods
         .swap(swapAmount, minAmountOut)
         .accounts({
           pool,
-          inVault: appStableVault,
+          inVault: customStableVault,
           outVault: usdcVault,
-          inVaultTokenAccount: appStableVaultTokenAccount,
+          inVaultTokenAccount: customStableVaultTokenAccount,
           outVaultTokenAccount: usdcVaultTokenAccount,
-          userFromTokenAccount: userAppStableAccount,
+          userFromTokenAccount: userCustomStableAccount,
           toTokenAccount: userUsdcAccount,
-          feeRecipientTokenAccount: userAppStableAccount, // Fee collected in input token (AppStable)
+          feeRecipientTokenAccount: userCustomStableAccount, // Fee collected in input token (CustomStable)
           feeRecipient: payer.publicKey, // Fee recipient authority
-          fromMint: appStableMint,
+          fromMint: customStableMint,
           toMint: usdcMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
@@ -437,18 +442,19 @@ describe("scaas-liquidity", () => {
         provider.connection,
         userUsdcAccount
       );
-      const finalUserAppStableBalance = await getAccount(
+      const finalUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       // Verify balances changed correctly (1:1 swap, 0% fee)
       const usdcDiff =
         finalUserUsdcBalance.amount - initialUserUsdcBalance.amount;
-      const appStableDiff =
-        initialUserAppStableBalance.amount - finalUserAppStableBalance.amount;
+      const customStableDiff =
+        initialUserCustomStableBalance.amount -
+        finalUserCustomStableBalance.amount;
 
-      assert.equal(appStableDiff.toString(), swapAmount.toString());
+      assert.equal(customStableDiff.toString(), swapAmount.toString());
       assert.equal(usdcDiff.toString(), swapAmount.toString()); // 1:1 with 0% fee
     });
 
@@ -460,10 +466,10 @@ describe("scaas-liquidity", () => {
         usdcMint,
         swapper.publicKey
       );
-      const swapperAppStableAccount = await createAccount(
+      const swapperCustomStableAccount = await createAccount(
         provider.connection,
         payer.payer,
-        appStableMint,
+        customStableMint,
         swapper.publicKey
       );
 
@@ -480,7 +486,7 @@ describe("scaas-liquidity", () => {
       const minAmountOut = new anchor.BN(10 * 10 ** 6);
       const beforeBalance = await getAccount(
         provider.connection,
-        swapperAppStableAccount
+        swapperCustomStableAccount
       );
 
       await program.methods
@@ -488,15 +494,15 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: swapperUsdcAccount,
-          toTokenAccount: swapperAppStableAccount,
+          toTokenAccount: swapperCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: swapper.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -507,7 +513,7 @@ describe("scaas-liquidity", () => {
 
       const afterBalance = await getAccount(
         provider.connection,
-        swapperAppStableAccount
+        swapperCustomStableAccount
       );
       assert.equal(
         (afterBalance.amount - beforeBalance.amount).toString(),
@@ -527,15 +533,15 @@ describe("scaas-liquidity", () => {
           .accounts({
             pool,
             inVault: usdcVault,
-            outVault: appStableVault,
+            outVault: customStableVault,
             inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
+            outVaultTokenAccount: customStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
-            toTokenAccount: userAppStableAccount,
+            toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: feeRecipientUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
-            toMint: appStableMint,
+            toMint: customStableMint,
             user: unauthorizedUser.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -567,10 +573,10 @@ describe("scaas-liquidity", () => {
         usdcMint,
         owner.publicKey
       );
-      const delegateAppStableAccount = await createAccount(
+      const delegateCustomStableAccount = await createAccount(
         provider.connection,
         payer.payer,
-        appStableMint,
+        customStableMint,
         delegate.publicKey
       );
 
@@ -594,7 +600,7 @@ describe("scaas-liquidity", () => {
 
       const beforeBalance = await getAccount(
         provider.connection,
-        delegateAppStableAccount
+        delegateCustomStableAccount
       );
 
       await program.methods
@@ -602,15 +608,15 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: ownerUsdcAccount,
-          toTokenAccount: delegateAppStableAccount,
+          toTokenAccount: delegateCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: delegate.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -621,7 +627,7 @@ describe("scaas-liquidity", () => {
 
       const afterBalance = await getAccount(
         provider.connection,
-        delegateAppStableAccount
+        delegateCustomStableAccount
       );
       assert.equal(
         (afterBalance.amount - beforeBalance.amount).toString(),
@@ -632,7 +638,7 @@ describe("scaas-liquidity", () => {
     it("Allows swapping exactly the full destination vault balance", async () => {
       const destinationVaultBefore = await getAccount(
         provider.connection,
-        appStableVaultTokenAccount
+        customStableVaultTokenAccount
       );
       const fullDrainAmount = new anchor.BN(
         destinationVaultBefore.amount.toString()
@@ -652,15 +658,15 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -671,15 +677,15 @@ describe("scaas-liquidity", () => {
 
       const drainedVault = await getAccount(
         provider.connection,
-        appStableVaultTokenAccount
+        customStableVaultTokenAccount
       );
       assert.equal(drainedVault.amount.toString(), "0");
 
       await transfer(
         provider.connection,
         payer.payer,
-        userAppStableAccount,
-        appStableVaultTokenAccount,
+        userCustomStableAccount,
+        customStableVaultTokenAccount,
         payer.payer,
         BigInt(fullDrainAmount.toString())
       );
@@ -695,15 +701,15 @@ describe("scaas-liquidity", () => {
           .accounts({
             pool,
             inVault: usdcVault,
-            outVault: appStableVault,
+            outVault: customStableVault,
             inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
+            outVaultTokenAccount: customStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
-            toTokenAccount: userAppStableAccount,
+            toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
-            toMint: appStableMint,
+            toMint: customStableMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -740,15 +746,15 @@ describe("scaas-liquidity", () => {
           .accounts({
             pool,
             inVault: usdcVault,
-            outVault: appStableVault,
+            outVault: customStableVault,
             inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
+            outVaultTokenAccount: customStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
-            toTokenAccount: userAppStableAccount,
+            toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
-            toMint: appStableMint,
+            toMint: customStableMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -797,15 +803,15 @@ describe("scaas-liquidity", () => {
           .accounts({
             pool,
             inVault: usdcVault,
-            outVault: appStableVault,
+            outVault: customStableVault,
             inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
+            outVaultTokenAccount: customStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
-            toTokenAccount: userAppStableAccount,
+            toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
-            toMint: appStableMint,
+            toMint: customStableMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -851,7 +857,7 @@ describe("scaas-liquidity", () => {
       const vaultAccount = await program.account.tokenVault.fetch(usdcVault);
       assert.equal(vaultAccount.disabled, true, "Vault should be disabled");
 
-      // Try to swap USDC for AppStable (should fail)
+      // Try to swap USDC for CustomStable (should fail)
       const swapAmount = new anchor.BN(10 * 10 ** 6);
       const minAmountOut = new anchor.BN(10 * 10 ** 6);
 
@@ -861,15 +867,15 @@ describe("scaas-liquidity", () => {
           .accounts({
             pool,
             inVault: usdcVault,
-            outVault: appStableVault,
+            outVault: customStableVault,
             inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
+            outVaultTokenAccount: customStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
-            toTokenAccount: userAppStableAccount,
+            toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
-            toMint: appStableMint,
+            toMint: customStableMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -885,7 +891,7 @@ describe("scaas-liquidity", () => {
     });
 
     it("Prevents swaps when output token is disabled", async () => {
-      // Try to swap AppStable for USDC (USDC is disabled from previous test)
+      // Try to swap CustomStable for USDC (USDC is disabled from previous test)
       const swapAmount = new anchor.BN(10 * 10 ** 6);
       const minAmountOut = new anchor.BN(10 * 10 ** 6);
 
@@ -894,15 +900,15 @@ describe("scaas-liquidity", () => {
           .swap(swapAmount, minAmountOut)
           .accounts({
             pool,
-            inVault: appStableVault,
+            inVault: customStableVault,
             outVault: usdcVault,
-            inVaultTokenAccount: appStableVaultTokenAccount,
+            inVaultTokenAccount: customStableVaultTokenAccount,
             outVaultTokenAccount: usdcVaultTokenAccount,
-            userFromTokenAccount: userAppStableAccount,
+            userFromTokenAccount: userCustomStableAccount,
             toTokenAccount: userUsdcAccount,
-            feeRecipientTokenAccount: userAppStableAccount,
+            feeRecipientTokenAccount: userCustomStableAccount,
             feeRecipient: payer.publicKey,
-            fromMint: appStableMint,
+            fromMint: customStableMint,
             toMint: usdcMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
@@ -944,15 +950,15 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: userUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1379,15 +1385,15 @@ describe("scaas-liquidity", () => {
           .accounts({
             pool,
             inVault: usdcVault,
-            outVault: appStableVault,
+            outVault: customStableVault,
             inVaultTokenAccount: usdcVaultTokenAccount,
-            outVaultTokenAccount: appStableVaultTokenAccount,
+            outVaultTokenAccount: customStableVaultTokenAccount,
             userFromTokenAccount: userUsdcAccount,
-            toTokenAccount: userAppStableAccount,
+            toTokenAccount: userCustomStableAccount,
             feeRecipientTokenAccount: userUsdcAccount,
             feeRecipient: payer.publicKey,
             fromMint: usdcMint,
-            toMint: appStableMint,
+            toMint: customStableMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1435,15 +1441,15 @@ describe("scaas-liquidity", () => {
           .swap(excessiveAmount, minAmountOut)
           .accounts({
             pool,
-            inVault: appStableVault,
+            inVault: customStableVault,
             outVault: usdcVault,
-            inVaultTokenAccount: appStableVaultTokenAccount,
+            inVaultTokenAccount: customStableVaultTokenAccount,
             outVaultTokenAccount: usdcVaultTokenAccount,
-            userFromTokenAccount: userAppStableAccount,
+            userFromTokenAccount: userCustomStableAccount,
             toTokenAccount: userUsdcAccount,
-            feeRecipientTokenAccount: userAppStableAccount,
+            feeRecipientTokenAccount: userCustomStableAccount,
             feeRecipient: payer.publicKey,
-            fromMint: appStableMint,
+            fromMint: customStableMint,
             toMint: usdcMint,
             user: payer.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
@@ -1491,9 +1497,9 @@ describe("scaas-liquidity", () => {
         provider.connection,
         userUsdcAccount
       );
-      const initialUserAppStableBalance = await getAccount(
+      const initialUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
       const initialVaultUsdcBalance = await getAccount(
         provider.connection,
@@ -1509,15 +1515,15 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccount,
           feeRecipient: feeRecipient.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1531,9 +1537,9 @@ describe("scaas-liquidity", () => {
         provider.connection,
         userUsdcAccount
       );
-      const finalUserAppStableBalance = await getAccount(
+      const finalUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
       const finalVaultUsdcBalance = await getAccount(
         provider.connection,
@@ -1554,10 +1560,11 @@ describe("scaas-liquidity", () => {
       );
 
       // Verify user received net amount (after fee deduction)
-      const userAppStableReceived =
-        finalUserAppStableBalance.amount - initialUserAppStableBalance.amount;
+      const userCustomStableReceived =
+        finalUserCustomStableBalance.amount -
+        initialUserCustomStableBalance.amount;
       assert.equal(
-        userAppStableReceived.toString(),
+        userCustomStableReceived.toString(),
         expectedNetAmount.toString(),
         "User should receive net amount after fees"
       );
@@ -1628,15 +1635,15 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: newFeeRecipientUsdcAccount, // New fee recipient
           feeRecipient: newFeeRecipient.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1680,9 +1687,9 @@ describe("scaas-liquidity", () => {
         provider.connection,
         userUsdcAccount
       );
-      const initialUserAppStableBalance = await getAccount(
+      const initialUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       await program.methods
@@ -1690,15 +1697,15 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: userUsdcAccount,
           feeRecipient: payer.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1712,16 +1719,17 @@ describe("scaas-liquidity", () => {
         provider.connection,
         userUsdcAccount
       );
-      const finalUserAppStableBalance = await getAccount(
+      const finalUserCustomStableBalance = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       // Verify 1:1 swap with no fees
       const usdcSpent =
         initialUserUsdcBalance.amount - finalUserUsdcBalance.amount;
-      const appStableReceived =
-        finalUserAppStableBalance.amount - initialUserAppStableBalance.amount;
+      const customStableReceived =
+        finalUserCustomStableBalance.amount -
+        initialUserCustomStableBalance.amount;
 
       assert.equal(
         usdcSpent.toString(),
@@ -1729,7 +1737,7 @@ describe("scaas-liquidity", () => {
         "Should spend exact swap amount"
       );
       assert.equal(
-        appStableReceived.toString(),
+        customStableReceived.toString(),
         swapAmount.toString(),
         "Should receive exact swap amount (1:1, no fees)"
       );
@@ -1784,15 +1792,15 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccountForTest,
           feeRecipient: feeRecipient.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1832,15 +1840,15 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccountForTest,
           feeRecipient: feeRecipient.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1918,15 +1926,15 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipientTokenAccount: feeRecipientUsdcAccountForTest,
           feeRecipient: feeRecipient.publicKey,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -2358,15 +2366,15 @@ describe("scaas-liquidity", () => {
     it("Swaps with same decimals (6 to 6) work", async () => {
       // This tests backward compatibility - swaps between tokens with same decimals
       const swapAmount = new anchor.BN(50 * 10 ** 6); // 50 USDC
-      const minAmountOut = new anchor.BN(50 * 10 ** 6); // Expect 50 AppStable
+      const minAmountOut = new anchor.BN(50 * 10 ** 6); // Expect 50 CustomStable
 
       const userUsdcBefore = await getAccount(
         provider.connection,
         userUsdcAccount
       );
-      const userAppStableBefore = await getAccount(
+      const userCustomStableBefore = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       await program.methods
@@ -2374,15 +2382,15 @@ describe("scaas-liquidity", () => {
         .accounts({
           pool,
           inVault: usdcVault,
-          outVault: appStableVault,
+          outVault: customStableVault,
           inVaultTokenAccount: usdcVaultTokenAccount,
-          outVaultTokenAccount: appStableVaultTokenAccount,
+          outVaultTokenAccount: customStableVaultTokenAccount,
           userFromTokenAccount: userUsdcAccount,
-          toTokenAccount: userAppStableAccount,
+          toTokenAccount: userCustomStableAccount,
           feeRecipient: payer.publicKey,
           feeRecipientTokenAccount: userUsdcAccount,
           fromMint: usdcMint,
-          toMint: appStableMint,
+          toMint: customStableMint,
           user: payer.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -2395,9 +2403,9 @@ describe("scaas-liquidity", () => {
         provider.connection,
         userUsdcAccount
       );
-      const userAppStableAfter = await getAccount(
+      const userCustomStableAfter = await getAccount(
         provider.connection,
-        userAppStableAccount
+        userCustomStableAccount
       );
 
       // Should still be 1:1 when decimals are the same
@@ -2407,9 +2415,9 @@ describe("scaas-liquidity", () => {
         "USDC deducted incorrectly"
       );
       assert.equal(
-        userAppStableAfter.amount - userAppStableBefore.amount,
+        userCustomStableAfter.amount - userCustomStableBefore.amount,
         BigInt(50 * 10 ** 6),
-        "AppStable received incorrectly"
+        "CustomStable received incorrectly"
       );
     });
   });

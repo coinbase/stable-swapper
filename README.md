@@ -10,9 +10,8 @@ StableSwapper enables swapping between stablecoins at a 1:1 ratio, automatically
 
 - **1:1 Stablecoin Swaps** -- Swap between any listed stablecoins with automatic decimal normalization
 - **Fee Collection** -- Configurable fee in basis points, charged on the input token
-- **Role-Based Access Control** -- Distinct roles with separated concerns for administration, treasury, configuration, and pausing
-- **Feature Flags** -- Independent toggles for swaps, withdrawals, and allowlist enforcement
-- **Reserved Amounts** -- Reserve token balances from being consumed by swaps
+- **Role-Based Access Control** -- Distinct authorities with separated concerns
+- **Pause Controls** -- Independent toggles for swap and liquidity operations
 - **Slippage Protection** -- Users specify a minimum output amount per swap
 
 ## Implementations
@@ -30,19 +29,17 @@ See each implementation's README for chain-specific quickstart, build, test, and
 stable-swapper/
 ├── evm/                       # EVM (Solidity) implementation
 │   ├── src/                   # Production contracts
-│   ├── script/                # Deployment and utility scripts
 │   ├── test/                  # Unit and integration tests
 │   └── README.md
 ├── solana/                    # SVM (Rust / Anchor) implementation
 │   ├── programs/              # On-chain Anchor program
 │   ├── tests/                 # Anchor / Mocha integration tests
-│   ├── scripts/               # Admin and emergency scripts
-│   ├── runbooks/              # Deployment runbooks
 │   └── README.md
 ├── LICENSE
 ├── SECURITY.md
 ├── CONTRIBUTING.md
 └── .github/
+    ├── workflows/             # CI workflows
     └── PULL_REQUEST_TEMPLATE.md
 ```
 

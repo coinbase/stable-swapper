@@ -19,7 +19,7 @@ declare_id!("9vDwZVJXw5nxymWmUcgmNpemDH5EBcJwLNhtsznrgJDH");
 // close_whitelist instruction is not worth the complexity for the small amount involved.
 
 #[program]
-pub mod scaas_liquidity {
+pub mod stable_swapper {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>, fee_rate: u64) -> Result<()> {

@@ -25,7 +25,7 @@ contract SwapTest is StableSwapperBase {
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
         vm.expectRevert(StableSwapper.SwapsCannotBePaused.selector);
-        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
 
         vm.prank(pauseAuthority);
@@ -40,7 +40,7 @@ contract SwapTest is StableSwapperBase {
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
         vm.expectRevert(StableSwapper.CannotBeZeroAddress.selector);
-        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, address(0));
+        swapper.swap(address(usdc), address(customStable), swapAmount, swapAmount, address(0));
         vm.stopPrank();
     }
 
@@ -75,7 +75,7 @@ contract SwapTest is StableSwapperBase {
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenMustBeSwappable.selector, address(usdc)));
-        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
     }
 
@@ -90,9 +90,9 @@ contract SwapTest is StableSwapperBase {
         uint256 swapAmount = 10 * 10 ** 6;
 
         vm.startPrank(wallet0);
-        appStable.approve(address(swapper), swapAmount);
+        customStable.approve(address(swapper), swapAmount);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenMustBeSwappable.selector, address(usdc)));
-        swapper.swap(address(appStable), address(usdc), swapAmount, swapAmount, wallet0);
+        swapper.swap(address(customStable), address(usdc), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
     }
 
@@ -105,7 +105,7 @@ contract SwapTest is StableSwapperBase {
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
         vm.expectRevert(StableSwapper.CannotBeZeroAmount.selector);
-        swapper.swap(address(usdc), address(appStable), 0, minAmountOut, wallet0);
+        swapper.swap(address(usdc), address(customStable), 0, minAmountOut, wallet0);
         vm.stopPrank();
     }
 
@@ -117,7 +117,7 @@ contract SwapTest is StableSwapperBase {
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
         vm.expectRevert(StableSwapper.CannotBeZeroAmount.selector);
-        swapper.swap(address(usdc), address(appStable), swapAmount, 0, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, 0, wallet0);
         vm.stopPrank();
     }
 
@@ -134,7 +134,7 @@ contract SwapTest is StableSwapperBase {
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenMustBeSwappable.selector, address(usdc)));
-        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
     }
 
@@ -149,9 +149,9 @@ contract SwapTest is StableSwapperBase {
         uint256 swapAmount = 10 * 10 ** 6;
 
         vm.startPrank(wallet0);
-        appStable.approve(address(swapper), swapAmount);
+        customStable.approve(address(swapper), swapAmount);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.TokenMustBeSwappable.selector, address(usdc)));
-        swapper.swap(address(appStable), address(usdc), swapAmount, swapAmount, wallet0);
+        swapper.swap(address(customStable), address(usdc), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
     }
 
@@ -179,7 +179,7 @@ contract SwapTest is StableSwapperBase {
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), amountThatCausesOverflow);
         vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
-        swapper.swap(address(usdc), address(appStable), amountThatCausesOverflow, 1, wallet0);
+        swapper.swap(address(usdc), address(customStable), amountThatCausesOverflow, 1, wallet0);
         vm.stopPrank();
     }
 
@@ -207,37 +207,37 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(configureAuthority);
         swapper.updateTokenListing(address(usdc), true);
-        swapper.updateTokenListing(address(appStable), true);
+        swapper.updateTokenListing(address(customStable), true);
         vm.stopPrank();
 
         vm.startPrank(pauseAuthority);
         swapper.updateTokenStatus(address(usdc), true);
-        swapper.updateTokenStatus(address(appStable), true);
+        swapper.updateTokenStatus(address(customStable), true);
         vm.stopPrank();
 
         vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), initialLiquidity);
-        appStable.transfer(address(swapper), initialLiquidity);
+        customStable.transfer(address(swapper), initialLiquidity);
 
-        // Set reserved amount on appStable
-        swapper.updateReservedAmount(address(appStable), reservedAmount);
+        // Set reserved amount on customStable
+        swapper.updateReservedAmount(address(customStable), reservedAmount);
 
         // Withdraw liquidity below the reserved amount
         // This leaves balance < reservedAmount, triggering the check at line 364
-        swapper.withdrawLiquidity(address(appStable), withdrawAmount, treasuryAuthority);
+        swapper.withdrawLiquidity(address(customStable), withdrawAmount, treasuryAuthority);
         vm.stopPrank();
 
         // Verify the balance is now below reserved amount
-        uint256 currentBalance = appStable.balanceOf(address(swapper));
+        uint256 currentBalance = customStable.balanceOf(address(swapper));
         assertLt(currentBalance, reservedAmount, "Balance should be less than reserved amount");
 
-        // Try to swap USDC -> APPSTABLE, should revert because balance <= reserved amount
+        // Try to swap USDC -> CSTBL, should revert because balance <= reserved amount
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
         vm.expectRevert(
-            abi.encodeWithSelector(StableSwapper.TokenOutBalanceLessThanReservedAmount.selector, address(appStable))
+            abi.encodeWithSelector(StableSwapper.TokenOutBalanceLessThanReservedAmount.selector, address(customStable))
         );
-        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
     }
 
@@ -268,25 +268,25 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(configureAuthority);
         swapper.updateTokenListing(address(usdc), true);
-        swapper.updateTokenListing(address(appStable), true);
+        swapper.updateTokenListing(address(customStable), true);
         swapper.updateFeeBasisPoints(feeRateBps);
         vm.stopPrank();
 
         vm.startPrank(pauseAuthority);
         swapper.updateTokenStatus(address(usdc), true);
-        swapper.updateTokenStatus(address(appStable), true);
+        swapper.updateTokenStatus(address(customStable), true);
         vm.stopPrank();
 
         vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
-        appStable.transfer(address(swapper), liquidityAmount);
+        customStable.transfer(address(swapper), liquidityAmount);
         vm.stopPrank();
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), tinyAmount);
         // When amountOut is 0, it will fail slippage check since minAmountOut is 1
         vm.expectRevert(StableSwapper.SlippageExceeded.selector);
-        swapper.swap(address(usdc), address(appStable), tinyAmount, 1, wallet0);
+        swapper.swap(address(usdc), address(customStable), tinyAmount, 1, wallet0);
         vm.stopPrank();
 
         // Reset fee
@@ -319,7 +319,7 @@ contract SwapTest is StableSwapperBase {
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
         vm.expectRevert(StableSwapper.SlippageExceeded.selector);
-        swapper.swap(address(usdc), address(appStable), swapAmount, minAmountOut, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, minAmountOut, wallet0);
         vm.stopPrank();
 
         // Reset fee
@@ -337,18 +337,18 @@ contract SwapTest is StableSwapperBase {
         // Add tokens
         vm.startPrank(configureAuthority);
         swapper.updateTokenListing(address(usdc), true);
-        swapper.updateTokenListing(address(appStable), true);
+        swapper.updateTokenListing(address(customStable), true);
         vm.stopPrank();
 
         vm.startPrank(pauseAuthority);
         swapper.updateTokenStatus(address(usdc), true);
-        swapper.updateTokenStatus(address(appStable), true);
+        swapper.updateTokenStatus(address(customStable), true);
         vm.stopPrank();
 
         // Deposit limited liquidity
         vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), limitedLiquidity);
-        appStable.transfer(address(swapper), limitedLiquidity);
+        customStable.transfer(address(swapper), limitedLiquidity);
         vm.stopPrank();
 
         // Try to swap more than available
@@ -359,7 +359,7 @@ contract SwapTest is StableSwapperBase {
                 StableSwapper.AmountOutExceedsAvailableLiquidity.selector, excessiveSwapAmount, limitedLiquidity
             )
         );
-        swapper.swap(address(usdc), address(appStable), excessiveSwapAmount, excessiveSwapAmount, wallet0);
+        swapper.swap(address(usdc), address(customStable), excessiveSwapAmount, excessiveSwapAmount, wallet0);
         vm.stopPrank();
     }
 
@@ -376,17 +376,17 @@ contract SwapTest is StableSwapperBase {
         // Add tokens
         vm.startPrank(configureAuthority);
         swapper.updateTokenListing(address(usdc), true);
-        swapper.updateTokenListing(address(appStable), true);
+        swapper.updateTokenListing(address(customStable), true);
         vm.stopPrank();
 
         vm.startPrank(pauseAuthority);
         swapper.updateTokenStatus(address(usdc), true);
-        swapper.updateTokenStatus(address(appStable), true);
+        swapper.updateTokenStatus(address(customStable), true);
         vm.stopPrank();
 
         vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), depositedLiquidity);
-        appStable.transfer(address(swapper), depositedLiquidity);
+        customStable.transfer(address(swapper), depositedLiquidity);
 
         // Set reserved amount on USDC
         swapper.updateReservedAmount(address(usdc), reservedAmount);
@@ -394,13 +394,13 @@ contract SwapTest is StableSwapperBase {
 
         // Try to swap more than available (balance - reserved)
         vm.startPrank(wallet0);
-        appStable.approve(address(swapper), swapAmount);
+        customStable.approve(address(swapper), swapAmount);
         vm.expectRevert(
             abi.encodeWithSelector(
                 StableSwapper.AmountOutExceedsAvailableLiquidity.selector, swapAmount, availableLiquidity
             )
         );
-        swapper.swap(address(appStable), address(usdc), swapAmount, swapAmount, wallet0);
+        swapper.swap(address(customStable), address(usdc), swapAmount, swapAmount, wallet0);
         vm.stopPrank();
     }
 
@@ -408,7 +408,7 @@ contract SwapTest is StableSwapperBase {
                             SUCCESS TESTS
     //////////////////////////////////////////////////////////////*/
 
-    function testFuzz_swap_transfersTokensCorrectly_usdcToAppStable(uint256 swapAmountSeed, uint256 minAmountOutSeed)
+    function testFuzz_swap_transfersTokensCorrectly_usdcToCustomStable(uint256 swapAmountSeed, uint256 minAmountOutSeed)
         public
     {
         setupBasicSwapEnvironment();
@@ -417,18 +417,18 @@ contract SwapTest is StableSwapperBase {
         uint256 minAmountOut = bound(minAmountOutSeed, 1, swapAmount);
 
         uint256 initialUserUsdc = usdc.balanceOf(wallet0);
-        uint256 initialUserAppStable = appStable.balanceOf(wallet0);
+        uint256 initialUserCustomStable = customStable.balanceOf(wallet0);
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(appStable), swapAmount, minAmountOut, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, minAmountOut, wallet0);
         vm.stopPrank();
 
         assertEq(usdc.balanceOf(wallet0), initialUserUsdc - swapAmount);
-        assertEq(appStable.balanceOf(wallet0), initialUserAppStable + swapAmount);
+        assertEq(customStable.balanceOf(wallet0), initialUserCustomStable + swapAmount);
     }
 
-    function testFuzz_swap_transfersTokensCorrectly_appStableToUsdc(uint256 swapAmountSeed, uint256 minAmountOutSeed)
+    function testFuzz_swap_transfersTokensCorrectly_customStableToUsdc(uint256 swapAmountSeed, uint256 minAmountOutSeed)
         public
     {
         setupBasicSwapEnvironment();
@@ -437,14 +437,14 @@ contract SwapTest is StableSwapperBase {
         uint256 minAmountOut = bound(minAmountOutSeed, 1, swapAmount);
 
         uint256 initialUserUsdc = usdc.balanceOf(wallet0);
-        uint256 initialUserAppStable = appStable.balanceOf(wallet0);
+        uint256 initialUserCustomStable = customStable.balanceOf(wallet0);
 
         vm.startPrank(wallet0);
-        appStable.approve(address(swapper), swapAmount);
-        swapper.swap(address(appStable), address(usdc), swapAmount, minAmountOut, wallet0);
+        customStable.approve(address(swapper), swapAmount);
+        swapper.swap(address(customStable), address(usdc), swapAmount, minAmountOut, wallet0);
         vm.stopPrank();
 
-        assertEq(appStable.balanceOf(wallet0), initialUserAppStable - swapAmount);
+        assertEq(customStable.balanceOf(wallet0), initialUserCustomStable - swapAmount);
         assertEq(usdc.balanceOf(wallet0), initialUserUsdc + swapAmount);
     }
 
@@ -582,15 +582,15 @@ contract SwapTest is StableSwapperBase {
         swapper.updateFeeBasisPoints(feeRateBps);
 
         uint256 initialFeeRecipientBalance = usdc.balanceOf(feeRecipient);
-        uint256 initialUserAppStable = appStable.balanceOf(wallet0);
+        uint256 initialUserCustomStable = customStable.balanceOf(wallet0);
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(appStable), swapAmount, minAmountOut, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, minAmountOut, wallet0);
         vm.stopPrank();
 
         assertEq(usdc.balanceOf(feeRecipient), initialFeeRecipientBalance + expectedFee);
-        assertEq(appStable.balanceOf(wallet0), initialUserAppStable + expectedNetOutput);
+        assertEq(customStable.balanceOf(wallet0), initialUserCustomStable + expectedNetOutput);
 
         // Reset fee
         vm.prank(configureAuthority);
@@ -605,15 +605,15 @@ contract SwapTest is StableSwapperBase {
         uint256 expectedOutput = 50 * 10 ** 6;
 
         uint256 initialUserUsdc = usdc.balanceOf(wallet0);
-        uint256 initialUserAppStable = appStable.balanceOf(wallet0);
+        uint256 initialUserCustomStable = customStable.balanceOf(wallet0);
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(appStable), swapAmount, minAmountOut, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, minAmountOut, wallet0);
         vm.stopPrank();
 
         assertEq(usdc.balanceOf(wallet0), initialUserUsdc - swapAmount);
-        assertEq(appStable.balanceOf(wallet0), initialUserAppStable + expectedOutput);
+        assertEq(customStable.balanceOf(wallet0), initialUserCustomStable + expectedOutput);
     }
 
     function test_swap_roundsUpFees_whenFractionalAmount() public {
@@ -635,7 +635,7 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(appStable), swapAmount, minAmountOut, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, minAmountOut, wallet0);
         vm.stopPrank();
 
         uint256 feeCollected = usdc.balanceOf(feeRecipient) - initialFeeRecipientBalance;
@@ -663,7 +663,7 @@ contract SwapTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(appStable), swapAmount, minAmountOut, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, minAmountOut, wallet0);
         vm.stopPrank();
 
         uint256 feeCollected = usdc.balanceOf(feeRecipient) - initialFeeRecipientBalance;

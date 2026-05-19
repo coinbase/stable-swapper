@@ -38,7 +38,7 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
 
         vm.startPrank(configureAuthority);
         swapper.updateTokenListing(address(usdc), true);
-        swapper.updateTokenListing(address(appStable), true);
+        swapper.updateTokenListing(address(customStable), true);
 
         // Update fee recipient and set 1% fee
         swapper.updateFeeRecipient(newFeeRecipient);
@@ -47,12 +47,12 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
 
         vm.startPrank(pauseAuthority);
         swapper.updateTokenStatus(address(usdc), true);
-        swapper.updateTokenStatus(address(appStable), true);
+        swapper.updateTokenStatus(address(customStable), true);
         vm.stopPrank();
 
         vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), liquidityAmount);
-        appStable.transfer(address(swapper), liquidityAmount);
+        customStable.transfer(address(swapper), liquidityAmount);
         vm.stopPrank();
 
         uint64 swapAmount = 100 * 10 ** 6;
@@ -61,7 +61,7 @@ contract UpdateFeeRecipientTest is StableSwapperBase {
 
         vm.startPrank(wallet0);
         usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(appStable), swapAmount, minAmountOut, wallet0);
+        swapper.swap(address(usdc), address(customStable), swapAmount, minAmountOut, wallet0);
         vm.stopPrank();
 
         assertEq(usdc.balanceOf(newFeeRecipient), expectedFee);

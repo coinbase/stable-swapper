@@ -33,7 +33,7 @@ contract StableSwapperBase is Test {
     StableSwapper public swapper;
 
     MockERC20 public usdc;
-    MockERC20 public appStable;
+    MockERC20 public customStable;
 
     address public defaultAdmin;
     address public treasuryAuthority;
@@ -58,7 +58,7 @@ contract StableSwapperBase is Test {
 
         // Deploy tokens
         usdc = new MockERC20("USD Coin", "USDC", 6);
-        appStable = new MockERC20("App Stable", "APPSTABLE", 6);
+        customStable = new MockERC20("Custom Stable", "CSTBL", 6);
 
         // Deploy implementation
         implementation = new StableSwapper();
@@ -80,11 +80,11 @@ contract StableSwapperBase is Test {
 
         // Mint tokens to wallet0
         usdc.mint(wallet0, 1000 * 10 ** 6); // 1000 USDC
-        appStable.mint(wallet0, 1000 * 10 ** 6); // 1000 AppStable
+        customStable.mint(wallet0, 1000 * 10 ** 6); // 1000 CustomStable
 
         // Mint tokens to treasury authority for liquidity operations
         usdc.mint(treasuryAuthority, 1000 * 10 ** 6);
-        appStable.mint(treasuryAuthority, 1000 * 10 ** 6);
+        customStable.mint(treasuryAuthority, 1000 * 10 ** 6);
     }
 
     /**
@@ -94,19 +94,19 @@ contract StableSwapperBase is Test {
         // Configure authority lists tokens
         vm.startPrank(configureAuthority);
         swapper.updateTokenListing(address(usdc), true);
-        swapper.updateTokenListing(address(appStable), true);
+        swapper.updateTokenListing(address(customStable), true);
         vm.stopPrank();
 
         // Pause authority enables tokens
         vm.startPrank(pauseAuthority);
         swapper.updateTokenStatus(address(usdc), true);
-        swapper.updateTokenStatus(address(appStable), true);
+        swapper.updateTokenStatus(address(customStable), true);
         vm.stopPrank();
 
         // Treasury authority deposits liquidity
         vm.startPrank(treasuryAuthority);
         usdc.transfer(address(swapper), 500 * 10 ** 6);
-        appStable.transfer(address(swapper), 500 * 10 ** 6);
+        customStable.transfer(address(swapper), 500 * 10 ** 6);
         vm.stopPrank();
     }
 }

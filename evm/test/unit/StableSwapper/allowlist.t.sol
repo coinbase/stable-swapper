@@ -93,7 +93,7 @@ contract AllowlistTest is StableSwapperBase {
         vm.startPrank(wallet2);
         usdc.approve(address(swapper), swapAmount);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.AddressNotInAllowlist.selector, wallet2));
-        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet1);
+        swapper.swap(address(usdc), address(customStable), swapAmount, swapAmount, wallet1);
         vm.stopPrank();
     }
 
@@ -115,7 +115,7 @@ contract AllowlistTest is StableSwapperBase {
         vm.startPrank(wallet1);
         usdc.approve(address(swapper), swapAmount);
         vm.expectRevert(abi.encodeWithSelector(StableSwapper.AddressNotInAllowlist.selector, wallet1));
-        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet1);
+        swapper.swap(address(usdc), address(customStable), swapAmount, swapAmount, wallet1);
         vm.stopPrank();
     }
 
@@ -165,10 +165,10 @@ contract AllowlistTest is StableSwapperBase {
 
         vm.startPrank(wallet2);
         usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet1);
+        swapper.swap(address(usdc), address(customStable), swapAmount, swapAmount, wallet1);
         vm.stopPrank();
 
-        assertEq(appStable.balanceOf(wallet1), swapAmount);
+        assertEq(customStable.balanceOf(wallet1), swapAmount);
     }
 
     function test_swap_allowsAllowlistedUser() public {
@@ -188,10 +188,10 @@ contract AllowlistTest is StableSwapperBase {
 
         vm.startPrank(wallet1);
         usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet1);
+        swapper.swap(address(usdc), address(customStable), swapAmount, swapAmount, wallet1);
         vm.stopPrank();
 
-        assertEq(appStable.balanceOf(wallet1), swapAmount);
+        assertEq(customStable.balanceOf(wallet1), swapAmount);
     }
 
     function test_swap_allowsAnyUser_afterAllowlistDisabled() public {
@@ -210,9 +210,9 @@ contract AllowlistTest is StableSwapperBase {
 
         vm.startPrank(wallet2);
         usdc.approve(address(swapper), swapAmount);
-        swapper.swap(address(usdc), address(appStable), swapAmount, swapAmount, wallet1);
+        swapper.swap(address(usdc), address(customStable), swapAmount, swapAmount, wallet1);
         vm.stopPrank();
 
-        assertTrue(appStable.balanceOf(wallet1) > 0);
+        assertTrue(customStable.balanceOf(wallet1) > 0);
     }
 }
