@@ -48,6 +48,8 @@ jobs:
     env:
       SOLANA_VERSION: 3.0.13
       SOLANA_SHA256: 5dfd42a8f4a2c6319c4dcf4790582aa28573825fe1cb8475c70e497ffa0aabd6
+      PLATFORM_TOOLS_VERSION: 1.51
+      PLATFORM_TOOLS_SHA256: 0933e05dd964826e8e2db5c58c34ae255e3baf0ce1711568552dca81b5407a6b
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
@@ -74,13 +76,25 @@ jobs:
       - name: Install Solana CLI
         run: |
           set -euo pipefail
-          curl --proto '=https' --tlsv1.2 -sSfL \
+          curl --proto '=https' --tlsv1.2 -sSfL --retry 5 --retry-delay 5 \
             "https://github.com/anza-xyz/agave/releases/download/v${SOLANA_VERSION}/solana-release-x86_64-unknown-linux-gnu.tar.bz2" \
             --output solana-release.tar.bz2
           echo "${SOLANA_SHA256}  solana-release.tar.bz2" | sha256sum --check
           tar -xj -f solana-release.tar.bz2 -C "$HOME"
           rm solana-release.tar.bz2
           echo "$HOME/solana-release/bin" >> "$GITHUB_PATH"
+
+      - name: Pre-install Solana platform-tools (for anchor build)
+        run: |
+          set -euo pipefail
+          PLATFORM_TOOLS_DIR="$HOME/.cache/solana/v${PLATFORM_TOOLS_VERSION}/platform-tools"
+          mkdir -p "$PLATFORM_TOOLS_DIR"
+          curl --proto '=https' --tlsv1.2 -sSfL --retry 5 --retry-delay 5 \
+            "https://github.com/anza-xyz/platform-tools/releases/download/v${PLATFORM_TOOLS_VERSION}/platform-tools-linux-x86_64.tar.bz2" \
+            --output platform-tools.tar.bz2
+          echo "${PLATFORM_TOOLS_SHA256}  platform-tools.tar.bz2" | sha256sum --check
+          tar -xj -f platform-tools.tar.bz2 -C "$PLATFORM_TOOLS_DIR"
+          rm platform-tools.tar.bz2
 
       - name: Verify Solana toolchain
         run: |
