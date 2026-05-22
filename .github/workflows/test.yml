@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evm:
+    name: EVM (Foundry)
+    runs-on: ubuntu-latest
+    env:
+      FOUNDRY_PROFILE: ci
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@8b0419c685ef46cb79ec93fbdc131174afceb730 # v1.6.0
+
+      - name: Show Forge version
+        run: forge --version
+
+      - name: Run Forge fmt
+        run: forge fmt --check
+        working-directory: evm
+
+      - name: Run Forge build
+        run: forge build --sizes
+        working-directory: evm
+
+      - name: Run Forge tests
+        run: forge test -vvv
+        working-directory: evm
+
+  solana:
+    name: Solana (Anchor)
+    runs-on: ubuntu-latest
+    env:
+      SOLANA_VERSION: 3.0.13
+      SOLANA_SHA256: 5dfd42a8f4a2c6319c4dcf4790582aa28573825fe1cb8475c70e497ffa0aabd6
+      PLATFORM_TOOLS_VERSION: 1.51
+      PLATFORM_TOOLS_SHA256: 0933e05dd964826e8e2db5c58c34ae255e3baf0ce1711568552dca81b5407a6b
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Show Rust version
+        run: rustc --version
+
+      - name: Check Rust formatting
+        working-directory: solana
+        run: cargo fmt --all -- --check
+
+      - name: Install JS dependencies
+        run: yarn install --frozen-lockfile
+        working-directory: solana
+
+      - name: Check TypeScript formatting
+        working-directory: solana
+        run: yarn lint
+
+      - name: Install Solana CLI
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -sSfL --retry 5 --retry-delay 5 \
+            "https://github.com/anza-xyz/agave/releases/download/v${SOLANA_VERSION}/solana-release-x86_64-unknown-linux-gnu.tar.bz2" \
+            --output solana-release.tar.bz2
+          echo "${SOLANA_SHA256}  solana-release.tar.bz2" | sha256sum --check
+          tar -xj -f solana-release.tar.bz2 -C "$HOME"
+          rm solana-release.tar.bz2
+          echo "$HOME/solana-release/bin" >> "$GITHUB_PATH"
+
+      - name: Pre-install Solana platform-tools (for anchor build)
+        run: |
+          set -euo pipefail
+          PLATFORM_TOOLS_DIR="$HOME/.cache/solana/v${PLATFORM_TOOLS_VERSION}/platform-tools"
+          mkdir -p "$PLATFORM_TOOLS_DIR"
+          curl --proto '=https' --tlsv1.2 -sSfL --retry 5 --retry-delay 5 \
+            "https://github.com/anza-xyz/platform-tools/releases/download/v${PLATFORM_TOOLS_VERSION}/platform-tools-linux-x86_64.tar.bz2" \
+            --output platform-tools.tar.bz2
+          echo "${PLATFORM_TOOLS_SHA256}  platform-tools.tar.bz2" | sha256sum --check
+          tar -xj -f platform-tools.tar.bz2 -C "$PLATFORM_TOOLS_DIR"
+          rm platform-tools.tar.bz2
+
+      - name: Verify Solana toolchain
+        run: |
+          solana --version
+          solana-keygen --version
+
+      - name: Install Anchor CLI
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor \
+            --rev 47284f8f0b9844c6b83234aa90f556bad00e12ed anchor-cli --locked # v0.31.1
+
+      - name: Verify Anchor CLI
+        run: anchor --version
+
+      - name: Generate wallet keypair
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.config/solana"
+          solana-keygen new --no-bip39-passphrase --silent --force \
+            --outfile "$HOME/.config/solana/id.json"
+          solana address
+
+      - name: Generate ephemeral program keypair and align IDs
+        working-directory: solana
+        run: |
+          set -euo pipefail
+          mkdir -p target/deploy
+          solana-keygen new --no-bip39-passphrase --silent --force \
+            --outfile target/deploy/stable_swapper-keypair.json
+          TEST_ID=$(solana address -k target/deploy/stable_swapper-keypair.json)
+          perl -pi -e "s/declare_id!\\(\"[^\"]+\"\\)/declare_id!(\"$TEST_ID\")/" \
+            programs/stable-swapper/src/lib.rs
+          awk -v id="$TEST_ID" '
+            /^\[/  { in_localnet = ($0 ~ /^\[programs\.localnet\]$/) }
+            in_localnet && /^stable_swapper[[:space:]]*=/ {
+              print "stable_swapper = \"" id "\""; next
+            }
+            { print }
+          ' Anchor.toml > Anchor.toml.tmp && mv Anchor.toml.tmp Anchor.toml
+
+      - name: Build Anchor program
+        working-directory: solana
+        run: anchor build
+
+      - name: Run Anchor tests
+        working-directory: solana
+        run: anchor test --provider.cluster localnet --skip-build
