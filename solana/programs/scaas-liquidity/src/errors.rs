@@ -52,6 +52,12 @@ pub enum LiquidityError {
     AlreadyMigrated,
     #[msg("Withdraw recipient is not configured")]
     WithdrawRecipientNotSet,
+    #[msg("Withdraw recipient is not on the allowlist")]
+    WithdrawRecipientNotAllowed,
+    #[msg("Withdraw recipient is already on the allowlist")]
+    WithdrawRecipientAlreadyAllowed,
+    #[msg("Maximum number of withdraw recipients reached")]
+    MaxWithdrawRecipientsReached,
     #[msg("Legacy pool data length does not match the expected pre-migration size")]
     LegacySizeMismatch,
     #[msg("Legacy pool discriminator does not match LiquidityPool")]

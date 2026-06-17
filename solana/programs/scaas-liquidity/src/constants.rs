@@ -7,6 +7,11 @@ pub const MAX_FEE_RATE: u64 = 1000;
 /// Maximum number of supported tokens per pool
 pub const MAX_SUPPORTED_TOKENS: usize = 50;
 
+/// Maximum number of allowlisted withdraw recipients per pool.
+/// The treasury authority may only withdraw to a token account owned by one of
+/// these addresses; only the cold-key configure authority can add or remove them.
+pub const MAX_WITHDRAW_RECIPIENTS: usize = 10;
+
 /// Minimum allowed token decimals
 pub const MIN_TOKEN_DECIMALS: u8 = 6;
 

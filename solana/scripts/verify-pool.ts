@@ -56,8 +56,8 @@ async function main() {
     );
     console.log("- Fee Recipient:", poolAccount.feeRecipient.toString());
     console.log(
-      "- Withdraw Recipient:",
-      poolAccount.withdrawRecipient.toString()
+      "- Withdraw Recipients:",
+      poolAccount.withdrawRecipients.map((r) => r.toString())
     );
     console.log(
       "- Fee Rate:",

@@ -37,7 +37,9 @@ pub mod scaas_liquidity {
         pool.treasury_authority = ctx.accounts.treasury_authority.key();
         pool.configure_authority = ctx.accounts.configure_authority.key();
         pool.fee_recipient = ctx.accounts.fee_recipient.key();
-        pool.withdraw_recipient = ctx.accounts.withdraw_recipient.key();
+        // Seed the allowlist with the initial recipient so withdraws are possible from day one.
+        // Further recipients are managed by `configure_authority` via add/remove.
+        pool.withdraw_recipients = vec![ctx.accounts.withdraw_recipient.key()];
         pool.supported_tokens = Vec::new();
         pool.fee_rate = fee_rate;
         pool.swaps_paused = false;
@@ -52,7 +54,8 @@ pub mod scaas_liquidity {
     /// to the new role-based layout. Co-signed by both legacy authorities so neither key alone
     /// can unilaterally redistribute roles.
     ///
-    /// The pool grows by 96 bytes (3 extra `Pubkey`s). The legacy account is opened as
+    /// The pool grows from the legacy layout to `LiquidityPool::INIT_SPACE` (extra role keys
+    /// plus the withdraw-recipient allowlist slot). The legacy account is opened as
     /// `UncheckedAccount` because the on-chain bytes don't deserialize into the new
     /// `LiquidityPool` struct; we parse the legacy fields manually, realloc, then serialize
     /// the new layout. Re-runs are rejected by checking the on-chain data length.
@@ -300,10 +303,14 @@ pub mod scaas_liquidity {
         require!(!pool.liquidity_paused, LiquidityError::LiquidityPaused);
         require!(amount > 0, LiquidityError::InvalidAmount);
 
-        // Defensive: refuse to release funds before configure_authority has set a recipient.
+        // The treasury (hot) key selects a destination by passing its token account; the program
+        // enforces that the account's owner is on the cold-key-managed allowlist. This prevents
+        // the treasury key from redirecting funds to an address it controls on its own. An empty
+        // allowlist therefore blocks all withdraws.
         require!(
-            pool.withdraw_recipient != Pubkey::default(),
-            LiquidityError::WithdrawRecipientNotSet
+            pool.withdraw_recipients
+                .contains(&ctx.accounts.recipient_token_account.owner),
+            LiquidityError::WithdrawRecipientNotAllowed
         );
 
         // Ensure the treasury authority does not overdraw the vault balance.
@@ -355,17 +362,42 @@ pub mod scaas_liquidity {
         Ok(())
     }
 
-    pub fn update_withdraw_recipient(
-        ctx: Context<UpdateWithdrawRecipient>,
-        new_withdraw_recipient: Pubkey,
+    /// Adds an owner to the withdraw-recipient allowlist. Only `configure_authority` (cold key).
+    pub fn add_withdraw_recipient(
+        ctx: Context<ConfigureWithdrawRecipients>,
+        recipient: Pubkey,
     ) -> Result<()> {
         require!(
-            new_withdraw_recipient != Pubkey::default(),
+            recipient != Pubkey::default(),
             LiquidityError::WithdrawRecipientNotSet
         );
         let pool = &mut ctx.accounts.pool;
-        pool.withdraw_recipient = new_withdraw_recipient;
-        msg!("Updated withdraw recipient to: {}", new_withdraw_recipient);
+        require!(
+            !pool.withdraw_recipients.contains(&recipient),
+            LiquidityError::WithdrawRecipientAlreadyAllowed
+        );
+        require!(
+            pool.withdraw_recipients.len() < MAX_WITHDRAW_RECIPIENTS,
+            LiquidityError::MaxWithdrawRecipientsReached
+        );
+        pool.withdraw_recipients.push(recipient);
+        msg!("Added withdraw recipient: {}", recipient);
+        Ok(())
+    }
+
+    /// Removes an owner from the withdraw-recipient allowlist. Only `configure_authority` (cold key).
+    pub fn remove_withdraw_recipient(
+        ctx: Context<ConfigureWithdrawRecipients>,
+        recipient: Pubkey,
+    ) -> Result<()> {
+        let pool = &mut ctx.accounts.pool;
+        let position = pool
+            .withdraw_recipients
+            .iter()
+            .position(|&r| r == recipient)
+            .ok_or(LiquidityError::WithdrawRecipientNotAllowed)?;
+        pool.withdraw_recipients.swap_remove(position);
+        msg!("Removed withdraw recipient: {}", recipient);
         Ok(())
     }
 
@@ -518,8 +550,10 @@ fn do_migrate_authorities<'info>(
             tokens.push(Pubkey::try_from(&data[off..off + 32]).unwrap());
         }
 
-        // Trailing fixed-size fields sit after the max-sized vec slot.
-        let trailing = 108 + MAX_SUPPORTED_TOKENS * 32;
+        // Borsh serializes a `Vec` packed (4-byte len + len * element_size), NOT padded to its
+        // allocated capacity. The trailing fixed-size fields therefore sit immediately after the
+        // `len` actual token entries, not after the max-sized slot.
+        let trailing = 108 + len * 32;
         let fee_rate = u64::from_le_bytes(data[trailing..trailing + 8].try_into().unwrap());
         let swaps_paused = data[trailing + 8] != 0;
         let liquidity_paused = data[trailing + 9] != 0;
@@ -574,7 +608,7 @@ fn do_migrate_authorities<'info>(
         treasury_authority: new_treasury_authority,
         configure_authority: new_configure_authority,
         fee_recipient: legacy_fee_recipient,
-        withdraw_recipient: new_withdraw_recipient,
+        withdraw_recipients: vec![new_withdraw_recipient],
         supported_tokens,
         fee_rate,
         swaps_paused,
@@ -627,8 +661,8 @@ pub struct Initialize<'info> {
     /// CHECK: Fee recipient can be any account
     pub fee_recipient: UncheckedAccount<'info>,
 
-    /// CHECK: Withdraw recipient can be any account; only its key matters and only `configure_authority`
-    /// can change it after initialization.
+    /// CHECK: Withdraw recipient can be any account; only its key matters. It seeds the withdraw
+    /// allowlist, which `configure_authority` manages via add/remove after initialization.
     pub withdraw_recipient: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
@@ -849,13 +883,12 @@ pub struct WithdrawLiquidity<'info> {
     )]
     pub vault_token_account: Account<'info, TokenAccount>,
 
-    /// Recipient token account is locked to the address whose owner equals
-    /// `pool.withdraw_recipient`. This prevents the treasury (hot) key from
-    /// redirecting funds to an attacker-controlled wallet on its own.
+    /// Destination token account. Its owner must be on `pool.withdraw_recipients` (enforced in
+    /// the instruction body). This prevents the treasury (hot) key from redirecting funds to an
+    /// attacker-controlled wallet on its own; only the cold configure authority manages the list.
     #[account(
         mut,
         token::mint = mint,
-        token::authority = pool.withdraw_recipient,
     )]
     pub recipient_token_account: Account<'info, TokenAccount>,
 
@@ -880,7 +913,7 @@ pub struct UpdateFeeConfig<'info> {
 }
 
 #[derive(Accounts)]
-pub struct UpdateWithdrawRecipient<'info> {
+pub struct ConfigureWithdrawRecipients<'info> {
     #[account(
         mut,
         has_one = configure_authority,

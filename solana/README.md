@@ -6,7 +6,7 @@ A production-ready Solana-based liquidity management system designed for secure,
 
 - ✅ **1:1 Token Swaps**: Guaranteed parity swapping between supported stablecoins
 - ✅ **Role-Based Authority Model**: Four in-program roles split between SCM cold and CCS hot keys (Pause, Unpause, Treasury, Configure)
-- ✅ **Locked Withdraw Destination**: `withdraw_liquidity` can only target a `withdraw_recipient` set by the cold-key Configure Authority
+- ✅ **Withdraw Recipient Allowlist**: `withdraw_liquidity` can only target a token account owned by an allowlisted address; the allowlist is managed by the cold-key Configure Authority
 - ✅ **Slippage Protection**: User-defined minimum output amounts prevent unexpected losses
 - ✅ **Granular Pause Controls**: Independent pause flags for swaps, withdraws, and per-token; pausing is hot, unpausing is cold
 - ✅ **Configurable Fees**: Cold-key controlled fee rates (0-10% max) with separate fee recipient
@@ -150,21 +150,21 @@ The system is configured for **Solana Devnet** by default. To change networks:
 | --- | --- | --- |
 | Pause Authority | CCS hot | `pause_swaps`, `pause_withdraws`, `pause_token` |
 | Unpause Authority | SCM cold | `unpause_swaps`, `unpause_withdraws`, `unpause_token` |
-| Treasury Authority | CCS hot | `withdraw_liquidity` (recipient locked to `withdraw_recipient`) |
-| Configure Authority | SCM cold | `add_supported_token`, `remove_supported_token`, `update_fee_config`, `update_withdraw_recipient` |
+| Treasury Authority | CCS hot | `withdraw_liquidity` (recipient must be on `withdraw_recipients` allowlist) |
+| Configure Authority | SCM cold | `add_supported_token`, `remove_supported_token`, `update_fee_config`, `add_withdraw_recipient`, `remove_withdraw_recipient` |
 | Each role | (self) | `update_<role>_authority` (strict self-rotation) |
 
 The on-chain program upgrade authority is held by the BPF loader (rotate via `solana program set-upgrade-authority`) and is independent from the in-program roles above.
 
 ### Core Instructions
 
-- **`initialize`**: Creates pool with the four role authorities, fee recipient, and withdraw recipient
-- **`migrate_authorities`**: One-shot migration of an existing legacy pool to the role-based layout (co-signed by current `operations_authority` + `pause_authority`)
+- **`initialize`**: Creates pool with the four role authorities, fee recipient, and a withdraw allowlist seeded with one recipient
+- **`migrate_authorities`**: One-shot migration of an existing legacy pool to the role-based layout (co-signed by current `operations_authority` + `pause_authority`); seeds the withdraw allowlist with the provided recipient
 - **`add_supported_token` / `remove_supported_token`**: Configure Authority manages supported tokens
 - **`swap`**: Executes 1:1 swaps with slippage protection (`min_amount_out`)
-- **`withdraw_liquidity`**: Treasury Authority withdraws to the `withdraw_recipient`-owned token account only
+- **`withdraw_liquidity`**: Treasury Authority withdraws to a token account whose owner is on the `withdraw_recipients` allowlist
 - **`update_fee_config`**: Configure Authority updates fee rate and recipient
-- **`update_withdraw_recipient`**: Configure Authority rotates the locked withdraw destination
+- **`add_withdraw_recipient` / `remove_withdraw_recipient`**: Configure Authority manages the withdraw allowlist (up to 10 entries)
 - **`pause_swaps` / `pause_withdraws` / `pause_token`**: Pause Authority puts the corresponding flag in the paused state
 - **`unpause_swaps` / `unpause_withdraws` / `unpause_token`**: Unpause Authority clears the flag
 - **`update_<role>_authority`**: Each role self-rotates (no cross-role rotation)
@@ -176,7 +176,7 @@ Liquidity is seeded by sending tokens directly to the vault token account via an
 ### Access Controls
 - **Four-role model**: Pause/Unpause/Treasury/Configure split across SCM cold and CCS hot keys
 - **Strict self-rotation**: Each role rotates only itself; no role can take over another
-- **Locked withdraw destination**: `withdraw_liquidity` recipient must be a token account owned by `pool.withdraw_recipient`, which only the cold-key Configure Authority can change
+- **Withdraw recipient allowlist**: `withdraw_liquidity` recipient must be a token account whose owner is on `pool.withdraw_recipients`; only the cold-key Configure Authority can add or remove entries, so a compromised hot Treasury key cannot redirect funds to a new address
 - **Pausing is hot, unpausing is cold**: A compromised hot key can pause but cannot resume operations
 - **Granular pause controls**: Independent `swaps_paused`, `liquidity_paused`, and per-token `disabled` flags
 - **Fee rate cap**: Maximum 10% (1000 basis points) enforced at program level

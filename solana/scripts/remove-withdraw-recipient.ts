@@ -7,22 +7,22 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.length < 1 || args[0] === "--help" || args[0] === "-h") {
     console.log(
-      "Usage: yarn ts-node scripts/update-withdraw-recipient.ts <NEW_WITHDRAW_RECIPIENT>"
+      "Usage: yarn ts-node scripts/remove-withdraw-recipient.ts <WITHDRAW_RECIPIENT>"
     );
     console.log();
     console.log(
-      "The withdraw recipient is the wallet that owns the only token"
+      "Removes an owner from the withdraw allowlist. Only the Configure Authority"
     );
     console.log(
-      "account `withdraw_liquidity` is allowed to send funds to. Only the"
+      "(cold key) can change the list. Removing the last entry blocks all withdraws"
     );
-    console.log("Configure Authority (cold key) can rotate it.");
+    console.log("until a new recipient is added.");
     process.exit(args.length < 1 ? 1 : 0);
   }
 
-  let next: PublicKey;
+  let recipient: PublicKey;
   try {
-    next = new PublicKey(args[0]);
+    recipient = new PublicKey(args[0]);
   } catch {
     console.error(`❌ Error: Invalid address: ${args[0]}`);
     process.exit(1);
@@ -48,7 +48,7 @@ async function main() {
   const poolAccount = await program.account.liquidityPool.fetch(pool);
 
   console.log("=".repeat(60));
-  console.log("UPDATE WITHDRAW RECIPIENT");
+  console.log("REMOVE WITHDRAW RECIPIENT");
   console.log("=".repeat(60));
   console.log("- Pool PDA:", pool.toString());
   console.log(
@@ -56,31 +56,37 @@ async function main() {
     poolAccount.configureAuthority.toString()
   );
   console.log(
-    "- Current Withdraw Recipient:",
-    poolAccount.withdrawRecipient.toString()
+    "- Current Allowlist:",
+    poolAccount.withdrawRecipients.map((r) => r.toString())
   );
   console.log("- Your Wallet:", payer.publicKey.toString());
-  console.log("- New Withdraw Recipient:", next.toString());
+  console.log("- Recipient to remove:", recipient.toString());
 
   if (!poolAccount.configureAuthority.equals(payer.publicKey)) {
     console.error("❌ Error: You are not the configure authority");
     process.exit(1);
   }
-  if (poolAccount.withdrawRecipient.equals(next)) {
-    console.log("ℹ️  Withdraw recipient is already set to this address");
+  if (!poolAccount.withdrawRecipients.some((r) => r.equals(recipient))) {
+    console.log("ℹ️  Recipient is not on the allowlist");
     process.exit(0);
+  }
+  if (poolAccount.withdrawRecipients.length === 1) {
+    console.log(
+      "⚠️  This is the last allowlisted recipient. Removing it will block all"
+    );
+    console.log("    withdraws until a new recipient is added.");
   }
 
   console.log();
   console.log("Sending transaction...");
   const tx = await program.methods
-    .updateWithdrawRecipient(next)
+    .removeWithdrawRecipient(recipient)
     .accounts({
       pool,
       configureAuthority: payer.publicKey,
     } as any)
     .rpc();
-  console.log("✅ Withdraw recipient updated.");
+  console.log("✅ Withdraw recipient removed.");
   console.log("- Signature:", tx);
   console.log("- Explorer:", `https://solscan.io/tx/${tx}`);
 }

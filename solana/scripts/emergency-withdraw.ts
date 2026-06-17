@@ -10,13 +10,16 @@ async function main() {
 
   if (args.length < 1 || args[0] === "--help" || args[0] === "-h") {
     console.log(
-      "Usage: yarn ts-node scripts/emergency-withdraw.ts <TOKEN_MINT> [AMOUNT]"
+      "Usage: yarn ts-node scripts/emergency-withdraw.ts <TOKEN_MINT> [AMOUNT] [RECIPIENT_OWNER]"
     );
     console.log();
     console.log("Arguments:");
-    console.log("  TOKEN_MINT    Token mint address to withdraw");
+    console.log("  TOKEN_MINT       Token mint address to withdraw");
     console.log(
-      "  AMOUNT        Amount to withdraw in tokens (optional, defaults to 'max' for all available)"
+      "  AMOUNT           Amount to withdraw in tokens (optional, defaults to 'max' for all available)"
+    );
+    console.log(
+      "  RECIPIENT_OWNER  Allowlisted owner to receive funds (optional, defaults to the first allowlisted recipient)"
     );
     console.log();
     console.log("Examples:");
@@ -37,6 +40,7 @@ async function main() {
 
   const mintAddress = args[0];
   const amountArg = args[1] || "max";
+  const recipientArg = args[2];
 
   // Validate mint address
   let mint: PublicKey;
@@ -94,11 +98,39 @@ async function main() {
     process.exit(1);
   }
 
-  // Recipient is locked on-chain to the ATA owned by `pool.withdraw_recipient`.
-  // The treasury authority cannot redirect funds elsewhere.
+  // The destination owner must be on the on-chain allowlist; the treasury authority can only
+  // select among allowlisted owners (managed by the cold-key configure authority).
+  const allowlist = poolAccount.withdrawRecipients;
+  if (allowlist.length === 0) {
+    console.error(
+      "❌ Error: the pool has no allowlisted withdraw recipients. " +
+        "Add one with scripts/add-withdraw-recipient.ts first."
+    );
+    process.exit(1);
+  }
+  let recipientOwner: PublicKey;
+  if (recipientArg) {
+    try {
+      recipientOwner = new PublicKey(recipientArg);
+    } catch {
+      console.error(`❌ Error: Invalid recipient owner: ${recipientArg}`);
+      process.exit(1);
+    }
+    if (!allowlist.some((r) => r.equals(recipientOwner))) {
+      console.error(
+        `❌ Error: ${recipientOwner.toString()} is not on the withdraw allowlist`
+      );
+      console.error(
+        `   Allowlist: ${allowlist.map((r) => r.toString()).join(", ")}`
+      );
+      process.exit(1);
+    }
+  } else {
+    recipientOwner = allowlist[0];
+  }
   const withdrawRecipientTokenAccount = await getAssociatedTokenAddress(
     mint,
-    poolAccount.withdrawRecipient,
+    recipientOwner,
     false
   );
 
@@ -116,10 +148,7 @@ async function main() {
     "- Treasury Authority:",
     poolAccount.treasuryAuthority.toString()
   );
-  console.log(
-    "- Withdraw Recipient (owner):",
-    poolAccount.withdrawRecipient.toString()
-  );
+  console.log("- Withdraw Recipient (owner):", recipientOwner.toString());
   console.log(
     "- Withdraw Recipient ATA:",
     withdrawRecipientTokenAccount.toString()

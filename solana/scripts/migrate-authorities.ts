@@ -6,9 +6,10 @@ import { PublicKey, SystemProgram } from "@solana/web3.js";
 // On-chain layout sizes (must stay in sync with `LiquidityPool::LEGACY_INIT_SPACE` and
 // `LiquidityPool::INIT_SPACE` in `programs/scaas-liquidity/src/state.rs`):
 //   pre-migration : 8 disc + 32*3 + (4 + 32*MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1 = 1719
-//   post-migration: 8 disc + 32*6 + (4 + 32*MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1 = 1815
+//   post-migration: 8 disc + 32*5 + (4 + 32*MAX_WITHDRAW_RECIPIENTS)
+//                   + (4 + 32*MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1 = 2107
 const LEGACY_POOL_SIZE = 1719;
-const NEW_POOL_SIZE = 1815;
+const NEW_POOL_SIZE = 2107;
 
 /**
  * One-shot migration of an existing legacy pool (operations + pause authority
@@ -21,8 +22,9 @@ const NEW_POOL_SIZE = 1815;
  * passed so it can be co-signed offline by a cold wallet.
  *
  * Pre-flight: asserts the on-chain pool data length is exactly LEGACY_POOL_SIZE
- * before submitting. Post-submit: asserts the new size matches NEW_POOL_SIZE
- * and all six pubkey fields equal the args.
+ * before submitting. Post-submit: asserts the new size matches NEW_POOL_SIZE,
+ * the four role authorities equal the args, and the withdraw allowlist is seeded
+ * with the provided recipient.
  */
 async function main() {
   const args = process.argv.slice(2);
@@ -97,7 +99,10 @@ async function main() {
   console.log("- unpause_authority  =", newUnpause.toString());
   console.log("- treasury_authority =", newTreasury.toString());
   console.log("- configure_authority=", newConfigure.toString());
-  console.log("- withdraw_recipient =", newWithdrawRecipient.toString());
+  console.log(
+    "- withdraw_recipients=",
+    `[${newWithdrawRecipient.toString()}] (allowlist seed)`
+  );
   console.log();
 
   // Pre-flight: ensure the on-chain pool is exactly the legacy size. If it isn't, the
@@ -190,7 +195,6 @@ async function main() {
     ["unpause_authority", poolAccount.unpauseAuthority, newUnpause],
     ["treasury_authority", poolAccount.treasuryAuthority, newTreasury],
     ["configure_authority", poolAccount.configureAuthority, newConfigure],
-    ["withdraw_recipient", poolAccount.withdrawRecipient, newWithdrawRecipient],
   ];
   let mismatch = false;
   for (const [name, actual, want] of expected) {
@@ -201,11 +205,24 @@ async function main() {
       mismatch = true;
     }
   }
+  const seededRecipient = poolAccount.withdrawRecipients[0];
+  if (
+    poolAccount.withdrawRecipients.length !== 1 ||
+    !seededRecipient.equals(newWithdrawRecipient)
+  ) {
+    console.error(
+      `❌ Post-check: withdraw_recipients = [${poolAccount.withdrawRecipients
+        .map((r) => r.toString())
+        .join(", ")}], expected [${newWithdrawRecipient.toString()}]`
+    );
+    mismatch = true;
+  }
   if (mismatch) {
     process.exit(1);
   }
   console.log(
-    `✓ Post-check: pool is ${postInfo.data.length} bytes and all six fields match args.`
+    `✓ Post-check: pool is ${postInfo.data.length} bytes, role authorities match, ` +
+      `and the withdraw allowlist is seeded.`
   );
 }
 

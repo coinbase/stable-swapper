@@ -92,8 +92,8 @@ async function main() {
     );
     console.log("- Fee Recipient:", poolAccount.feeRecipient.toString());
     console.log(
-      "- Withdraw Recipient:",
-      poolAccount.withdrawRecipient.toString()
+      "- Withdraw Recipients:",
+      poolAccount.withdrawRecipients.map((r) => r.toString())
     );
     console.log("- Fee Rate:", poolAccount.feeRate.toNumber(), "bps");
     console.log("- Supported Tokens:", poolAccount.supportedTokens.length);
@@ -118,15 +118,20 @@ async function main() {
   console.log("- Treasury Authority:", payer.publicKey.toString());
   console.log("- Configure Authority:", payer.publicKey.toString());
   console.log("- Fee Recipient:", payer.publicKey.toString());
-  console.log("- Withdraw Recipient:", payer.publicKey.toString());
+  console.log(
+    "- Withdraw Recipient (allowlist seed):",
+    payer.publicKey.toString()
+  );
   console.log();
   console.log(
     "NOTE: All roles default to the deployer. Rotate them post-init using"
   );
   console.log(
-    "scripts/update-{pause,unpause,treasury,configure}-authority.ts and"
+    "scripts/update-{pause,unpause,treasury,configure}-authority.ts and manage"
   );
-  console.log("scripts/update-withdraw-recipient.ts.");
+  console.log(
+    "the withdraw allowlist with scripts/{add,remove}-withdraw-recipient.ts."
+  );
   console.log();
 
   console.log("Sending transaction...");
@@ -173,8 +178,8 @@ async function main() {
     );
     console.log("- Fee Recipient:", poolAccount.feeRecipient.toString());
     console.log(
-      "- Withdraw Recipient:",
-      poolAccount.withdrawRecipient.toString()
+      "- Withdraw Recipients:",
+      poolAccount.withdrawRecipients.map((r) => r.toString())
     );
     console.log("- Fee Rate:", poolAccount.feeRate.toNumber(), "bps");
     console.log("- Swaps Paused:", poolAccount.swapsPaused);

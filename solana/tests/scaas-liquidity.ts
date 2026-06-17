@@ -176,8 +176,9 @@ describe("scaas-liquidity", () => {
         poolAccount.feeRecipient.toString(),
         payer.publicKey.toString()
       );
+      assert.equal(poolAccount.withdrawRecipients.length, 1);
       assert.equal(
-        poolAccount.withdrawRecipient.toString(),
+        poolAccount.withdrawRecipients[0].toString(),
         withdrawRecipient.publicKey.toString()
       );
       assert.equal(poolAccount.feeRate.toNumber(), feeRate);
@@ -3021,7 +3022,7 @@ describe("scaas-liquidity", () => {
     });
   });
 
-  describe("Withdraw Recipient Lock", () => {
+  describe("Withdraw Recipient Allowlist", () => {
     let foreignOwner: anchor.web3.Keypair;
     let foreignUsdcAccount: PublicKey;
 
@@ -3035,7 +3036,18 @@ describe("scaas-liquidity", () => {
       );
     });
 
-    it("Rejects withdraw to a recipient not owned by withdraw_recipient", async () => {
+    async function fundStranger(stranger: anchor.web3.Keypair) {
+      const tx = new anchor.web3.Transaction().add(
+        anchor.web3.SystemProgram.transfer({
+          fromPubkey: payer.publicKey,
+          toPubkey: stranger.publicKey,
+          lamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL,
+        })
+      );
+      await provider.sendAndConfirm(tx, [payer.payer]);
+    }
+
+    it("Rejects withdraw to an owner not on the allowlist", async () => {
       try {
         await program.methods
           .withdrawLiquidity(new anchor.BN(1))
@@ -3043,29 +3055,38 @@ describe("scaas-liquidity", () => {
             pool,
             vault: usdcVault,
             vaultTokenAccount: usdcVaultTokenAccount,
-            recipientTokenAccount: foreignUsdcAccount, // owner != withdrawRecipient
+            recipientTokenAccount: foreignUsdcAccount, // owner not allowlisted
             mint: usdcMint,
             treasuryAuthority: treasuryAuthority.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
           })
           .signers([treasuryAuthority.payer])
           .rpc();
-        assert.fail("Expected constraint violation");
+        assert.fail("Expected WithdrawRecipientNotAllowed");
       } catch (error) {
-        assert.include(error.toString().toLowerCase(), "constraint");
+        assert.include(
+          error.toString().toLowerCase(),
+          "withdrawrecipientnotallowed"
+        );
       }
     });
 
-    it("Allows configure_authority to rotate withdraw_recipient and re-locks the destination", async () => {
-      // Rotate to foreignOwner so a withdraw to foreignUsdcAccount succeeds.
+    it("Lets configure_authority add a recipient, unlocking withdraws to it", async () => {
       await program.methods
-        .updateWithdrawRecipient(foreignOwner.publicKey)
+        .addWithdrawRecipient(foreignOwner.publicKey)
         .accounts({
           pool,
           configureAuthority: configureAuthority.publicKey,
         })
         .signers([configureAuthority.payer])
         .rpc();
+
+      const poolAccount = await program.account.liquidityPool.fetch(pool);
+      assert.isTrue(
+        poolAccount.withdrawRecipients.some((r) =>
+          r.equals(foreignOwner.publicKey)
+        )
+      );
 
       const before = await getAccount(provider.connection, foreignUsdcAccount);
       await program.methods
@@ -3084,7 +3105,117 @@ describe("scaas-liquidity", () => {
       const after = await getAccount(provider.connection, foreignUsdcAccount);
       assert.equal(after.amount - before.amount, BigInt(1));
 
-      // Withdrawing to the original recipient (payer) now fails.
+      // The original seed recipient (payer) is still allowed simultaneously.
+      const beforeUser = await getAccount(provider.connection, userUsdcAccount);
+      await program.methods
+        .withdrawLiquidity(new anchor.BN(1))
+        .accounts({
+          pool,
+          vault: usdcVault,
+          vaultTokenAccount: usdcVaultTokenAccount,
+          recipientTokenAccount: userUsdcAccount,
+          mint: usdcMint,
+          treasuryAuthority: treasuryAuthority.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([treasuryAuthority.payer])
+        .rpc();
+      const afterUser = await getAccount(provider.connection, userUsdcAccount);
+      assert.equal(afterUser.amount - beforeUser.amount, BigInt(1));
+    });
+
+    it("Rejects adding a duplicate recipient", async () => {
+      try {
+        await program.methods
+          .addWithdrawRecipient(foreignOwner.publicKey)
+          .accounts({ pool, configureAuthority: configureAuthority.publicKey })
+          .signers([configureAuthority.payer])
+          .rpc();
+        assert.fail("Expected WithdrawRecipientAlreadyAllowed");
+      } catch (error) {
+        assert.include(
+          error.toString().toLowerCase(),
+          "withdrawrecipientalreadyallowed"
+        );
+      }
+    });
+
+    it("Rejects adding the default pubkey", async () => {
+      try {
+        await program.methods
+          .addWithdrawRecipient(PublicKey.default)
+          .accounts({ pool, configureAuthority: configureAuthority.publicKey })
+          .signers([configureAuthority.payer])
+          .rpc();
+        assert.fail("Expected WithdrawRecipientNotSet");
+      } catch (error) {
+        assert.include(
+          error.toString().toLowerCase(),
+          "withdrawrecipientnotset"
+        );
+      }
+    });
+
+    it("Rejects add_withdraw_recipient from a non-configure signer", async () => {
+      const stranger = anchor.web3.Keypair.generate();
+      await fundStranger(stranger);
+      try {
+        await program.methods
+          .addWithdrawRecipient(stranger.publicKey)
+          .accounts({ pool, configureAuthority: stranger.publicKey })
+          .signers([stranger])
+          .rpc();
+        assert.fail("Expected constraint violation");
+      } catch (error) {
+        assert.include(error.toString().toLowerCase(), "constraint");
+      }
+    });
+
+    it("Rejects remove_withdraw_recipient from a non-configure signer", async () => {
+      const stranger = anchor.web3.Keypair.generate();
+      await fundStranger(stranger);
+      try {
+        await program.methods
+          .removeWithdrawRecipient(foreignOwner.publicKey)
+          .accounts({ pool, configureAuthority: stranger.publicKey })
+          .signers([stranger])
+          .rpc();
+        assert.fail("Expected constraint violation");
+      } catch (error) {
+        assert.include(error.toString().toLowerCase(), "constraint");
+      }
+    });
+
+    it("Rejects removing a recipient that is not on the allowlist", async () => {
+      try {
+        await program.methods
+          .removeWithdrawRecipient(anchor.web3.Keypair.generate().publicKey)
+          .accounts({ pool, configureAuthority: configureAuthority.publicKey })
+          .signers([configureAuthority.payer])
+          .rpc();
+        assert.fail("Expected WithdrawRecipientNotAllowed");
+      } catch (error) {
+        assert.include(
+          error.toString().toLowerCase(),
+          "withdrawrecipientnotallowed"
+        );
+      }
+    });
+
+    it("Lets configure_authority remove a recipient, re-locking withdraws to it", async () => {
+      await program.methods
+        .removeWithdrawRecipient(foreignOwner.publicKey)
+        .accounts({ pool, configureAuthority: configureAuthority.publicKey })
+        .signers([configureAuthority.payer])
+        .rpc();
+
+      const poolAccount = await program.account.liquidityPool.fetch(pool);
+      assert.isFalse(
+        poolAccount.withdrawRecipients.some((r) =>
+          r.equals(foreignOwner.publicKey)
+        )
+      );
+
       try {
         await program.methods
           .withdrawLiquidity(new anchor.BN(1))
@@ -3092,52 +3223,60 @@ describe("scaas-liquidity", () => {
             pool,
             vault: usdcVault,
             vaultTokenAccount: usdcVaultTokenAccount,
-            recipientTokenAccount: userUsdcAccount,
+            recipientTokenAccount: foreignUsdcAccount,
             mint: usdcMint,
             treasuryAuthority: treasuryAuthority.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
           })
           .signers([treasuryAuthority.payer])
           .rpc();
-        assert.fail("Expected constraint violation");
+        assert.fail("Expected WithdrawRecipientNotAllowed");
       } catch (error) {
-        assert.include(error.toString().toLowerCase(), "constraint");
+        assert.include(
+          error.toString().toLowerCase(),
+          "withdrawrecipientnotallowed"
+        );
       }
-
-      // Restore for any later tests.
-      await program.methods
-        .updateWithdrawRecipient(withdrawRecipient.publicKey)
-        .accounts({
-          pool,
-          configureAuthority: configureAuthority.publicKey,
-        })
-        .signers([configureAuthority.payer])
-        .rpc();
     });
 
-    it("Rejects update_withdraw_recipient from a non-configure signer", async () => {
-      const stranger = anchor.web3.Keypair.generate();
-      const transferTx = new anchor.web3.Transaction().add(
-        anchor.web3.SystemProgram.transfer({
-          fromPubkey: payer.publicKey,
-          toPubkey: stranger.publicKey,
-          lamports: 0.05 * anchor.web3.LAMPORTS_PER_SOL,
-        })
-      );
-      await provider.sendAndConfirm(transferTx, [payer.payer]);
+    it("Enforces the maximum number of withdraw recipients", async () => {
+      // Seed already holds one entry (payer). Fill up to the on-chain cap.
+      const MAX_WITHDRAW_RECIPIENTS = 10;
+      let current = (await program.account.liquidityPool.fetch(pool))
+        .withdrawRecipients.length;
+      const added: PublicKey[] = [];
+      while (current < MAX_WITHDRAW_RECIPIENTS) {
+        const r = anchor.web3.Keypair.generate().publicKey;
+        await program.methods
+          .addWithdrawRecipient(r)
+          .accounts({ pool, configureAuthority: configureAuthority.publicKey })
+          .signers([configureAuthority.payer])
+          .rpc();
+        added.push(r);
+        current += 1;
+      }
 
       try {
         await program.methods
-          .updateWithdrawRecipient(foreignOwner.publicKey)
-          .accounts({
-            pool,
-            configureAuthority: stranger.publicKey,
-          })
-          .signers([stranger])
+          .addWithdrawRecipient(anchor.web3.Keypair.generate().publicKey)
+          .accounts({ pool, configureAuthority: configureAuthority.publicKey })
+          .signers([configureAuthority.payer])
           .rpc();
-        assert.fail("Expected constraint violation");
+        assert.fail("Expected MaxWithdrawRecipientsReached");
       } catch (error) {
-        assert.include(error.toString().toLowerCase(), "constraint");
+        assert.include(
+          error.toString().toLowerCase(),
+          "maxwithdrawrecipientsreached"
+        );
+      }
+
+      // Clean up so later suites see only the seed recipient.
+      for (const r of added) {
+        await program.methods
+          .removeWithdrawRecipient(r)
+          .accounts({ pool, configureAuthority: configureAuthority.publicKey })
+          .signers([configureAuthority.payer])
+          .rpc();
       }
     });
   });

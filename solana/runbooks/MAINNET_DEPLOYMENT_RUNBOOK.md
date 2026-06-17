@@ -31,10 +31,10 @@ This runbook guides you through deploying the liquidity pool program to Solana m
 - **Fee Rate:** 0 basis points (0% - for 1:1 swaps)
 - **Pause Authority** (CCS hot, can `pause_*`): Deployer wallet
 - **Unpause Authority** (SCM cold, can `unpause_*`): Deployer wallet
-- **Treasury Authority** (CCS hot, can `withdraw_liquidity` to `withdraw_recipient` only): Deployer wallet
-- **Configure Authority** (SCM cold, can list/unlist tokens, update fees, rotate `withdraw_recipient`): Deployer wallet
+- **Treasury Authority** (CCS hot, can `withdraw_liquidity` to an allowlisted recipient only): Deployer wallet
+- **Configure Authority** (SCM cold, can list/unlist tokens, update fees, manage the withdraw allowlist): Deployer wallet
 - **Fee Recipient:** Deployer wallet
-- **Withdraw Recipient** (the only owner whose token account can receive `withdraw_liquidity` outputs): Deployer wallet
+- **Withdraw Recipient Allowlist** (owners whose token accounts can receive `withdraw_liquidity` outputs; seeded with one entry at init): Deployer wallet
 
 > All four authority defaults point at the deployer for the initial bring-up. Rotate each
 > role to its production custodian post-init via the role-rotation scripts; see the
@@ -295,7 +295,7 @@ yarn ts-node scripts/verify-pool.ts
 - Treasury Authority: `___________________`
 - Configure Authority: `___________________`
 - Fee Recipient: `___________________`
-- Withdraw Recipient: `___________________`
+- Withdraw Recipients (allowlist): `___________________`
 - Fee Rate: `___________________` bps
 - Swaps Paused: `___________________`
 - Liquidity Paused: `___________________`
@@ -741,7 +741,7 @@ new SCM cold keys and CCS hot keys.
 
 - [ ] `unpause_authority` (SCM cold): `___________________`
 - [ ] `configure_authority` (SCM cold): `___________________`
-- [ ] `withdraw_recipient` (SCM cold treasury wallet): `___________________`
+- [ ] `withdraw_recipient` (SCM cold treasury wallet; seeds the withdraw allowlist): `___________________`
 - [ ] (Optional) New `pause_authority` (CCS hot): `___________________`
 - [ ] (Optional) New `treasury_authority` (CCS hot): `___________________`
 
@@ -758,7 +758,7 @@ yarn ts-node scripts/emergency-pause-liquidity.ts true
 
 Confirm the on-chain pool is exactly the legacy pre-migration size before submitting any
 migration tx. The expected value is `1719` bytes (`8` discriminator + `LEGACY_INIT_SPACE`).
-Anything else (commonly `1815` after migration, or a different size if the legacy layout
+Anything else (commonly `2107` after migration, or a different size if the legacy layout
 has drifted) means do **not** proceed.
 
 ```bash
@@ -801,9 +801,10 @@ directly with the wallet running it (must be the legacy operations authority).
 `scripts/migrate-authorities.ts` automatically asserts the post-migration state when run
 without `--build-only`:
 
-- pool data length is exactly `1815` bytes (`8` disc + `INIT_SPACE`)
-- `pause_authority`, `unpause_authority`, `treasury_authority`, `configure_authority`, and
-  `withdraw_recipient` all equal the args that were submitted
+- pool data length is exactly `2107` bytes (`8` disc + `INIT_SPACE`)
+- `pause_authority`, `unpause_authority`, `treasury_authority`, and `configure_authority`
+  equal the args that were submitted, and the `withdraw_recipients` allowlist is seeded with
+  the supplied recipient
 
 If you used `--build-only` and submitted the tx through a separate signer flow, run the
 same assertions out-of-band:
@@ -811,16 +812,16 @@ same assertions out-of-band:
 ```bash
 solana account <POOL_PDA> --output json --output-file /tmp/pool.json
 jq -r '.account.data[0]' /tmp/pool.json | base64 -d | wc -c
-# expected output: 1815
+# expected output: 2107
 
 yarn ts-node scripts/verify-pool.ts
-# confirm all six fields match the values passed to migrate_authorities
+# confirm the role authorities and the withdraw allowlist match the values passed to migrate_authorities
 ```
 
 **Result:**
 - [ ] Completed
-- Pool data length: `___________________` (must be `1815`)
-- All six fields verified: `___________________`
+- Pool data length: `___________________` (must be `2107`)
+- Role authorities + withdraw allowlist verified: `___________________`
 
 ### Step M4: Verify the new layout
 
@@ -828,16 +829,16 @@ yarn ts-node scripts/verify-pool.ts
 yarn ts-node scripts/verify-pool.ts
 ```
 
-Confirm all 6 fields: `pause_authority`, `unpause_authority`, `treasury_authority`,
-`configure_authority`, `fee_recipient`, `withdraw_recipient`.
+Confirm all fields: `pause_authority`, `unpause_authority`, `treasury_authority`,
+`configure_authority`, `fee_recipient`, and the `withdraw_recipients` allowlist.
 
 ### Step M5: Smoke-test each role
 
 - [ ] Pause hot signs `emergency-pause-swaps.ts true` → swaps_paused becomes true
 - [ ] Unpause cold signs `emergency-pause-swaps.ts false` → swaps_paused becomes false
-- [ ] Treasury hot signs `emergency-withdraw.ts <MINT> 1` → withdraws 1 unit to the locked recipient
-- [ ] Treasury hot signs `emergency-withdraw.ts <MINT> 1` against a different recipient → fails with constraint error
-- [ ] Configure cold signs `update-withdraw-recipient.ts` → rotation succeeds
+- [ ] Treasury hot signs `emergency-withdraw.ts <MINT> 1` → withdraws 1 unit to an allowlisted recipient
+- [ ] Treasury hot signs `emergency-withdraw.ts <MINT> 1 <NON_ALLOWLISTED_OWNER>` → fails with `WithdrawRecipientNotAllowed`
+- [ ] Configure cold signs `add-withdraw-recipient.ts <OWNER>` then `remove-withdraw-recipient.ts <OWNER>` → allowlist updates succeed
 - [ ] Configure cold signs `update-fee-config.ts` (or equivalent) → fee update succeeds
 
 ### Step M6: Hand off the BPF loader upgrade authority to the SCM cold key

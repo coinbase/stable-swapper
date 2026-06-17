@@ -1,4 +1,4 @@
-use crate::constants::MAX_SUPPORTED_TOKENS;
+use crate::constants::{MAX_SUPPORTED_TOKENS, MAX_WITHDRAW_RECIPIENTS};
 use anchor_lang::prelude::*;
 
 // Discriminator-stability invariant: Anchor derives the 8-byte account discriminator from
@@ -18,9 +18,10 @@ pub struct LiquidityPool {
     pub configure_authority: Pubkey,
     /// Recipient of swap fees (token transfers go to its ATA per mint).
     pub fee_recipient: Pubkey,
-    /// Owner of the only token-account address allowed to receive `withdraw_liquidity` outputs.
-    /// Set/rotated by `configure_authority`.
-    pub withdraw_recipient: Pubkey,
+    /// Allowlist of owners whose token accounts may receive `withdraw_liquidity` outputs.
+    /// The treasury authority selects any one of these per withdraw; only `configure_authority`
+    /// can add or remove entries.
+    pub withdraw_recipients: Vec<Pubkey>,
     pub supported_tokens: Vec<Pubkey>,
     pub fee_rate: u64, // in basis points
     pub swaps_paused: bool,
@@ -31,9 +32,17 @@ pub struct LiquidityPool {
 }
 
 impl LiquidityPool {
-    // 6 Pubkeys + supported_tokens vec header + cap + fee_rate + 2 bools + bump
-    pub const INIT_SPACE: usize =
-        32 * 6 + (4 + 32 * MAX_SUPPORTED_TOKENS) + 8 + 1 + 1 + 1;
+    // 5 Pubkeys (pause/unpause/treasury/configure/fee_recipient)
+    // + withdraw_recipients vec header + cap
+    // + supported_tokens vec header + cap
+    // + fee_rate + 2 bools + bump
+    pub const INIT_SPACE: usize = 32 * 5
+        + (4 + 32 * MAX_WITHDRAW_RECIPIENTS)
+        + (4 + 32 * MAX_SUPPORTED_TOKENS)
+        + 8
+        + 1
+        + 1
+        + 1;
 
     /// Pre-migration on-chain layout: ops + pause + fee_recipient + supported_tokens + fee_rate + 2 bools + bump.
     /// Used by `migrate_authorities` to size the pre-realloc account before expanding to `INIT_SPACE`.
