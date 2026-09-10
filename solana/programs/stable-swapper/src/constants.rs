@@ -27,3 +27,6 @@ pub const TOKEN_VAULT_SEED: &[u8] = b"token_vault";
 
 /// Seed for vault token account PDA
 pub const VAULT_TOKEN_ACCOUNT_SEED: &[u8] = b"vault_token_account";
+
+/// Seed for address whitelist PDA
+pub const ADDRESS_WHITELIST_SEED: &[u8] = b"address_whitelist";
