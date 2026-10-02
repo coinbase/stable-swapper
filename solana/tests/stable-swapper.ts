@@ -901,9 +901,7 @@ describe("stable-swapper", () => {
     });
   });
 
-  // `swap` (legacy, 16 accounts including the deprecated `whitelist` slot) and `swap_v2`
-  // (15 accounts, no `whitelist`). These tests build the instructions by hand so the exact
-  // account list, order, and discriminator are what is exercised, not Anchor's auto-resolution.
+  // Instructions are built by hand so the exact account list and discriminator are exercised.
   describe("Swap V2 (whitelist account removed)", () => {
     // sha256("global:swap")[0..8] as encoded by existing callers.
     const LEGACY_SWAP_DISCRIMINATOR = Buffer.from([
@@ -959,8 +957,7 @@ describe("stable-swapper", () => {
       feeUsdcAtStart = feeUsdc.amount;
     });
 
-    // Later suites assume the balances this block started with. Swap the vault delta back
-    // (0% fee, both mints 6 decimals), then return any fees from the fee account to the user.
+    // Restore balances for later suites: swap the vault delta back, return any fees.
     after(async () => {
       const vaultUsdcNow = (
         await getAccount(provider.connection, usdcVaultTokenAccount)
@@ -1112,9 +1109,7 @@ describe("stable-swapper", () => {
         legacy.args.map((a) => [a.name, a.type])
       );
 
-      // Legacy keeps `whitelist` at index 12; v2 is the same list without it.
-      // Compare every published field (signer, writable, pda, relations), not just the name.
-      // `docs` differ because the v2 comments are shorter.
+      // v2 is the legacy list minus `whitelist`, compared on every published field but `docs`.
       const legacyNames = legacy.accounts.map((a) => a.name);
       const v2Names = v2.accounts.map((a) => a.name);
       assert.lengthOf(legacyNames, 16);
@@ -1188,9 +1183,7 @@ describe("stable-swapper", () => {
       );
       const amount = new anchor.BN(10 * 10 ** 6);
 
-      // Index 7 is the fee token account and index 8 is the fee recipient in both
-      // layouts. Match by index: the fee recipient pubkey is also the user signer,
-      // so matching on pubkey would replace the signer and fail signature checks.
+      // Replace by index (7, 8): the fee recipient pubkey is also the signer in this suite.
       const withStranger = (keys: ReturnType<typeof legacySwapKeys>) =>
         keys.map((k, i) => {
           if (i === 7) return { ...k, pubkey: strangerUsdc };
@@ -1281,9 +1274,8 @@ describe("stable-swapper", () => {
           .rpc();
       }
 
-      // The payer's USDC account is the pool fee recipient's ATA, so a fee paid to the
-      // pool's normal recipient lands back in the account that paid it. Point the pool at
-      // a fresh recipient for this check so the fee shows up as its own balance.
+      // The payer's USDC account is also the fee recipient's ATA; use a fresh recipient so
+      // the fee is observable.
       const feeOwner = anchor.web3.Keypair.generate();
       const feeOwnerUsdc = await getAssociatedTokenAddress(
         usdcMint,

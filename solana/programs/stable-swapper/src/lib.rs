@@ -163,20 +163,13 @@ pub mod stable_swapper {
         Ok(())
     }
 
-    /// Swaps `amount_in` of `from_mint` for `to_mint` 1:1, net of the pool fee and normalized
-    /// for the two mints' decimals.
-    ///
-    /// Legacy account layout: this instruction still carries the deprecated `whitelist` slot
-    /// (see [`Swap`]). It is retained only so callers that encode that layout keep working.
-    /// New integrations should use `swap_v2`; `swap` will be removed once every live caller
-    /// has confirmed its cutover.
+    /// Legacy layout: still carries the deprecated `whitelist` slot so existing callers keep
+    /// working. Use `swap_v2` for new integrations; `swap` is removed once callers cut over.
     pub fn swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64) -> Result<()> {
         do_swap(&ctx.accounts.swap_accounts(), amount_in, min_amount_out)
     }
 
-    /// Identical to `swap` with the deprecated `whitelist` account removed from the account
-    /// list. Arguments, fee model, validation, and on-chain effects are the same; only the
-    /// account layout differs (see [`SwapV2`]).
+    /// `swap` without the deprecated `whitelist` account. Same args, logic, and effects.
     pub fn swap_v2(ctx: Context<SwapV2>, amount_in: u64, min_amount_out: u64) -> Result<()> {
         do_swap(&ctx.accounts.swap_accounts(), amount_in, min_amount_out)
     }
@@ -530,9 +523,7 @@ fn do_migrate_authorities<'info>(
     Ok(())
 }
 
-/// The accounts a swap reads and writes, independent of which instruction context supplied
-/// them. [`Swap`] (legacy layout with the deprecated `whitelist` slot) and [`SwapV2`] both
-/// project onto this so the two instructions share one body and cannot drift.
+/// Accounts a swap touches; `Swap` and `SwapV2` both project onto this so they share one body.
 struct SwapAccounts<'a, 'info> {
     pool: &'a Account<'info, LiquidityPool>,
     in_vault: &'a Account<'info, TokenVault>,
@@ -548,8 +539,7 @@ struct SwapAccounts<'a, 'info> {
     token_program: &'a Program<'info, Token>,
 }
 
-/// Shared body for `swap` and `swap_v2`. The Accounts struct on the calling instruction is
-/// responsible for PDA derivation, mint/ownership constraints, and the fee-recipient check.
+/// Shared body for `swap` and `swap_v2`. Account constraints are enforced by the caller's context.
 fn do_swap(a: &SwapAccounts, amount_in: u64, min_amount_out: u64) -> Result<()> {
     let pool = a.pool;
     require!(!pool.swaps_paused, LiquidityError::SwapsPaused);
@@ -971,8 +961,7 @@ impl<'info> Swap<'info> {
     }
 }
 
-/// Account layout for `swap_v2`: [`Swap`] with the deprecated `whitelist` slot removed.
-/// Every remaining account keeps the same order, constraints, and writability as in `Swap`.
+/// `Swap` with the deprecated `whitelist` slot removed; all other accounts are unchanged.
 #[derive(Accounts)]
 pub struct SwapV2<'info> {
     #[account(
