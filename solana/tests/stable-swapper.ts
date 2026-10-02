@@ -1221,6 +1221,8 @@ describe("stable-swapper", () => {
         );
       } catch (error) {
         threw = true;
+        // Slot 13 is read as `token_program` and holds the Associated Token program.
+        assert.include(error.toString(), "InvalidProgramId");
       }
       assert.isTrue(threw, "legacy swap accepted the 15-account layout");
       assert.deepEqual(await balances(), before);
