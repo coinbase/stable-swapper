@@ -14,6 +14,7 @@ import {
   approve,
 } from "@solana/spl-token";
 import { assert } from "chai";
+import { createHash } from "crypto";
 
 const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
   "BPFLoaderUpgradeab1e11111111111111111111111"
@@ -897,6 +898,485 @@ describe("stable-swapper", () => {
         })
         .signers([configureAuthority.payer])
         .rpc();
+    });
+  });
+
+  // Instructions are built by hand so the exact account list and discriminator are exercised.
+  describe("Swap V2 (whitelist account removed)", () => {
+    // sha256("global:swap")[0..8] as encoded by existing callers.
+    const LEGACY_SWAP_DISCRIMINATOR = Buffer.from([
+      248, 198, 158, 145, 225, 117, 135, 200,
+    ]);
+
+    const ixDiscriminator = (name: string): Buffer =>
+      createHash("sha256").update(`global:${name}`).digest().subarray(0, 8);
+
+    const swapIxData = (
+      discriminator: Buffer,
+      amountIn: anchor.BN,
+      minAmountOut: anchor.BN
+    ): Buffer =>
+      Buffer.concat([
+        discriminator,
+        amountIn.toArrayLike(Buffer, "le", 8),
+        minAmountOut.toArrayLike(Buffer, "le", 8),
+      ]);
+
+    let whitelistPda: PublicKey;
+    let feeRecipient: PublicKey;
+    let feeRecipientTokenAccount: PublicKey;
+    let vaultUsdcAtStart: bigint;
+    let vaultCustomAtStart: bigint;
+    let userUsdcAtStart: bigint;
+    let userCustomAtStart: bigint;
+    let feeUsdcAtStart: bigint;
+
+    before(async () => {
+      [whitelistPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("address_whitelist")],
+        program.programId
+      );
+      const poolAccount = await program.account.liquidityPool.fetch(pool);
+      feeRecipient = poolAccount.feeRecipient;
+      feeRecipientTokenAccount = await getAssociatedTokenAddress(
+        usdcMint,
+        feeRecipient
+      );
+      const [vaultUsdc, vaultCustom, userUsdc, userCustom, feeUsdc] =
+        await Promise.all([
+          getAccount(provider.connection, usdcVaultTokenAccount),
+          getAccount(provider.connection, customStableVaultTokenAccount),
+          getAccount(provider.connection, userUsdcAccount),
+          getAccount(provider.connection, userCustomStableAccount),
+          getAccount(provider.connection, feeRecipientTokenAccount),
+        ]);
+      vaultUsdcAtStart = vaultUsdc.amount;
+      vaultCustomAtStart = vaultCustom.amount;
+      userUsdcAtStart = userUsdc.amount;
+      userCustomAtStart = userCustom.amount;
+      feeUsdcAtStart = feeUsdc.amount;
+    });
+
+    // Restore balances for later suites: swap the vault delta back, return any fees.
+    after(async () => {
+      const vaultUsdcNow = (
+        await getAccount(provider.connection, usdcVaultTokenAccount)
+      ).amount;
+      const moved = vaultUsdcNow - vaultUsdcAtStart;
+      if (moved > 0n) {
+        await program.methods
+          .swap(
+            new anchor.BN(moved.toString()),
+            new anchor.BN(moved.toString())
+          )
+          .accounts({
+            pool,
+            inVault: customStableVault,
+            outVault: usdcVault,
+            inVaultTokenAccount: customStableVaultTokenAccount,
+            outVaultTokenAccount: usdcVaultTokenAccount,
+            userFromTokenAccount: userCustomStableAccount,
+            toTokenAccount: userUsdcAccount,
+            feeRecipientTokenAccount: feeRecipientCustomStableAccount,
+            feeRecipient,
+            fromMint: customStableMint,
+            toMint: usdcMint,
+            user: payer.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([payer.payer])
+          .rpc();
+      }
+      const feeNow = (
+        await getAccount(provider.connection, feeRecipientTokenAccount)
+      ).amount;
+      const feeMoved = feeNow - feeUsdcAtStart;
+      if (feeMoved > 0n) {
+        await transfer(
+          provider.connection,
+          payer.payer,
+          feeRecipientTokenAccount,
+          userUsdcAccount,
+          payer.payer,
+          feeMoved
+        );
+      }
+      const restored = await Promise.all([
+        getAccount(provider.connection, usdcVaultTokenAccount),
+        getAccount(provider.connection, customStableVaultTokenAccount),
+        getAccount(provider.connection, userUsdcAccount),
+        getAccount(provider.connection, userCustomStableAccount),
+        getAccount(provider.connection, feeRecipientTokenAccount),
+      ]);
+      assert.equal(restored[0].amount.toString(), vaultUsdcAtStart.toString());
+      assert.equal(
+        restored[1].amount.toString(),
+        vaultCustomAtStart.toString()
+      );
+      assert.equal(restored[2].amount.toString(), userUsdcAtStart.toString());
+      assert.equal(restored[3].amount.toString(), userCustomAtStart.toString());
+      assert.equal(restored[4].amount.toString(), feeUsdcAtStart.toString());
+    });
+
+    // USDC -> CustomStable, in the account order existing callers encode for legacy `swap`.
+    const legacySwapKeys = () => [
+      { pubkey: pool, isSigner: false, isWritable: false },
+      { pubkey: usdcVault, isSigner: false, isWritable: false },
+      { pubkey: customStableVault, isSigner: false, isWritable: false },
+      { pubkey: usdcVaultTokenAccount, isSigner: false, isWritable: true },
+      {
+        pubkey: customStableVaultTokenAccount,
+        isSigner: false,
+        isWritable: true,
+      },
+      { pubkey: userUsdcAccount, isSigner: false, isWritable: true },
+      { pubkey: userCustomStableAccount, isSigner: false, isWritable: true },
+      { pubkey: feeRecipientTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: feeRecipient, isSigner: false, isWritable: false },
+      { pubkey: usdcMint, isSigner: false, isWritable: false },
+      { pubkey: customStableMint, isSigner: false, isWritable: false },
+      { pubkey: payer.publicKey, isSigner: true, isWritable: true },
+      { pubkey: whitelistPda, isSigner: false, isWritable: false }, // index 12
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      {
+        pubkey: ASSOCIATED_TOKEN_PROGRAM_ID,
+        isSigner: false,
+        isWritable: false,
+      },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ];
+
+    // Same list with the `whitelist` slot (index 12) dropped.
+    const v2SwapKeys = () => legacySwapKeys().filter((_, i) => i !== 12);
+
+    const sendRawSwap = async (
+      keys: ReturnType<typeof legacySwapKeys>,
+      data: Buffer
+    ) => {
+      const ix = new anchor.web3.TransactionInstruction({
+        programId: program.programId,
+        keys,
+        data,
+      });
+      const tx = new anchor.web3.Transaction().add(ix);
+      return provider.sendAndConfirm(tx, [payer.payer]);
+    };
+
+    const balances = async () => {
+      const [usdc, custom, vaultUsdc, vaultCustom, feeUsdc] = await Promise.all(
+        [
+          getAccount(provider.connection, userUsdcAccount),
+          getAccount(provider.connection, userCustomStableAccount),
+          getAccount(provider.connection, usdcVaultTokenAccount),
+          getAccount(provider.connection, customStableVaultTokenAccount),
+          getAccount(provider.connection, feeRecipientTokenAccount),
+        ]
+      );
+      return {
+        usdc: usdc.amount,
+        custom: custom.amount,
+        vaultUsdc: vaultUsdc.amount,
+        vaultCustom: vaultCustom.amount,
+        feeUsdc: feeUsdc.amount,
+      };
+    };
+
+    it("Exposes both instructions in the IDL with the expected account layouts", () => {
+      const legacy = program.idl.instructions.find((i) => i.name === "swap");
+      const v2 = program.idl.instructions.find((i) => i.name === "swapV2");
+      assert.isDefined(legacy, "legacy swap missing from IDL");
+      assert.isDefined(v2, "swap_v2 missing from IDL");
+
+      // Legacy discriminator must not move: existing callers hard-code it.
+      assert.deepEqual(
+        Buffer.from(legacy.discriminator),
+        LEGACY_SWAP_DISCRIMINATOR
+      );
+      assert.deepEqual(
+        Buffer.from(v2.discriminator),
+        ixDiscriminator("swap_v2")
+      );
+      assert.notDeepEqual(
+        Buffer.from(v2.discriminator),
+        LEGACY_SWAP_DISCRIMINATOR
+      );
+
+      // Same args on both.
+      assert.deepEqual(
+        v2.args.map((a) => [a.name, a.type]),
+        legacy.args.map((a) => [a.name, a.type])
+      );
+
+      // v2 is the legacy list minus `whitelist`, compared on every published field but `docs`.
+      const legacyNames = legacy.accounts.map((a) => a.name);
+      const v2Names = v2.accounts.map((a) => a.name);
+      assert.lengthOf(legacyNames, 16);
+      assert.lengthOf(v2Names, 15);
+      assert.equal(legacyNames[12], "whitelist");
+      const comparable = (accounts: any[]) =>
+        accounts
+          .filter((a) => a.name !== "whitelist")
+          .map(({ docs, ...rest }) => rest);
+      assert.deepEqual(comparable(v2.accounts), comparable(legacy.accounts));
+    });
+
+    it("Legacy swap still accepts the 16-account layout", async () => {
+      const amount = new anchor.BN(10 * 10 ** 6);
+      const before = await balances();
+
+      await sendRawSwap(
+        legacySwapKeys(),
+        swapIxData(LEGACY_SWAP_DISCRIMINATOR, amount, amount)
+      );
+
+      const after = await balances();
+      assert.equal((before.usdc - after.usdc).toString(), amount.toString());
+      assert.equal(
+        (after.custom - before.custom).toString(),
+        amount.toString()
+      );
+    });
+
+    it("swap_v2 accepts the 15-account layout and produces the same result", async () => {
+      const amount = new anchor.BN(10 * 10 ** 6);
+      const before = await balances();
+
+      await sendRawSwap(
+        v2SwapKeys(),
+        swapIxData(ixDiscriminator("swap_v2"), amount, amount)
+      );
+
+      const after = await balances();
+      assert.equal((before.usdc - after.usdc).toString(), amount.toString());
+      assert.equal(
+        (after.custom - before.custom).toString(),
+        amount.toString()
+      );
+    });
+
+    it("swap_v2 rejects the legacy 16-account layout", async () => {
+      const amount = new anchor.BN(10 * 10 ** 6);
+      const before = await balances();
+
+      let threw = false;
+      try {
+        await sendRawSwap(
+          legacySwapKeys(),
+          swapIxData(ixDiscriminator("swap_v2"), amount, amount)
+        );
+      } catch (error) {
+        threw = true;
+        // Slot 12 is read as `token_program` and is not the Token program.
+        assert.include(error.toString(), "InvalidProgramId");
+      }
+      assert.isTrue(threw, "swap_v2 accepted the legacy account layout");
+      assert.deepEqual(await balances(), before);
+    });
+
+    it("both instructions reject a fee recipient that is not the pool's", async () => {
+      const stranger = anchor.web3.Keypair.generate();
+      const strangerUsdc = await getAssociatedTokenAddress(
+        usdcMint,
+        stranger.publicKey
+      );
+      const amount = new anchor.BN(10 * 10 ** 6);
+
+      // Replace by index (7, 8): the fee recipient pubkey is also the signer in this suite.
+      const withStranger = (keys: ReturnType<typeof legacySwapKeys>) =>
+        keys.map((k, i) => {
+          if (i === 7) return { ...k, pubkey: strangerUsdc };
+          if (i === 8) return { ...k, pubkey: stranger.publicKey };
+          return k;
+        });
+
+      for (const [name, keys] of [
+        ["swap", withStranger(legacySwapKeys())],
+        ["swap_v2", withStranger(v2SwapKeys())],
+      ] as const) {
+        const before = await balances();
+        try {
+          await sendRawSwap(
+            keys,
+            swapIxData(ixDiscriminator(name), amount, amount)
+          );
+          assert.fail(`${name} accepted a foreign fee recipient`);
+        } catch (error) {
+          assert.include(error.toString(), "ConstraintAddress");
+        }
+        assert.deepEqual(await balances(), before);
+      }
+    });
+
+    it("Legacy swap rejects the 15-account layout", async () => {
+      const amount = new anchor.BN(10 * 10 ** 6);
+      const before = await balances();
+
+      let threw = false;
+      try {
+        await sendRawSwap(
+          v2SwapKeys(),
+          swapIxData(LEGACY_SWAP_DISCRIMINATOR, amount, amount)
+        );
+      } catch (error) {
+        threw = true;
+        // Slot 13 is read as `token_program` and holds the Associated Token program.
+        assert.include(error.toString(), "InvalidProgramId");
+      }
+      assert.isTrue(threw, "legacy swap accepted the 15-account layout");
+      assert.deepEqual(await balances(), before);
+    });
+
+    it("swap_v2 applies the same validation and fee logic as swap", async () => {
+      const amount = new anchor.BN(100 * 10 ** 6);
+
+      // min_amount_out = 0 is rejected on both.
+      for (const [name, keys] of [
+        ["swap", legacySwapKeys()],
+        ["swap_v2", v2SwapKeys()],
+      ] as const) {
+        try {
+          await sendRawSwap(
+            keys,
+            swapIxData(ixDiscriminator(name), amount, new anchor.BN(0))
+          );
+          assert.fail(`${name} accepted min_amount_out = 0`);
+        } catch (error) {
+          assert.include(error.toString().toLowerCase(), "invalidamount");
+        }
+      }
+
+      // Paused swaps are rejected on both.
+      await program.methods
+        .pauseSwaps()
+        .accounts({ pool, pauseAuthority: pauseAuthority.publicKey })
+        .signers([pauseAuthority.payer])
+        .rpc();
+      try {
+        for (const [name, keys] of [
+          ["swap", legacySwapKeys()],
+          ["swap_v2", v2SwapKeys()],
+        ] as const) {
+          try {
+            await sendRawSwap(
+              keys,
+              swapIxData(ixDiscriminator(name), amount, amount)
+            );
+            assert.fail(`${name} executed while swaps were paused`);
+          } catch (error) {
+            assert.include(error.toString(), "SwapsPaused");
+          }
+        }
+      } finally {
+        await program.methods
+          .unpauseSwaps()
+          .accounts({ pool, unpauseAuthority: unpauseAuthority.publicKey })
+          .signers([unpauseAuthority.payer])
+          .rpc();
+      }
+
+      // The payer's USDC account is also the fee recipient's ATA; use a fresh recipient so
+      // the fee is observable.
+      const feeOwner = anchor.web3.Keypair.generate();
+      const feeOwnerUsdc = await getAssociatedTokenAddress(
+        usdcMint,
+        feeOwner.publicKey
+      );
+      const withFeeOwner = (keys: ReturnType<typeof legacySwapKeys>) =>
+        keys.map((k, i) => {
+          if (i === 7) return { ...k, pubkey: feeOwnerUsdc };
+          if (i === 8) return { ...k, pubkey: feeOwner.publicKey };
+          return k;
+        });
+      await program.methods
+        .updateFeeRate(new anchor.BN(100))
+        .accounts({ pool, configureAuthority: configureAuthority.publicKey })
+        .signers([configureAuthority.payer])
+        .rpc();
+      await program.methods
+        .updateFeeRecipient(feeOwner.publicKey)
+        .accounts({ pool, configureAuthority: configureAuthority.publicKey })
+        .signers([configureAuthority.payer])
+        .rpc();
+      try {
+        const expectedNet = BigInt(99 * 10 ** 6);
+        const expectedFee = BigInt(amount.toString()) - expectedNet;
+        const minOut = new anchor.BN(99 * 10 ** 6);
+
+        for (const [name, keys] of [
+          ["swap", withFeeOwner(legacySwapKeys())],
+          ["swap_v2", withFeeOwner(v2SwapKeys())],
+        ] as const) {
+          const before = await balances();
+          let feeBefore = 0n;
+          try {
+            feeBefore = (await getAccount(provider.connection, feeOwnerUsdc))
+              .amount;
+          } catch {
+            // The recipient ATA is created by the swap's init_if_needed.
+          }
+          await sendRawSwap(
+            keys,
+            swapIxData(ixDiscriminator(name), amount, minOut)
+          );
+          const after = await balances();
+          const feeAfter = (await getAccount(provider.connection, feeOwnerUsdc))
+            .amount;
+          assert.equal(
+            (before.usdc - after.usdc).toString(),
+            amount.toString(),
+            `${name}: input debit`
+          );
+          assert.equal(
+            (feeAfter - feeBefore).toString(),
+            expectedFee.toString(),
+            `${name}: fee recipient received the fee`
+          );
+          assert.equal(
+            (after.vaultUsdc - before.vaultUsdc).toString(),
+            expectedNet.toString(),
+            `${name}: vault receives net of fee`
+          );
+          assert.equal(
+            (after.custom - before.custom).toString(),
+            expectedNet.toString(),
+            `${name}: net output`
+          );
+          assert.equal(
+            (before.vaultCustom - after.vaultCustom).toString(),
+            expectedNet.toString(),
+            `${name}: output vault debit`
+          );
+        }
+      } finally {
+        await program.methods
+          .updateFeeRate(new anchor.BN(0))
+          .accounts({ pool, configureAuthority: configureAuthority.publicKey })
+          .signers([configureAuthority.payer])
+          .rpc();
+        await program.methods
+          .updateFeeRecipient(feeRecipient)
+          .accounts({ pool, configureAuthority: configureAuthority.publicKey })
+          .signers([configureAuthority.payer])
+          .rpc();
+        try {
+          const leftover = (await getAccount(provider.connection, feeOwnerUsdc))
+            .amount;
+          if (leftover > 0n) {
+            await transfer(
+              provider.connection,
+              payer.payer,
+              feeOwnerUsdc,
+              userUsdcAccount,
+              feeOwner,
+              leftover
+            );
+          }
+        } catch {
+          // No fee was collected, so there is nothing to return.
+        }
+      }
     });
   });
 
