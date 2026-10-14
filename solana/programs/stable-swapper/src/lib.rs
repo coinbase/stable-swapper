@@ -163,144 +163,15 @@ pub mod stable_swapper {
         Ok(())
     }
 
+    /// Legacy layout: still carries the deprecated `whitelist` slot so existing callers keep
+    /// working. Use `swap_v2` for new integrations; `swap` is removed once callers cut over.
     pub fn swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64) -> Result<()> {
-        let pool = &ctx.accounts.pool;
-        require!(!pool.swaps_paused, LiquidityError::SwapsPaused);
-        require!(amount_in > 0, LiquidityError::InvalidAmount);
-        require!(min_amount_out > 0, LiquidityError::InvalidAmount);
+        do_swap(&ctx.accounts.swap_accounts(), amount_in, min_amount_out)
+    }
 
-        // Whitelist enforcement is permanently deprecated. `whitelist` stays in this
-        // instruction's account list (see the field below) purely so already-encoded
-        // callers/indexers built against the pre-deprecation `swap` signature keep working;
-        // nothing reads or writes it anymore.
-
-        // Check that neither token is disabled
-        require!(
-            !ctx.accounts.in_vault.disabled,
-            LiquidityError::TokenDisabled
-        );
-        require!(
-            !ctx.accounts.out_vault.disabled,
-            LiquidityError::TokenDisabled
-        );
-
-        let from_mint = ctx.accounts.from_mint.key();
-        let to_mint = ctx.accounts.to_mint.key();
-
-        require!(
-            pool.supported_tokens.contains(&from_mint),
-            LiquidityError::TokenNotSupported
-        );
-        require!(
-            pool.supported_tokens.contains(&to_mint),
-            LiquidityError::TokenNotSupported
-        );
-        require!(from_mint != to_mint, LiquidityError::SameToken);
-
-        // Read decimals from both mints
-        let from_decimals = ctx.accounts.from_mint.decimals;
-        let to_decimals = ctx.accounts.to_mint.decimals;
-
-        // Fee Model: Fee is charged on INPUT token (from_mint)
-        // Example: User swaps 100 USDC → SOL with 1% fee
-        //   - User provides: 100 USDC total
-        //   - from_vault receives: 99 USDC (liquidity)
-        //   - fee_recipient receives: 1 USDC (protocol fee)
-        //   - to_vault sends: 99 SOL to user (1:1 swap of net amount, normalized for decimals)
-
-        // Calculate fee (in basis points, e.g., 100 = 1%)
-        // Round up to ensure protocol always collects full fee amount
-        let fee_amount = (amount_in as u128)
-            .checked_mul(pool.fee_rate as u128)
-            .ok_or(LiquidityError::FeeCalculationOverflow)?
-            .checked_add(FEE_DENOMINATOR as u128 - 1)
-            .ok_or(LiquidityError::FeeCalculationOverflow)?
-            .checked_div(FEE_DENOMINATOR as u128)
-            .ok_or(LiquidityError::FeeCalculationOverflow)? as u64;
-
-        // Net amount after fee deduction (in from_token decimals)
-        let amount_after_fee = amount_in
-            .checked_sub(fee_amount)
-            .ok_or(LiquidityError::FeeCalculationOverflow)?;
-
-        // Normalize the amount to destination token decimals for output.
-        //
-        // IMPORTANT: When scaling down (e.g., 9 decimals → 6 decimals), integer division
-        // rounds down, creating "dust" that cannot be represented in the lower-decimal token.
-        // This dust is neither paid to the user nor to the fee recipient—it effectively
-        // remains in the pool as a tiny implicit spread due to decimal precision mismatch.
-        //
-        // Example: Swapping 100.000000123 tokens (9 decimals) → 100.000000 tokens (6 decimals)
-        // The remaining 0.000000123 precision is truncated (123 units in 9-decimal terms).
-        // This is expected protocol-favorable rounding behavior.
-        let amount_out = normalize_decimals(amount_after_fee, from_decimals, to_decimals)?;
-
-        // Prevent zero-output swaps (e.g., when fees consume entire input amount)
-        require!(amount_out > 0, LiquidityError::InvalidAmount);
-
-        // Slippage protection: ensure normalized output meets user's minimum acceptable amount
-        require!(
-            amount_out >= min_amount_out,
-            LiquidityError::SlippageExceeded
-        );
-
-        // Check available liquidity in the destination vault.
-        require!(
-            ctx.accounts.out_vault_token_account.amount >= amount_out,
-            LiquidityError::InsufficientLiquidity
-        );
-
-        // Step 1: Transfer net amount (after fee) from user to source vault
-        // This becomes the pool's liquidity for the input token
-        let transfer_to_vault_ctx = CpiContext::new(
-            ctx.accounts.token_program.to_account_info(),
-            Transfer {
-                from: ctx.accounts.user_from_token_account.to_account_info(),
-                to: ctx.accounts.in_vault_token_account.to_account_info(),
-                authority: ctx.accounts.user.to_account_info(),
-            },
-        );
-        token::transfer(transfer_to_vault_ctx, amount_after_fee)?;
-
-        // Step 2: Transfer fee portion (in input token) from user to fee recipient
-        // Only execute if fee is non-zero to save gas
-        if fee_amount > 0 {
-            let transfer_fee_ctx = CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
-                Transfer {
-                    from: ctx.accounts.user_from_token_account.to_account_info(),
-                    to: ctx.accounts.fee_recipient_token_account.to_account_info(),
-                    authority: ctx.accounts.user.to_account_info(),
-                },
-            );
-            token::transfer(transfer_fee_ctx, fee_amount)?;
-        }
-
-        // Step 3: Transfer normalized amount from destination vault to user
-        // amount_out is already normalized to destination token decimals
-        let pool_seeds = &[LIQUIDITY_POOL_SEED, &[pool.bump]];
-        let signer_seeds = &[&pool_seeds[..]];
-
-        let transfer_out_ctx = CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            Transfer {
-                from: ctx.accounts.out_vault_token_account.to_account_info(),
-                to: ctx.accounts.to_token_account.to_account_info(),
-                authority: ctx.accounts.pool.to_account_info(),
-            },
-            signer_seeds,
-        );
-        token::transfer(transfer_out_ctx, amount_out)?;
-
-        msg!(
-            "Swapped {} tokens (from_decimals: {}, to_decimals: {}, amount_out: {}, fee: {})",
-            amount_after_fee,
-            from_decimals,
-            to_decimals,
-            amount_out,
-            fee_amount
-        );
-        Ok(())
+    /// `swap` without the deprecated `whitelist` account. Same args, logic, and effects.
+    pub fn swap_v2(ctx: Context<SwapV2>, amount_in: u64, min_amount_out: u64) -> Result<()> {
+        do_swap(&ctx.accounts.swap_accounts(), amount_in, min_amount_out)
     }
 
     pub fn withdraw_liquidity(ctx: Context<WithdrawLiquidity>, amount: u64) -> Result<()> {
@@ -652,6 +523,152 @@ fn do_migrate_authorities<'info>(
     Ok(())
 }
 
+/// Accounts a swap touches; `Swap` and `SwapV2` both project onto this so they share one body.
+struct SwapAccounts<'a, 'info> {
+    pool: &'a Account<'info, LiquidityPool>,
+    in_vault: &'a Account<'info, TokenVault>,
+    out_vault: &'a Account<'info, TokenVault>,
+    in_vault_token_account: &'a Account<'info, TokenAccount>,
+    out_vault_token_account: &'a Account<'info, TokenAccount>,
+    user_from_token_account: &'a Account<'info, TokenAccount>,
+    to_token_account: &'a Account<'info, TokenAccount>,
+    fee_recipient_token_account: &'a Account<'info, TokenAccount>,
+    from_mint: &'a Account<'info, Mint>,
+    to_mint: &'a Account<'info, Mint>,
+    user: &'a Signer<'info>,
+    token_program: &'a Program<'info, Token>,
+}
+
+/// Shared body for `swap` and `swap_v2`. Account constraints are enforced by the caller's context.
+fn do_swap(a: &SwapAccounts, amount_in: u64, min_amount_out: u64) -> Result<()> {
+    let pool = a.pool;
+    require!(!pool.swaps_paused, LiquidityError::SwapsPaused);
+    require!(amount_in > 0, LiquidityError::InvalidAmount);
+    require!(min_amount_out > 0, LiquidityError::InvalidAmount);
+
+    // Check that neither token is disabled
+    require!(!a.in_vault.disabled, LiquidityError::TokenDisabled);
+    require!(!a.out_vault.disabled, LiquidityError::TokenDisabled);
+
+    let from_mint = a.from_mint.key();
+    let to_mint = a.to_mint.key();
+
+    require!(
+        pool.supported_tokens.contains(&from_mint),
+        LiquidityError::TokenNotSupported
+    );
+    require!(
+        pool.supported_tokens.contains(&to_mint),
+        LiquidityError::TokenNotSupported
+    );
+    require!(from_mint != to_mint, LiquidityError::SameToken);
+
+    // Read decimals from both mints
+    let from_decimals = a.from_mint.decimals;
+    let to_decimals = a.to_mint.decimals;
+
+    // Fee Model: Fee is charged on INPUT token (from_mint)
+    // Example: User swaps 100 USDC → SOL with 1% fee
+    //   - User provides: 100 USDC total
+    //   - from_vault receives: 99 USDC (liquidity)
+    //   - fee_recipient receives: 1 USDC (protocol fee)
+    //   - to_vault sends: 99 SOL to user (1:1 swap of net amount, normalized for decimals)
+
+    // Calculate fee (in basis points, e.g., 100 = 1%)
+    // Round up to ensure protocol always collects full fee amount
+    let fee_amount = (amount_in as u128)
+        .checked_mul(pool.fee_rate as u128)
+        .ok_or(LiquidityError::FeeCalculationOverflow)?
+        .checked_add(FEE_DENOMINATOR as u128 - 1)
+        .ok_or(LiquidityError::FeeCalculationOverflow)?
+        .checked_div(FEE_DENOMINATOR as u128)
+        .ok_or(LiquidityError::FeeCalculationOverflow)? as u64;
+
+    // Net amount after fee deduction (in from_token decimals)
+    let amount_after_fee = amount_in
+        .checked_sub(fee_amount)
+        .ok_or(LiquidityError::FeeCalculationOverflow)?;
+
+    // Normalize the amount to destination token decimals for output.
+    //
+    // IMPORTANT: When scaling down (e.g., 9 decimals → 6 decimals), integer division
+    // rounds down, creating "dust" that cannot be represented in the lower-decimal token.
+    // This dust is neither paid to the user nor to the fee recipient—it effectively
+    // remains in the pool as a tiny implicit spread due to decimal precision mismatch.
+    //
+    // Example: Swapping 100.000000123 tokens (9 decimals) → 100.000000 tokens (6 decimals)
+    // The remaining 0.000000123 precision is truncated (123 units in 9-decimal terms).
+    // This is expected protocol-favorable rounding behavior.
+    let amount_out = normalize_decimals(amount_after_fee, from_decimals, to_decimals)?;
+
+    // Prevent zero-output swaps (e.g., when fees consume entire input amount)
+    require!(amount_out > 0, LiquidityError::InvalidAmount);
+
+    // Slippage protection: ensure normalized output meets user's minimum acceptable amount
+    require!(
+        amount_out >= min_amount_out,
+        LiquidityError::SlippageExceeded
+    );
+
+    // Check available liquidity in the destination vault.
+    require!(
+        a.out_vault_token_account.amount >= amount_out,
+        LiquidityError::InsufficientLiquidity
+    );
+
+    // Step 1: Transfer net amount (after fee) from user to source vault
+    // This becomes the pool's liquidity for the input token
+    let transfer_to_vault_ctx = CpiContext::new(
+        a.token_program.to_account_info(),
+        Transfer {
+            from: a.user_from_token_account.to_account_info(),
+            to: a.in_vault_token_account.to_account_info(),
+            authority: a.user.to_account_info(),
+        },
+    );
+    token::transfer(transfer_to_vault_ctx, amount_after_fee)?;
+
+    // Step 2: Transfer fee portion (in input token) from user to fee recipient
+    // Only execute if fee is non-zero to save gas
+    if fee_amount > 0 {
+        let transfer_fee_ctx = CpiContext::new(
+            a.token_program.to_account_info(),
+            Transfer {
+                from: a.user_from_token_account.to_account_info(),
+                to: a.fee_recipient_token_account.to_account_info(),
+                authority: a.user.to_account_info(),
+            },
+        );
+        token::transfer(transfer_fee_ctx, fee_amount)?;
+    }
+
+    // Step 3: Transfer normalized amount from destination vault to user
+    // amount_out is already normalized to destination token decimals
+    let pool_seeds = &[LIQUIDITY_POOL_SEED, &[pool.bump]];
+    let signer_seeds = &[&pool_seeds[..]];
+
+    let transfer_out_ctx = CpiContext::new_with_signer(
+        a.token_program.to_account_info(),
+        Transfer {
+            from: a.out_vault_token_account.to_account_info(),
+            to: a.to_token_account.to_account_info(),
+            authority: pool.to_account_info(),
+        },
+        signer_seeds,
+    );
+    token::transfer(transfer_out_ctx, amount_out)?;
+
+    msg!(
+        "Swapped {} tokens (from_decimals: {}, to_decimals: {}, amount_out: {}, fee: {})",
+        amount_after_fee,
+        from_decimals,
+        to_decimals,
+        amount_out,
+        fee_amount
+    );
+    Ok(())
+}
+
 // Instruction contexts
 #[derive(Accounts)]
 pub struct Initialize<'info> {
@@ -912,6 +929,7 @@ pub struct Swap<'info> {
     /// pre-deprecation `swap` signature that existing callers/indexers already encode;
     /// its data is never read. On mainnet this resolves to the orphaned whitelist account
     /// left behind by the original removal; on fresh deployments it need not exist at all.
+    /// `swap_v2` / [`SwapV2`] is the same instruction without this slot.
     /// CHECK: seeds-verified PDA address only; deliberately not deserialized.
     #[account(
         seeds = [ADDRESS_WHITELIST_SEED],
@@ -922,6 +940,116 @@ pub struct Swap<'info> {
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+}
+
+impl<'info> Swap<'info> {
+    fn swap_accounts(&self) -> SwapAccounts<'_, 'info> {
+        SwapAccounts {
+            pool: &self.pool,
+            in_vault: &self.in_vault,
+            out_vault: &self.out_vault,
+            in_vault_token_account: &self.in_vault_token_account,
+            out_vault_token_account: &self.out_vault_token_account,
+            user_from_token_account: &self.user_from_token_account,
+            to_token_account: &self.to_token_account,
+            fee_recipient_token_account: &self.fee_recipient_token_account,
+            from_mint: &self.from_mint,
+            to_mint: &self.to_mint,
+            user: &self.user,
+            token_program: &self.token_program,
+        }
+    }
+}
+
+/// `Swap` with the deprecated `whitelist` slot removed; all other accounts are unchanged.
+#[derive(Accounts)]
+pub struct SwapV2<'info> {
+    #[account(
+        seeds = [LIQUIDITY_POOL_SEED],
+        bump = pool.bump
+    )]
+    pub pool: Account<'info, LiquidityPool>,
+
+    #[account(
+        seeds = [TOKEN_VAULT_SEED, pool.key().as_ref(), from_mint.key().as_ref()],
+        bump = in_vault.bump
+    )]
+    pub in_vault: Account<'info, TokenVault>,
+
+    #[account(
+        seeds = [TOKEN_VAULT_SEED, pool.key().as_ref(), to_mint.key().as_ref()],
+        bump = out_vault.bump
+    )]
+    pub out_vault: Account<'info, TokenVault>,
+
+    #[account(
+        mut,
+        seeds = [VAULT_TOKEN_ACCOUNT_SEED, in_vault.key().as_ref()],
+        bump
+    )]
+    pub in_vault_token_account: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        seeds = [VAULT_TOKEN_ACCOUNT_SEED, out_vault.key().as_ref()],
+        bump
+    )]
+    pub out_vault_token_account: Account<'info, TokenAccount>,
+
+    /// User's input token account. Not constrained to be owned by `user`; see [`Swap`].
+    #[account(
+        mut,
+        token::mint = from_mint,
+    )]
+    pub user_from_token_account: Account<'info, TokenAccount>,
+
+    /// Output token account. Not constrained to be owned by `user`; must already exist.
+    #[account(
+        mut,
+        token::mint = to_mint,
+    )]
+    pub to_token_account: Account<'info, TokenAccount>,
+
+    #[account(
+        init_if_needed,
+        payer = user,
+        associated_token::mint = from_mint,
+        associated_token::authority = fee_recipient
+    )]
+    pub fee_recipient_token_account: Account<'info, TokenAccount>,
+
+    /// CHECK: Fee recipient address, validated via pool.fee_recipient
+    #[account(address = pool.fee_recipient)]
+    pub fee_recipient: UncheckedAccount<'info>,
+
+    pub from_mint: Account<'info, Mint>,
+    pub to_mint: Account<'info, Mint>,
+
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+}
+
+impl<'info> SwapV2<'info> {
+    fn swap_accounts(&self) -> SwapAccounts<'_, 'info> {
+        SwapAccounts {
+            pool: &self.pool,
+            in_vault: &self.in_vault,
+            out_vault: &self.out_vault,
+            in_vault_token_account: &self.in_vault_token_account,
+            out_vault_token_account: &self.out_vault_token_account,
+            user_from_token_account: &self.user_from_token_account,
+            to_token_account: &self.to_token_account,
+            fee_recipient_token_account: &self.fee_recipient_token_account,
+            from_mint: &self.from_mint,
+            to_mint: &self.to_mint,
+            user: &self.user,
+            token_program: &self.token_program,
+        }
+    }
 }
 
 #[derive(Accounts)]
