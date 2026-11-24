@@ -23,6 +23,12 @@ Solidity implementation of StableSwapper using the UUPS upgradeable proxy patter
 
 - **No fee-on-transfer tokens** -- The contract assumes 1:1 transfers where the received amount equals the specified amount. Tokens that deduct fees during transfers will cause accounting errors and must not be listed.
 
+## Price Feed
+
+`StableSwapperPriceFeed` is a separate, read-only contract for off-chain price consumers such as CoinGecko's Virtual Price. `getPrice(token)` returns `1e6` (1 USDC, 6 decimals) for any token the StableSwapper lists, and reverts with `TokenNotListed(token)` otherwise. The price is pinned at 1 regardless of liquidity or pause state, so it must not be used as an on-chain oracle.
+
+The feed has no owner, roles, or storage, and is not upgradeable. It is deployed against the StableSwapper proxy address, so it keeps working across swapper upgrades.
+
 ## Prerequisites
 
 - [Foundry](https://book.getfoundry.sh/getting-started/installation) (forge, cast, anvil)
@@ -37,6 +43,12 @@ forge build
 
 ```sh
 forge test -vvv
+```
+
+Fork tests under `test/fork/` skip unless `BASE_RPC_URL` is set:
+
+```sh
+BASE_RPC_URL=https://mainnet.base.org forge test --match-path 'test/fork/*' -vvv
 ```
 
 ## Format
@@ -54,10 +66,12 @@ Deployment is performed via out-of-repo tooling. The contract under `src/` is th
 ```
 evm/
 ├── src/
-│   └── StableSwapper.sol              # Core swap contract
+│   ├── StableSwapper.sol              # Core swap contract
+│   └── StableSwapperPriceFeed.sol     # Read-only price feed for listed tokens
 ├── test/
 │   ├── unit/                          # Unit tests by function
-│   ├── integration/                   # Multi-token swap scenarios
+│   ├── integration/                   # Multi-token swap and price feed lifecycle scenarios
+│   ├── fork/                          # Base mainnet fork tests (need BASE_RPC_URL)
 │   └── lib/                           # Test base contracts and mocks
 ├── lib/                               # Dependencies (git submodules)
 ├── foundry.toml                       # Foundry configuration
