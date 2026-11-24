@@ -8,7 +8,11 @@ import {StableSwapperPriceFeed} from "../../src/StableSwapperPriceFeed.sol";
 /// @title PriceFeedBaseMainnetTest
 /// @notice Fork tests that deploy the price feed against the live Base mainnet StableSwapper proxy
 /// @dev Runs only when BASE_RPC_URL is set, so CI without an RPC skips it
+/// @dev Pinned to a block where the listings below were verified, since listings can change on-chain.
+/// @dev Set BASE_FORK_BLOCK to check another block.
 contract PriceFeedBaseMainnetTest is Test {
+    uint256 internal constant FORK_BLOCK = 61_785_161;
+
     address internal constant STABLE_SWAPPER_PROXY = 0x57AB1E77a6E70074307f39173176B94043A8C33c;
 
     address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
@@ -28,7 +32,7 @@ contract PriceFeedBaseMainnetTest is Test {
             return;
         }
 
-        vm.createSelectFork(rpcUrl);
+        vm.createSelectFork(rpcUrl, vm.envOr("BASE_FORK_BLOCK", FORK_BLOCK));
         priceFeed = new StableSwapperPriceFeed(STABLE_SWAPPER_PROXY);
     }
 
