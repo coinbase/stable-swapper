@@ -421,7 +421,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount, minAmountOut)
+        .swapV2(swapAmount, minAmountOut)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -478,7 +478,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount, minAmountOut)
+        .swapV2(swapAmount, minAmountOut)
         .accounts({
           pool,
           inVault: customStableVault,
@@ -552,7 +552,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount, minAmountOut)
+        .swapV2(swapAmount, minAmountOut)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -591,7 +591,7 @@ describe("stable-swapper", () => {
 
       try {
         await program.methods
-          .swap(swapAmount, minAmountOut)
+          .swapV2(swapAmount, minAmountOut)
           .accounts({
             pool,
             inVault: usdcVault,
@@ -666,7 +666,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount, swapAmount)
+        .swapV2(swapAmount, swapAmount)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -716,7 +716,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(fullDrainAmount, fullDrainAmount)
+        .swapV2(fullDrainAmount, fullDrainAmount)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -759,7 +759,7 @@ describe("stable-swapper", () => {
 
       try {
         await program.methods
-          .swap(excessiveAmount, minAmountOut)
+          .swapV2(excessiveAmount, minAmountOut)
           .accounts({
             pool,
             inVault: usdcVault,
@@ -804,7 +804,7 @@ describe("stable-swapper", () => {
 
       try {
         await program.methods
-          .swap(swapAmount, minAmountOut)
+          .swapV2(swapAmount, minAmountOut)
           .accounts({
             pool,
             inVault: usdcVault,
@@ -861,7 +861,7 @@ describe("stable-swapper", () => {
 
       try {
         await program.methods
-          .swap(tinySwapAmount, minAmountOut)
+          .swapV2(tinySwapAmount, minAmountOut)
           .accounts({
             pool,
             inVault: usdcVault,
@@ -902,8 +902,8 @@ describe("stable-swapper", () => {
   });
 
   // Instructions are built by hand so the exact account list and discriminator are exercised.
-  describe("Swap V2 (whitelist account removed)", () => {
-    // sha256("global:swap")[0..8] as encoded by existing callers.
+  describe("Swap V2 (legacy swap removed)", () => {
+    // sha256("global:swap")[0..8]: the removed legacy instruction.
     const LEGACY_SWAP_DISCRIMINATOR = Buffer.from([
       248, 198, 158, 145, 225, 117, 135, 200,
     ]);
@@ -965,7 +965,7 @@ describe("stable-swapper", () => {
       const moved = vaultUsdcNow - vaultUsdcAtStart;
       if (moved > 0n) {
         await program.methods
-          .swap(
+          .swapV2(
             new anchor.BN(moved.toString()),
             new anchor.BN(moved.toString())
           )
@@ -1020,7 +1020,7 @@ describe("stable-swapper", () => {
       assert.equal(restored[4].amount.toString(), feeUsdcAtStart.toString());
     });
 
-    // USDC -> CustomStable, in the account order existing callers encode for legacy `swap`.
+    // USDC -> CustomStable in the removed legacy `swap` layout (16 accounts, `whitelist` at 12).
     const legacySwapKeys = () => [
       { pubkey: pool, isSigner: false, isWritable: false },
       { pubkey: usdcVault, isSigner: false, isWritable: false },
@@ -1083,63 +1083,60 @@ describe("stable-swapper", () => {
       };
     };
 
-    it("Exposes both instructions in the IDL with the expected account layouts", () => {
-      const legacy = program.idl.instructions.find((i) => i.name === "swap");
+    it("Exposes only swap_v2 in the IDL, with the 15-account layout", () => {
+      const names = program.idl.instructions.map((i) => i.name);
+      assert.notInclude(names, "swap", "legacy swap is still in the IDL");
       const v2 = program.idl.instructions.find((i) => i.name === "swapV2");
-      assert.isDefined(legacy, "legacy swap missing from IDL");
       assert.isDefined(v2, "swap_v2 missing from IDL");
-
-      // Legacy discriminator must not move: existing callers hard-code it.
-      assert.deepEqual(
-        Buffer.from(legacy.discriminator),
-        LEGACY_SWAP_DISCRIMINATOR
-      );
       assert.deepEqual(
         Buffer.from(v2.discriminator),
         ixDiscriminator("swap_v2")
       );
-      assert.notDeepEqual(
-        Buffer.from(v2.discriminator),
-        LEGACY_SWAP_DISCRIMINATOR
-      );
-
-      // Same args on both.
       assert.deepEqual(
-        v2.args.map((a) => [a.name, a.type]),
-        legacy.args.map((a) => [a.name, a.type])
+        v2.accounts.map((a) => a.name),
+        [
+          "pool",
+          "inVault",
+          "outVault",
+          "inVaultTokenAccount",
+          "outVaultTokenAccount",
+          "userFromTokenAccount",
+          "toTokenAccount",
+          "feeRecipientTokenAccount",
+          "feeRecipient",
+          "fromMint",
+          "toMint",
+          "user",
+          "tokenProgram",
+          "associatedTokenProgram",
+          "systemProgram",
+        ]
       );
-
-      // v2 is the legacy list minus `whitelist`, compared on every published field but `docs`.
-      const legacyNames = legacy.accounts.map((a) => a.name);
-      const v2Names = v2.accounts.map((a) => a.name);
-      assert.lengthOf(legacyNames, 16);
-      assert.lengthOf(v2Names, 15);
-      assert.equal(legacyNames[12], "whitelist");
-      const comparable = (accounts: any[]) =>
-        accounts
-          .filter((a) => a.name !== "whitelist")
-          .map(({ docs, ...rest }) => rest);
-      assert.deepEqual(comparable(v2.accounts), comparable(legacy.accounts));
     });
 
-    it("Legacy swap still accepts the 16-account layout", async () => {
+    it("Rejects the legacy swap discriminator in either layout", async () => {
       const amount = new anchor.BN(10 * 10 ** 6);
-      const before = await balances();
-
-      await sendRawSwap(
-        legacySwapKeys(),
-        swapIxData(LEGACY_SWAP_DISCRIMINATOR, amount, amount)
-      );
-
-      const after = await balances();
-      assert.equal((before.usdc - after.usdc).toString(), amount.toString());
-      assert.equal(
-        (after.custom - before.custom).toString(),
-        amount.toString()
-      );
+      for (const [layout, keys] of [
+        ["16-account", legacySwapKeys()],
+        ["15-account", v2SwapKeys()],
+      ] as const) {
+        const before = await balances();
+        let threw = false;
+        try {
+          await sendRawSwap(
+            keys,
+            swapIxData(LEGACY_SWAP_DISCRIMINATOR, amount, amount)
+          );
+        } catch (error) {
+          threw = true;
+          assert.include(error.toString(), "InstructionFallbackNotFound");
+        }
+        assert.isTrue(threw, `legacy swap (${layout}) still executes`);
+        assert.deepEqual(await balances(), before);
+      }
     });
 
-    it("swap_v2 accepts the 15-account layout and produces the same result", async () => {
+    it("swap_v2 accepts the 15-account layout", async () => {
       const amount = new anchor.BN(10 * 10 ** 6);
       const before = await balances();
 
@@ -1155,7 +1152,6 @@ describe("stable-swapper", () => {
         amount.toString()
       );
     });
-
     it("swap_v2 rejects the legacy 16-account layout", async () => {
       const amount = new anchor.BN(10 * 10 ** 6);
       const before = await balances();
@@ -1175,7 +1171,7 @@ describe("stable-swapper", () => {
       assert.deepEqual(await balances(), before);
     });
 
-    it("both instructions reject a fee recipient that is not the pool's", async () => {
+    it("swap_v2 rejects a fee recipient that is not the pool's", async () => {
       const stranger = anchor.web3.Keypair.generate();
       const strangerUsdc = await getAssociatedTokenAddress(
         usdcMint,
@@ -1192,7 +1188,6 @@ describe("stable-swapper", () => {
         });
 
       for (const [name, keys] of [
-        ["swap", withStranger(legacySwapKeys())],
         ["swap_v2", withStranger(v2SwapKeys())],
       ] as const) {
         const before = await balances();
@@ -1209,33 +1204,11 @@ describe("stable-swapper", () => {
       }
     });
 
-    it("Legacy swap rejects the 15-account layout", async () => {
-      const amount = new anchor.BN(10 * 10 ** 6);
-      const before = await balances();
-
-      let threw = false;
-      try {
-        await sendRawSwap(
-          v2SwapKeys(),
-          swapIxData(LEGACY_SWAP_DISCRIMINATOR, amount, amount)
-        );
-      } catch (error) {
-        threw = true;
-        // Slot 13 is read as `token_program` and holds the Associated Token program.
-        assert.include(error.toString(), "InvalidProgramId");
-      }
-      assert.isTrue(threw, "legacy swap accepted the 15-account layout");
-      assert.deepEqual(await balances(), before);
-    });
-
-    it("swap_v2 applies the same validation and fee logic as swap", async () => {
+    it("swap_v2 enforces min_amount_out, pause, and fee logic", async () => {
       const amount = new anchor.BN(100 * 10 ** 6);
 
-      // min_amount_out = 0 is rejected on both.
-      for (const [name, keys] of [
-        ["swap", legacySwapKeys()],
-        ["swap_v2", v2SwapKeys()],
-      ] as const) {
+      // min_amount_out = 0 is rejected.
+      for (const [name, keys] of [["swap_v2", v2SwapKeys()]] as const) {
         try {
           await sendRawSwap(
             keys,
@@ -1247,17 +1220,14 @@ describe("stable-swapper", () => {
         }
       }
 
-      // Paused swaps are rejected on both.
+      // Paused swaps are rejected.
       await program.methods
         .pauseSwaps()
         .accounts({ pool, pauseAuthority: pauseAuthority.publicKey })
         .signers([pauseAuthority.payer])
         .rpc();
       try {
-        for (const [name, keys] of [
-          ["swap", legacySwapKeys()],
-          ["swap_v2", v2SwapKeys()],
-        ] as const) {
+        for (const [name, keys] of [["swap_v2", v2SwapKeys()]] as const) {
           try {
             await sendRawSwap(
               keys,
@@ -1305,7 +1275,6 @@ describe("stable-swapper", () => {
         const minOut = new anchor.BN(99 * 10 ** 6);
 
         for (const [name, keys] of [
-          ["swap", withFeeOwner(legacySwapKeys())],
           ["swap_v2", withFeeOwner(v2SwapKeys())],
         ] as const) {
           const before = await balances();
@@ -1404,7 +1373,7 @@ describe("stable-swapper", () => {
 
       try {
         await program.methods
-          .swap(swapAmount, minAmountOut)
+          .swapV2(swapAmount, minAmountOut)
           .accounts({
             pool,
             inVault: usdcVault,
@@ -1438,7 +1407,7 @@ describe("stable-swapper", () => {
 
       try {
         await program.methods
-          .swap(swapAmount, minAmountOut)
+          .swapV2(swapAmount, minAmountOut)
           .accounts({
             pool,
             inVault: customStableVault,
@@ -1487,7 +1456,7 @@ describe("stable-swapper", () => {
       const minAmountOut = new anchor.BN(10 * 10 ** 6);
 
       await program.methods
-        .swap(swapAmount, minAmountOut)
+        .swapV2(swapAmount, minAmountOut)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -1934,7 +1903,7 @@ describe("stable-swapper", () => {
 
       try {
         await program.methods
-          .swap(swapAmount, minAmountOut)
+          .swapV2(swapAmount, minAmountOut)
           .accounts({
             pool,
             inVault: usdcVault,
@@ -1991,7 +1960,7 @@ describe("stable-swapper", () => {
 
       try {
         await program.methods
-          .swap(excessiveAmount, minAmountOut)
+          .swapV2(excessiveAmount, minAmountOut)
           .accounts({
             pool,
             inVault: customStableVault,
@@ -2072,7 +2041,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount, minAmountOut)
+        .swapV2(swapAmount, minAmountOut)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -2208,7 +2177,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount, minAmountOut)
+        .swapV2(swapAmount, minAmountOut)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -2278,7 +2247,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount, minAmountOut)
+        .swapV2(swapAmount, minAmountOut)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -2373,7 +2342,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount1, minAmountOut1)
+        .swapV2(swapAmount1, minAmountOut1)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -2421,7 +2390,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount2, minAmountOut2)
+        .swapV2(swapAmount2, minAmountOut2)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -2515,7 +2484,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount, minAmountOut)
+        .swapV2(swapAmount, minAmountOut)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -2748,7 +2717,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount, minAmountOut)
+        .swapV2(swapAmount, minAmountOut)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -2807,7 +2776,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount, minAmountOut)
+        .swapV2(swapAmount, minAmountOut)
         .accounts({
           pool,
           inVault: token9DecVault,
@@ -2866,7 +2835,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount, minAmountOut)
+        .swapV2(swapAmount, minAmountOut)
         .accounts({
           pool,
           inVault: token9DecVault,
@@ -3016,7 +2985,7 @@ describe("stable-swapper", () => {
       );
 
       await program.methods
-        .swap(swapAmount, minAmountOut)
+        .swapV2(swapAmount, minAmountOut)
         .accounts({
           pool,
           inVault: usdcVault,
@@ -3175,7 +3144,7 @@ describe("stable-swapper", () => {
 
       try {
         await program.methods
-          .swap(swapAmount, minAmountOut)
+          .swapV2(swapAmount, minAmountOut)
           .accounts({
             pool,
             inVault: usdcVault,
@@ -3264,7 +3233,7 @@ describe("stable-swapper", () => {
 
       try {
         await program.methods
-          .swap(swapAmount, minAmountOut)
+          .swapV2(swapAmount, minAmountOut)
           .accounts({
             pool,
             inVault: usdcVault,
