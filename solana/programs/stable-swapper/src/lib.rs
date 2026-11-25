@@ -163,9 +163,7 @@ pub mod stable_swapper {
         Ok(())
     }
 
-    /// Executes a 1:1 swap (normalized for decimals) with slippage protection. Replaces the
-    /// legacy `swap` instruction, which carried the deprecated `whitelist` account and has
-    /// been removed now that callers have moved to `swap_v2`.
+    /// Executes a 1:1 swap (normalized for decimals) with slippage protection.
     pub fn swap_v2(ctx: Context<SwapV2>, amount_in: u64, min_amount_out: u64) -> Result<()> {
         do_swap(&ctx.accounts.swap_accounts(), amount_in, min_amount_out)
     }
@@ -842,8 +840,7 @@ pub struct RemoveSupportedToken<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// Accounts for `swap_v2`. The legacy `swap` layout had an extra deprecated `whitelist`
-/// account between `user` and `token_program`; `swap` has been removed.
+/// Accounts for `swap_v2`.
 #[derive(Accounts)]
 pub struct SwapV2<'info> {
     #[account(
