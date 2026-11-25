@@ -26,8 +26,6 @@ contract PriceFeedLifecycleTest is StableSwapperPriceFeedBase {
     /// 4. Pausing the token and global swaps keeps the price
     /// 5. Unlisting it removes the price
     function test_priceFeed_tokenLaunchLifecycle() public {
-        address feedBefore = address(priceFeed);
-
         // PHASE 1: Not listed yet
         expectTokenNotListedRevert(address(newStable));
         priceFeed.getPrice(address(newStable));
@@ -52,10 +50,9 @@ contract PriceFeedLifecycleTest is StableSwapperPriceFeedBase {
         expectTokenNotListedRevert(address(newStable));
         priceFeed.getPrice(address(newStable));
 
-        // Existing listings are unaffected and the feed itself never changed
+        // Existing listings are unaffected
         assertEq(priceFeed.getPrice(address(usdc)), 1e6);
         assertEq(priceFeed.getPrice(address(customStable)), 1e6);
-        assertEq(address(priceFeed), feedBefore);
     }
 
     /// @dev The feed points at the proxy, so it keeps answering after the swapper is upgraded

@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 
+import {StableSwapper} from "../../src/StableSwapper.sol";
 import {StableSwapperPriceFeed} from "../../src/StableSwapperPriceFeed.sol";
 
 /// @title PriceFeedBaseMainnetTest
@@ -14,6 +15,7 @@ contract PriceFeedBaseMainnetTest is Test {
     uint256 internal constant FORK_BLOCK = 61_785_161;
 
     address internal constant STABLE_SWAPPER_PROXY = 0x57AB1E77a6E70074307f39173176B94043A8C33c;
+    StableSwapper internal constant STABLE_SWAPPER = StableSwapper(STABLE_SWAPPER_PROXY);
 
     address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     address internal constant ONED = 0x10ED0050b7A5d5e1E9Cc164F77a71d0bF69f64BD;
@@ -37,6 +39,9 @@ contract PriceFeedBaseMainnetTest is Test {
     }
 
     function test_fork_getPrice_returnsOne_forListedTokens() public view {
+        assertTrue(STABLE_SWAPPER.isTokenListed(USDR), "USDR not listed at this block");
+        assertFalse(STABLE_SWAPPER.isTokenSwappable(USDR), "USDR swappable at this block");
+
         assertEq(priceFeed.getPrice(USDC), 1e6);
         assertEq(priceFeed.getPrice(ONED), 1e6);
         assertEq(priceFeed.getPrice(USDSL), 1e6);
@@ -44,6 +49,8 @@ contract PriceFeedBaseMainnetTest is Test {
     }
 
     function test_fork_getPrice_reverts_forUnlistedToken() public {
+        assertFalse(STABLE_SWAPPER.isTokenListed(RUSD), "RUSD listed at this block");
+
         vm.expectRevert(abi.encodeWithSelector(StableSwapperPriceFeed.TokenNotListed.selector, RUSD));
         priceFeed.getPrice(RUSD);
     }

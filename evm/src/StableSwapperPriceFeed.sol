@@ -15,9 +15,9 @@ interface IStableSwapperListing {
 /// @title StableSwapperPriceFeed
 /// @notice A read-only price feed that quotes every token listed in the StableSwapper at 1 USDC
 ///
-/// @dev The StableSwapper swaps listed stablecoins 1:1 (after decimal normalization) with USDC, so a
-/// @dev listed token is always redeemable at par through the swapper. This feed exposes that par value
-/// @dev for off-chain price consumers such as CoinGecko's Virtual Price, which `eth_call` `getPrice`.
+/// @dev The StableSwapper is designed to redeem listed stablecoins 1:1 (after decimal normalization)
+/// @dev with USDC. This feed exposes that par value for off-chain price consumers such as CoinGecko's
+/// @dev Virtual Price, which `eth_call` `getPrice`.
 ///
 /// @dev The price is pinned at 1 regardless of pool liquidity, fees, or whether swaps are paused. It
 /// @dev reflects the swapper's listing, not a market price, and must not be used as an on-chain oracle.
