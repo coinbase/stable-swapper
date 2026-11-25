@@ -163,13 +163,7 @@ pub mod stable_swapper {
         Ok(())
     }
 
-    /// Legacy layout: still carries the deprecated `whitelist` slot so existing callers keep
-    /// working. Use `swap_v2` for new integrations; `swap` is removed once callers cut over.
-    pub fn swap(ctx: Context<Swap>, amount_in: u64, min_amount_out: u64) -> Result<()> {
-        do_swap(&ctx.accounts.swap_accounts(), amount_in, min_amount_out)
-    }
-
-    /// `swap` without the deprecated `whitelist` account. Same args, logic, and effects.
+    /// Executes a 1:1 swap (normalized for decimals) with slippage protection.
     pub fn swap_v2(ctx: Context<SwapV2>, amount_in: u64, min_amount_out: u64) -> Result<()> {
         do_swap(&ctx.accounts.swap_accounts(), amount_in, min_amount_out)
     }
@@ -523,7 +517,7 @@ fn do_migrate_authorities<'info>(
     Ok(())
 }
 
-/// Accounts a swap touches; `Swap` and `SwapV2` both project onto this so they share one body.
+/// Accounts a swap touches, projected from [`SwapV2`].
 struct SwapAccounts<'a, 'info> {
     pool: &'a Account<'info, LiquidityPool>,
     in_vault: &'a Account<'info, TokenVault>,
@@ -539,7 +533,7 @@ struct SwapAccounts<'a, 'info> {
     token_program: &'a Program<'info, Token>,
 }
 
-/// Shared body for `swap` and `swap_v2`. Account constraints are enforced by the caller's context.
+/// Swap body for `swap_v2`. Account constraints are enforced by [`SwapV2`].
 fn do_swap(a: &SwapAccounts, amount_in: u64, min_amount_out: u64) -> Result<()> {
     let pool = a.pool;
     require!(!pool.swaps_paused, LiquidityError::SwapsPaused);
@@ -846,8 +840,9 @@ pub struct RemoveSupportedToken<'info> {
     pub token_program: Program<'info, Token>,
 }
 
+/// Accounts for `swap_v2`.
 #[derive(Accounts)]
-pub struct Swap<'info> {
+pub struct SwapV2<'info> {
     #[account(
         seeds = [LIQUIDITY_POOL_SEED],
         bump = pool.bump
@@ -901,109 +896,6 @@ pub struct Swap<'info> {
     ///
     /// Note: The recipient's token account must exist before the swap.
     /// Users can create it with: spl-token create-account <MINT>
-    #[account(
-        mut,
-        token::mint = to_mint,
-    )]
-    pub to_token_account: Account<'info, TokenAccount>,
-
-    #[account(
-        init_if_needed,
-        payer = user,
-        associated_token::mint = from_mint,
-        associated_token::authority = fee_recipient
-    )]
-    pub fee_recipient_token_account: Account<'info, TokenAccount>,
-
-    /// CHECK: Fee recipient address, validated via pool.fee_recipient
-    #[account(address = pool.fee_recipient)]
-    pub fee_recipient: UncheckedAccount<'info>,
-
-    pub from_mint: Account<'info, Mint>,
-    pub to_mint: Account<'info, Mint>,
-
-    #[account(mut)]
-    pub user: Signer<'info>,
-
-    /// Deprecated whitelist PDA. Kept only so the account list matches the
-    /// pre-deprecation `swap` signature that existing callers/indexers already encode;
-    /// its data is never read. On mainnet this resolves to the orphaned whitelist account
-    /// left behind by the original removal; on fresh deployments it need not exist at all.
-    /// `swap_v2` / [`SwapV2`] is the same instruction without this slot.
-    /// CHECK: seeds-verified PDA address only; deliberately not deserialized.
-    #[account(
-        seeds = [ADDRESS_WHITELIST_SEED],
-        bump
-    )]
-    pub whitelist: UncheckedAccount<'info>,
-
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
-}
-
-impl<'info> Swap<'info> {
-    fn swap_accounts(&self) -> SwapAccounts<'_, 'info> {
-        SwapAccounts {
-            pool: &self.pool,
-            in_vault: &self.in_vault,
-            out_vault: &self.out_vault,
-            in_vault_token_account: &self.in_vault_token_account,
-            out_vault_token_account: &self.out_vault_token_account,
-            user_from_token_account: &self.user_from_token_account,
-            to_token_account: &self.to_token_account,
-            fee_recipient_token_account: &self.fee_recipient_token_account,
-            from_mint: &self.from_mint,
-            to_mint: &self.to_mint,
-            user: &self.user,
-            token_program: &self.token_program,
-        }
-    }
-}
-
-/// `Swap` with the deprecated `whitelist` slot removed; all other accounts are unchanged.
-#[derive(Accounts)]
-pub struct SwapV2<'info> {
-    #[account(
-        seeds = [LIQUIDITY_POOL_SEED],
-        bump = pool.bump
-    )]
-    pub pool: Account<'info, LiquidityPool>,
-
-    #[account(
-        seeds = [TOKEN_VAULT_SEED, pool.key().as_ref(), from_mint.key().as_ref()],
-        bump = in_vault.bump
-    )]
-    pub in_vault: Account<'info, TokenVault>,
-
-    #[account(
-        seeds = [TOKEN_VAULT_SEED, pool.key().as_ref(), to_mint.key().as_ref()],
-        bump = out_vault.bump
-    )]
-    pub out_vault: Account<'info, TokenVault>,
-
-    #[account(
-        mut,
-        seeds = [VAULT_TOKEN_ACCOUNT_SEED, in_vault.key().as_ref()],
-        bump
-    )]
-    pub in_vault_token_account: Account<'info, TokenAccount>,
-
-    #[account(
-        mut,
-        seeds = [VAULT_TOKEN_ACCOUNT_SEED, out_vault.key().as_ref()],
-        bump
-    )]
-    pub out_vault_token_account: Account<'info, TokenAccount>,
-
-    /// User's input token account. Not constrained to be owned by `user`; see [`Swap`].
-    #[account(
-        mut,
-        token::mint = from_mint,
-    )]
-    pub user_from_token_account: Account<'info, TokenAccount>,
-
-    /// Output token account. Not constrained to be owned by `user`; must already exist.
     #[account(
         mut,
         token::mint = to_mint,
